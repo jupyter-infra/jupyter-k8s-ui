@@ -1,0 +1,95 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: var(--bg-default);
+}
+
+.toolbar {
+  padding: 0 24px;
+  min-height: 64px;
+}
+
+@media (max-width: 600px) {
+  .toolbar {
+    padding: 0 16px;
+    min-height: 56px;
+  }
+}
+
+.logoLink {
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.logoLink:hover {
+  opacity: 0.85;
+}
+
+.logoBox {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--gradient-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0px 2px 4px rgba(79, 70, 229, 0.2);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.logoLink:hover .logoBox {
+  transform: translateY(-1px);
+  box-shadow: 0px 4px 8px rgba(79, 70, 229, 0.3);
+}
+
+.logoText {
+  color: white;
+  font-weight: 700;
+  font-size: 1.125rem;
+  letter-spacing: -0.02em;
+}
+
+.brandText {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+}
+
+@media (max-width: 600px) {
+  .brandText {
+    display: none;
+  }
+}
+
+.spacer {
+  flex-grow: 1;
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  background: var(--gradient-primary);
+  box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.main {
+  flex: 1;
+}
+
+.container {
+  padding: 32px 0;
+}
+
+@media (max-width: 600px) {
+  .container {
+    padding: 24px 0;
+  }
+}

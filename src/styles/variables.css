@@ -1,0 +1,42 @@
+/*
+ * CSS custom properties used by component CSS modules.
+ * Color theming is handled by MUI's ThemeProvider — these variables
+ * bridge the gap for CSS modules that can't access the MUI theme directly.
+ */
+
+:root,
+[data-theme="light"] {
+  --color-primary: #4f46e5;
+  --color-primary-light: #6366f1;
+  --color-primary-dark: #3730a3;
+  --color-background: #f8fafc;
+  --color-background-paper: #ffffff;
+  --color-text: #0f172a;
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #64748b;
+  --color-divider: rgba(0, 0, 0, 0.08);
+  --gradient-primary: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #3730a3 0%, #6d28d9 100%);
+  --color-success: #16a34a;
+  --color-error: #dc2626;
+  --color-info: #0284c7;
+  --border-radius-sm: 6px;
+  --border-radius-lg: 12px;
+}
+
+[data-theme="dark"] {
+  --color-primary: #6366f1;
+  --color-primary-light: #818cf8;
+  --color-primary-dark: #4f46e5;
+  --color-background: #0a0a0b;
+  --color-background-paper: #141416;
+  --color-text: #fafafa;
+  --color-text-primary: #fafafa;
+  --color-text-secondary: #a1a1aa;
+  --color-divider: rgba(255, 255, 255, 0.12);
+  --gradient-primary: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  --color-success: #22c55e;
+  --color-error: #ef4444;
+  --color-info: #0ea5e9;
+}

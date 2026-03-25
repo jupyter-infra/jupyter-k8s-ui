@@ -1,0 +1,59 @@
+.card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid var(--color-divider);
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0px 8px 16px -4px rgba(0,0,0,0.1),
+              0px 4px 8px 0px rgba(0,0,0,0.08),
+              0px 2px 4px 0px rgba(0,0,0,0.06);
+}
+
+.cardContent {
+  flex: 1;
+  padding: 24px;
+}
+
+.statusIcon {
+  font-size: 8px !important;
+}
+
+.imageChip {
+  max-width: 180px;
+}
+
+.imageChip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.privateChip {
+  background-color: rgba(99, 102, 241, 0.1);
+  color: var(--color-primary);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  font-weight: 500;
+}
+
+.resourceIcon {
+  font-size: 14px;
+}
+
+.actions {
+  padding: 12px 24px;
+  border-top: 1px solid var(--color-divider);
+  min-height: 56px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+[data-theme="dark"] .actions {
+  background-color: rgba(255, 255, 255, 0.02);
+}

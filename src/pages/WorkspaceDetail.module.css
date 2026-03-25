@@ -1,0 +1,109 @@
+.container {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.loadingContainer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 300px;
+}
+
+.backButton {
+  margin-bottom: 24px;
+  margin-left: -8px;
+}
+
+.header {
+  margin-bottom: 32px;
+}
+
+.content {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.mainColumn {
+  flex: 2;
+  min-width: 300px;
+}
+
+.sideColumn {
+  flex: 1;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.section {
+  padding: 24px;
+  border-radius: 12px;
+  background-color: var(--color-background-paper);
+  border: 1px solid var(--color-divider);
+  box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.sectionTitle {
+  margin-bottom: 20px;
+  font-weight: 600;
+  font-size: 1.125rem;
+}
+
+.conditionCard {
+  padding: 16px;
+  border-radius: 8px;
+  background-color: var(--color-background);
+  border: 1px solid var(--color-divider);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.conditionCard:hover {
+  border-color: rgba(0, 0, 0, 0.23);
+  box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.conditionActive {
+  border-color: var(--color-primary);
+  background-color: rgba(79, 70, 229, 0.04);
+}
+
+[data-theme="dark"] .conditionActive {
+  background-color: rgba(99, 102, 241, 0.08);
+}
+
+.infoRow {
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.infoRow:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.infoRow:first-child {
+  padding-top: 0;
+}
+
+.infoLabel {
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+.infoValue {
+  text-align: right;
+  word-break: break-word;
+  max-width: 60%;
+}
+
+.errorCard {
+  padding: 32px;
+  margin-top: 24px;
+  border-radius: 12px;
+  background-color: var(--color-background-paper);
+  border: 1px solid var(--color-divider);
+}
