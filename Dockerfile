@@ -28,7 +28,4 @@ USER 1000:1000
 
 EXPOSE 8090
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD bun --version > /dev/null || exit 1
-
 CMD ["bun", "run", "start"]

@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"path": "../jupyter-k8s"
+		},
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"kiroAgent.configureMCP": "Enabled"
+	}
+}

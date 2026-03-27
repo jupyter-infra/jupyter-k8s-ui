@@ -7,18 +7,23 @@ export interface WorkspaceMetadata {
   creationTimestamp?: string;
 }
 
-export interface WorkspaceResources {
-  limits: { cpu: string; memory: string };
-  requests: { cpu: string; memory: string };
+export interface ResourceRequirements {
+  limits?: Record<string, string>;
+  requests?: Record<string, string>;
 }
 
 export interface WorkspaceSpec {
-  displayName: string;
-  image: string;
-  desiredStatus: 'Running' | 'Stopped';
-  accessType: 'Public' | 'OwnerOnly';
-  ownershipType: 'Public' | 'OwnerOnly';
-  resources: WorkspaceResources;
+  displayName?: string;
+  image?: string;
+  desiredStatus?: string;
+  accessType?: string;
+  ownershipType?: string;
+  resources?: ResourceRequirements;
+  storage?: Record<string, unknown>;
+  templateRef?: { name: string; namespace?: string };
+  idleShutdown?: { enabled: boolean; idleTimeoutInMinutes?: number };
+  podSecurityContext?: Record<string, unknown>;
+  accessStrategy?: { name: string; namespace?: string };
 }
 
 export interface WorkspaceCondition {
@@ -39,37 +44,44 @@ export interface Workspace {
   status?: WorkspaceStatus;
 }
 
-export interface WorkspaceTemplate {
-  name: string;
-  namespace: string;
-  displayName: string;
+export interface WorkspaceTemplateSpec {
+  displayName?: string;
   description?: string;
-  defaultImage: string;
+  defaultImage?: string;
   allowedImages?: string[];
-  allowCustomImages: boolean;
+  allowCustomImages?: boolean;
+  defaultAccessType?: string;
+  defaultOwnershipType?: string;
   resourceBounds?: {
-    cpu?: { min: string; max: string };
-    memory?: { min: string; max: string };
-    gpu?: { min: string; max: string };
+    resources?: {
+      cpu?: { min?: string; max?: string };
+      memory?: { min?: string; max?: string };
+      'nvidia.com/gpu'?: { min?: string; max?: string };
+    };
   };
   defaultResources?: {
-    cpu?: string;
-    memory?: string;
+    requests?: { cpu?: string; memory?: string };
   };
-  storageConfig?: {
+  primaryStorage?: {
     defaultSize?: string;
     minSize?: string;
     maxSize?: string;
-    mountPath?: string;
+    defaultMountPath?: string;
   };
-  defaultAccessType?: string;
-  defaultOwnershipType?: string;
-  idleShutdown?: {
-    enabled: boolean;
-    defaultTimeoutMinutes?: number;
-    minTimeoutMinutes?: number;
-    maxTimeoutMinutes?: number;
+  defaultIdleShutdown?: {
+    enabled?: boolean;
+    idleTimeoutInMinutes?: number;
   };
+  idleShutdownOverrides?: {
+    minIdleTimeoutInMinutes?: number;
+    maxIdleTimeoutInMinutes?: number;
+  };
+  defaultAccessStrategy?: { name: string; namespace?: string };
+}
+
+export interface WorkspaceTemplate {
+  metadata: { name: string; namespace: string };
+  spec: WorkspaceTemplateSpec;
 }
 
 export interface CreateWorkspaceRequest {
@@ -77,11 +89,25 @@ export interface CreateWorkspaceRequest {
   displayName: string;
   templateRef?: { name: string; namespace?: string };
   image?: string;
-  resources?: WorkspaceResources;
+  resources?: ResourceRequirements;
   storage?: { size?: string; mountPath?: string; storageClassName?: string };
   accessType?: string;
   ownershipType?: string;
   idleShutdown?: { enabled: boolean; timeoutInMinutes?: number };
   podSecurityContext?: { fsGroup?: number };
+  accessStrategy?: { name: string; namespace?: string };
+}
+
+export interface UpdateWorkspaceRequest {
+  displayName?: string;
+  image?: string;
+  desiredStatus?: string;
+  accessType?: string;
+  ownershipType?: string;
+  resources?: ResourceRequirements;
+  storage?: Record<string, unknown>;
+  templateRef?: { name: string; namespace?: string };
+  idleShutdown?: { enabled: boolean; timeoutInMinutes?: number };
+  podSecurityContext?: Record<string, unknown>;
   accessStrategy?: { name: string; namespace?: string };
 }

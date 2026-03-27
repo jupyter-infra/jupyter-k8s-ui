@@ -21,7 +21,7 @@ const MIME_TYPES: Record<string, string> = {
  * Serve a static file from the configured static directory.
  * Returns null if the file doesn't exist.
  */
-export function serveStatic(pathname: string): Response | null {
+export async function serveStatic(pathname: string): Promise<Response | null> {
   const staticDir = resolve(serverConfig.staticDir);
   const filePath = pathname === '/' ? 'index.html' : pathname.slice(1);
   const fullPath = resolve(join(staticDir, filePath));
@@ -34,8 +34,8 @@ export function serveStatic(pathname: string): Response | null {
 
   const file = Bun.file(fullPath);
 
-  // Bun.file doesn't throw on missing files — check size
-  if (file.size === 0 && !fullPath.endsWith('.html')) {
+  // Check if file actually exists on disk
+  if (!await file.exists()) {
     return null;
   }
 
