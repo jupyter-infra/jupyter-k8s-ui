@@ -1,4 +1,4 @@
-import type { Workspace, WorkspaceTemplate, CreateWorkspaceRequest } from '../types';
+import type { Workspace, WorkspaceTemplate, CreateWorkspaceRequest, UpdateWorkspaceRequest } from '../types';
 
 const API_BASE = '/api/v1';
 
@@ -40,6 +40,9 @@ class ApiClient {
 
   createWorkspace = (data: CreateWorkspaceRequest) =>
     this.request<Workspace>('/workspaces', { method: 'POST', body: JSON.stringify(data) });
+
+  updateWorkspace = (name: string, data: UpdateWorkspaceRequest) =>
+    this.request<Workspace>(`/workspaces/${name}`, { method: 'PUT', body: JSON.stringify(data) });
 
   deleteWorkspace = (name: string) =>
     this.request<void>(`/workspaces/${name}`, { method: 'DELETE' });

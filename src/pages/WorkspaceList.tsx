@@ -7,6 +7,7 @@ import {
 import { Add, Search, Refresh } from '@mui/icons-material';
 import { useWorkspaces } from '../api';
 import { useAuth } from '../context';
+import { isOwner as checkIsOwner } from '../utils';
 import { WorkspaceCard } from '../components';
 import { strings } from '../constants';
 import styles from './WorkspaceList.module.css';
@@ -24,20 +25,12 @@ export function WorkspaceList() {
     return workspaces.filter((ws) => {
       if (filter === 'mine') {
         const owner = ws.metadata.annotations?.['workspace.jupyter.org/created-by'];
-        if (!owner || !user?.username) return false;
-
-        const isOwner =
-          owner === user.username ||
-          owner === `github:${user.username}` ||
-          owner.endsWith(`/${user.username}`) ||
-          owner.includes(`:${user.username}`);
-
-        if (!isOwner) return false;
+        if (!checkIsOwner(owner, user?.username)) return false;
       }
 
       if (search) {
         const q = search.toLowerCase();
-        const matchesSearch = ws.spec.displayName.toLowerCase().includes(q) ||
+        const matchesSearch = (ws.spec.displayName ?? ws.metadata.name).toLowerCase().includes(q) ||
                              ws.metadata.name.toLowerCase().includes(q);
         if (!matchesSearch) return false;
       }

@@ -81,6 +81,7 @@ export interface K8sWorkspaceTemplate {
       minIdleTimeoutInMinutes?: number;
       maxIdleTimeoutInMinutes?: number;
     };
+    defaultAccessStrategy?: { name: string; namespace?: string };
   };
 }
 
@@ -91,6 +92,10 @@ export interface K8sListResponse<T> {
 
 // --- API Response Types ---
 
+// Response types now pass through the K8s spec/status directly
+// instead of cherry-picking fields. This ensures GPU resources,
+// env vars, templateRef, and any future CRD fields are preserved.
+
 export interface WorkspaceResponse {
   metadata: {
     name: string;
@@ -98,17 +103,7 @@ export interface WorkspaceResponse {
     annotations: Record<string, string>;
     creationTimestamp: string;
   };
-  spec: {
-    displayName: string;
-    image: string;
-    desiredStatus: string;
-    accessType: string;
-    ownershipType: string;
-    resources: {
-      limits: { cpu: string; memory: string };
-      requests: { cpu: string; memory: string };
-    };
-  };
+  spec: K8sWorkspace['spec'];
   status?: {
     accessURL: string;
     conditions: Array<{
@@ -121,33 +116,11 @@ export interface WorkspaceResponse {
 }
 
 export interface TemplateResponse {
-  name: string;
-  namespace: string;
-  displayName: string;
-  description: string;
-  defaultImage: string;
-  allowedImages: string[];
-  allowCustomImages: boolean;
-  defaultAccessType: string;
-  defaultOwnershipType: string;
-  resourceBounds?: {
-    cpu?: { min: string; max: string };
-    memory?: { min: string; max: string };
-    gpu?: { min: string; max: string };
+  metadata: {
+    name: string;
+    namespace: string;
   };
-  defaultResources?: { cpu: string; memory: string };
-  storageConfig?: {
-    defaultSize: string;
-    minSize: string;
-    maxSize: string;
-    mountPath: string;
-  };
-  idleShutdown?: {
-    enabled: boolean;
-    defaultTimeoutMinutes: number;
-    minTimeoutMinutes?: number;
-    maxTimeoutMinutes?: number;
-  };
+  spec: K8sWorkspaceTemplate['spec'];
 }
 
 // --- Request Types ---
@@ -171,7 +144,14 @@ export interface UpdateWorkspaceBody {
   displayName?: string;
   image?: string;
   desiredStatus?: string;
+  accessType?: string;
+  ownershipType?: string;
   resources?: K8sResourceRequirements;
+  storage?: Record<string, unknown>;
+  templateRef?: { name: string; namespace?: string };
+  idleShutdown?: { enabled: boolean; timeoutInMinutes?: number };
+  podSecurityContext?: Record<string, unknown>;
+  accessStrategy?: { name: string; namespace?: string };
 }
 
 // --- Log Level ---

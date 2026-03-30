@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from './client';
 import type { CreateWorkspaceRequest, Workspace } from '../types';
+import { getWorkspaceState } from '../utils';
 
 // Query keys as constants for consistency
 export const workspaceKeys = {
@@ -40,15 +41,9 @@ export function useWorkspaces() {
  */
 function isWorkspaceSettled(workspace: Workspace | undefined): boolean {
   if (!workspace) return false;
+  const { isAvailable, isProgressing, isStopped } = getWorkspaceState(workspace);
 
-  const conditions = workspace.status?.conditions ?? [];
-  const isAvailable = conditions.some((c) => c.type === 'Available' && c.status === 'True');
-  const isProgressing = conditions.some((c) => c.type === 'Progressing' && c.status === 'True');
-
-  if (isAvailable && !isProgressing) return true;
-  if (workspace.spec.desiredStatus === 'Stopped' && !isProgressing) return true;
-
-  return false;
+  return !isProgressing && (isAvailable || isStopped);
 }
 
 export function useWorkspace(name: string) {

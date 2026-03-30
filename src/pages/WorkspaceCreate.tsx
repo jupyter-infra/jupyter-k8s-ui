@@ -13,7 +13,7 @@ import {
   strings, imageOptions, resourceBounds as defaultResourceBounds,
   RESOURCE_DEFAULTS, IDLE_SHUTDOWN_DEFAULTS,
 } from '../constants';
-import { clamp, parseResourceValue, sanitizeK8sName } from '../utils';
+import { clamp, parseResourceValue, parseMemoryGi, sanitizeK8sName } from '../utils';
 import styles from './WorkspaceCreate.module.css';
 
 export function WorkspaceCreate() {
@@ -30,42 +30,44 @@ export function WorkspaceCreate() {
   const [storageSize, setStorageSize] = useState(10);
   const [storageMountPath, setStorageMountPath] = useState('/home/jovyan');
   const [accessType, setAccessType] = useState<'Public' | 'OwnerOnly'>('Public');
+  const [accessStrategyName, setAccessStrategyName] = useState('sample-access-strategy');
   const [idleShutdownEnabled, setIdleShutdownEnabled] = useState(false);
   const [idleTimeoutMinutes, setIdleTimeoutMinutes] = useState<number>(IDLE_SHUTDOWN_DEFAULTS.DEFAULT_TIMEOUT);
 
   const resourceBounds = useMemo(() => {
-    if (!selectedTemplate?.resourceBounds) return defaultResourceBounds;
-    const tb = selectedTemplate.resourceBounds;
+    if (!selectedTemplate?.spec.resourceBounds?.resources) return defaultResourceBounds;
+    const res = selectedTemplate.spec.resourceBounds.resources;
     return {
       cpu: {
-        min: parseResourceValue(tb.cpu?.min, defaultResourceBounds.cpu.min),
-        max: parseResourceValue(tb.cpu?.max, defaultResourceBounds.cpu.max),
+        min: parseResourceValue(res.cpu?.min, defaultResourceBounds.cpu.min),
+        max: parseResourceValue(res.cpu?.max, defaultResourceBounds.cpu.max),
         step: defaultResourceBounds.cpu.step,
       },
       memory: {
-        min: parseResourceValue(tb.memory?.min, defaultResourceBounds.memory.min),
-        max: parseResourceValue(tb.memory?.max, defaultResourceBounds.memory.max),
+        min: parseMemoryGi(res.memory?.min, defaultResourceBounds.memory.min),
+        max: parseMemoryGi(res.memory?.max, defaultResourceBounds.memory.max),
         step: defaultResourceBounds.memory.step,
       },
-      storage: selectedTemplate.storageConfig ? {
-        min: parseResourceValue(selectedTemplate.storageConfig.minSize, defaultResourceBounds.storage.min),
-        max: parseResourceValue(selectedTemplate.storageConfig.maxSize, defaultResourceBounds.storage.max),
+      storage: selectedTemplate.spec.primaryStorage ? {
+        min: parseMemoryGi(selectedTemplate.spec.primaryStorage.minSize, defaultResourceBounds.storage.min),
+        max: parseMemoryGi(selectedTemplate.spec.primaryStorage.maxSize, defaultResourceBounds.storage.max),
         step: defaultResourceBounds.storage.step,
       } : defaultResourceBounds.storage,
     };
   }, [selectedTemplate]);
 
   const idleShutdownBounds = useMemo(() => ({
-    min: selectedTemplate?.idleShutdown?.minTimeoutMinutes ?? IDLE_SHUTDOWN_DEFAULTS.MIN_TIMEOUT,
-    max: selectedTemplate?.idleShutdown?.maxTimeoutMinutes ?? IDLE_SHUTDOWN_DEFAULTS.MAX_TIMEOUT,
+    min: selectedTemplate?.spec.idleShutdownOverrides?.minIdleTimeoutInMinutes ?? IDLE_SHUTDOWN_DEFAULTS.MIN_TIMEOUT,
+    max: selectedTemplate?.spec.idleShutdownOverrides?.maxIdleTimeoutInMinutes ?? IDLE_SHUTDOWN_DEFAULTS.MAX_TIMEOUT,
   }), [selectedTemplate]);
 
   const availableImages = useMemo(() => {
-    if (selectedTemplate?.allowedImages?.length) {
-      return selectedTemplate.allowedImages.map((img) => ({ value: img, label: img, description: '' }));
+    if (selectedTemplate?.spec.allowedImages?.length) {
+      return selectedTemplate.spec.allowedImages.map((img) => ({ value: img, label: img, description: '' }));
     }
-    if (selectedTemplate && !selectedTemplate.allowCustomImages) {
-      return [{ value: selectedTemplate.defaultImage, label: selectedTemplate.defaultImage, description: '' }];
+    if (selectedTemplate && !selectedTemplate.spec.allowCustomImages) {
+      const defaultImg = selectedTemplate.spec.defaultImage ?? '';
+      return [{ value: defaultImg, label: defaultImg, description: '' }];
     }
     return [...imageOptions];
   }, [selectedTemplate]);
@@ -74,32 +76,41 @@ export function WorkspaceCreate() {
     return availableImages.find((img) => img.value === image) ?? { value: image, label: image, description: '' };
   }, [availableImages, image]);
 
-  const allowCustomImages = !selectedTemplate || selectedTemplate.allowCustomImages;
+  const allowCustomImages = !selectedTemplate || (selectedTemplate.spec.allowCustomImages ?? true);
+
+  // Show access strategy field when no template selected, or template doesn't provide one
+  const showAccessStrategyField = !selectedTemplate?.spec.defaultAccessStrategy;
 
   const handleTemplateSelect = useCallback((template: WorkspaceTemplate) => {
     setSelectedTemplate(template);
-    setImage(template.defaultImage);
+    setImage(template.spec.defaultImage ?? '');
 
-    const b = template.resourceBounds;
-    const cpuB = { min: parseResourceValue(b?.cpu?.min, 0.5), max: parseResourceValue(b?.cpu?.max, 8) };
-    const memB = { min: parseResourceValue(b?.memory?.min, 1), max: parseResourceValue(b?.memory?.max, 16) };
-    const storB = template.storageConfig
-      ? { min: parseResourceValue(template.storageConfig.minSize, 5), max: parseResourceValue(template.storageConfig.maxSize, 100) }
+    const res = template.spec.resourceBounds?.resources;
+    const cpuB = { min: parseResourceValue(res?.cpu?.min, 0.5), max: parseResourceValue(res?.cpu?.max, 8) };
+    const memB = { min: parseMemoryGi(res?.memory?.min, 1), max: parseMemoryGi(res?.memory?.max, 16) };
+    const storB = template.spec.primaryStorage
+      ? { min: parseMemoryGi(template.spec.primaryStorage.minSize, 5), max: parseMemoryGi(template.spec.primaryStorage.maxSize, 100) }
       : { min: 5, max: 100 };
 
-    if (template.defaultResources) {
-      setCpuLimit(clamp(parseResourceValue(template.defaultResources.cpu, 1), cpuB.min, cpuB.max));
-      setMemoryLimit(clamp(parseResourceValue(template.defaultResources.memory, 2), memB.min, memB.max));
+    if (template.spec.defaultResources?.requests) {
+      setCpuLimit(clamp(parseResourceValue(template.spec.defaultResources.requests.cpu, 1), cpuB.min, cpuB.max));
+      setMemoryLimit(clamp(parseMemoryGi(template.spec.defaultResources.requests.memory, 2), memB.min, memB.max));
     }
-    if (template.storageConfig?.defaultSize) {
-      setStorageSize(clamp(parseResourceValue(template.storageConfig.defaultSize, 10), storB.min, storB.max));
+    if (template.spec.primaryStorage?.defaultSize) {
+      setStorageSize(clamp(parseMemoryGi(template.spec.primaryStorage.defaultSize, 10), storB.min, storB.max));
     }
-    if (template.storageConfig?.mountPath) setStorageMountPath(template.storageConfig.mountPath);
-    if (template.defaultAccessType) setAccessType(template.defaultAccessType as 'Public' | 'OwnerOnly');
-    if (template.idleShutdown) {
-      setIdleShutdownEnabled(template.idleShutdown.enabled);
-      const idleB = { min: template.idleShutdown.minTimeoutMinutes ?? 5, max: template.idleShutdown.maxTimeoutMinutes ?? 480 };
-      setIdleTimeoutMinutes(clamp(template.idleShutdown.defaultTimeoutMinutes ?? 30, idleB.min, idleB.max));
+    if (template.spec.primaryStorage?.defaultMountPath) setStorageMountPath(template.spec.primaryStorage.defaultMountPath);
+    if (template.spec.defaultAccessType) setAccessType(template.spec.defaultAccessType as 'Public' | 'OwnerOnly');
+    if (template.spec.defaultAccessStrategy) {
+      setAccessStrategyName(template.spec.defaultAccessStrategy.name ?? '');
+    }
+    if (template.spec.defaultIdleShutdown) {
+      setIdleShutdownEnabled(template.spec.defaultIdleShutdown.enabled ?? false);
+      const idleB = {
+        min: template.spec.idleShutdownOverrides?.minIdleTimeoutInMinutes ?? 5,
+        max: template.spec.idleShutdownOverrides?.maxIdleTimeoutInMinutes ?? 480,
+      };
+      setIdleTimeoutMinutes(clamp(template.spec.defaultIdleShutdown.idleTimeoutInMinutes ?? 30, idleB.min, idleB.max));
     }
   }, []);
 
@@ -118,11 +129,17 @@ export function WorkspaceCreate() {
       },
       accessType,
       ownershipType: accessType,
-      accessStrategy: { name: 'sample-access-strategy', namespace: 'default' },
     };
 
+    // Use template's defaultAccessStrategy, or the user-provided value
+    if (selectedTemplate?.spec.defaultAccessStrategy) {
+      request.accessStrategy = selectedTemplate.spec.defaultAccessStrategy;
+    } else if (accessStrategyName.trim()) {
+      request.accessStrategy = { name: accessStrategyName.trim(), namespace: 'default' };
+    }
+
     if (selectedTemplate) {
-      request.templateRef = { name: selectedTemplate.name, namespace: selectedTemplate.namespace };
+      request.templateRef = { name: selectedTemplate.metadata.name, namespace: selectedTemplate.metadata.namespace };
     }
 
     if (idleShutdownEnabled) {
@@ -165,7 +182,7 @@ export function WorkspaceCreate() {
           ) : (
             <Box className={styles.templateGrid}>
               {templates?.map((t) => (
-                <TemplateCard key={t.name} template={t} selected={selectedTemplate?.name === t.name}
+                <TemplateCard key={t.metadata.name} template={t} selected={selectedTemplate?.metadata.name === t.metadata.name}
                   onClick={() => handleTemplateSelect(t)} />
               ))}
             </Box>
@@ -273,6 +290,19 @@ export function WorkspaceCreate() {
                 </ToggleButton>
               </ToggleButtonGroup>
             </Box>
+
+            {showAccessStrategyField && (
+              <>
+                <Box className={styles.divider} />
+                <TextField
+                  label="Access Strategy"
+                  value={accessStrategyName}
+                  onChange={(e) => setAccessStrategyName(e.target.value)}
+                  size="small"
+                  helperText="Name of the WorkspaceAccessStrategy resource to use for routing"
+                />
+              </>
+            )}
 
             <Box className={styles.divider} />
 

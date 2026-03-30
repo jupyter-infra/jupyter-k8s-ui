@@ -8,6 +8,7 @@ import {
 } from '@mui/icons-material';
 import { useWorkspace, useStartWorkspace, useStopWorkspace } from '../api';
 import { useAuth } from '../context';
+import { isOwner as checkIsOwner, getWorkspaceState } from '../utils';
 import type { WorkspaceCondition } from '../types';
 import { strings } from '../constants';
 import styles from './WorkspaceDetail.module.css';
@@ -82,23 +83,12 @@ export function WorkspaceDetail() {
     );
   }
 
-  const isRunning = workspace.spec.desiredStatus === 'Running';
-  const isAvailable = workspace.status?.conditions?.find(
-    (c) => c.type === 'Available' && c.status === 'True'
-  );
-  const isProgressing = workspace.status?.conditions?.find(
-    (c) => c.type === 'Progressing' && c.status === 'True'
-  );
+  const { isRunning, isAvailable, isProgressing } = getWorkspaceState(workspace);
   const accessURL = workspace.status?.accessURL;
 
   const owner = workspace.metadata.annotations?.['workspace.jupyter.org/created-by'];
-  const isOwner = owner && user?.username && (
-    owner === user.username ||
-    owner === `github:${user.username}` ||
-    owner.endsWith(`/${user.username}`) ||
-    owner.includes(`:${user.username}`)
-  );
-  const canOpen = isRunning && isAvailable && accessURL && (isOwner || workspace.spec.accessType === 'Public');
+  const ownerMatch = checkIsOwner(owner, user?.username);
+  const canOpen = isRunning && isAvailable && accessURL && (ownerMatch || workspace.spec.accessType === 'Public');
 
   const handleStart = () => startMutation.mutate(workspace.metadata.name);
   const handleStop = () => stopMutation.mutate(workspace.metadata.name);
@@ -118,11 +108,11 @@ export function WorkspaceDetail() {
 
       <Stack direction="row" alignItems="center" justifyContent="space-between" className={styles.header}>
         <Box>
-          <Typography variant="h4">{workspace.spec.displayName}</Typography>
+          <Typography variant="h4">{workspace.spec.displayName ?? workspace.metadata.name}</Typography>
           <Typography variant="body2" color="text.secondary">{workspace.metadata.name}</Typography>
         </Box>
         <Stack direction="row" gap={1}>
-          {isOwner && (
+          {ownerMatch && (
             isRunning ? (
               <Button
                 variant="outlined"
@@ -182,7 +172,7 @@ export function WorkspaceDetail() {
                   color={isAvailable ? 'success' : isProgressing ? 'info' : 'default'}
                 />
               } />
-              <InfoRow label="Image" value={workspace.spec.image} />
+              <InfoRow label="Image" value={workspace.spec.image ?? '—'} />
               <InfoRow label="Access" value={
                 <Chip
                   size="small"
@@ -203,11 +193,11 @@ export function WorkspaceDetail() {
             <Stack gap={1}>
               <InfoRow
                 label={<Stack direction="row" alignItems="center" gap={0.5}><Memory sx={{ fontSize: 16 }} /> CPU</Stack>}
-                value={workspace.spec.resources.limits.cpu}
+                value={workspace.spec.resources?.limits?.cpu ?? '—'}
               />
               <InfoRow
                 label={<Stack direction="row" alignItems="center" gap={0.5}><Storage sx={{ fontSize: 16 }} /> Memory</Stack>}
-                value={workspace.spec.resources.limits.memory}
+                value={workspace.spec.resources?.limits?.memory ?? '—'}
               />
             </Stack>
           </Paper>

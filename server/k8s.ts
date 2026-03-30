@@ -1,5 +1,6 @@
 import { KubeConfig, CustomObjectsApi } from '@kubernetes/client-node';
 import { existsSync } from 'fs';
+import { createHash } from 'crypto';
 import { homedir } from 'os';
 import { join } from 'path';
 import type {
@@ -102,7 +103,8 @@ export function createKubeConfig(jwt: string | null): KubeConfig {
 // Simple LRU-ish cache: one client per JWT, with a short TTL.
 // Avoids re-creating KubeConfig + API client on every single request.
 const clientCache = new Map<string, { client: CustomObjectsApi; expiresAt: number }>();
-const CLIENT_CACHE_TTL_MS = 30_000; // 30 seconds
+const CLIENT_CACHE_TTL_MS = 10 * 60_000; // 10 minutes
+const CLIENT_CACHE_MAX_SIZE = 100;
 const CLIENT_CACHE_KEY_NO_JWT = '__service_account__';
 
 function getCachedClient(cacheKey: string): CustomObjectsApi | null {
@@ -120,7 +122,7 @@ function setCachedClient(cacheKey: string, client: CustomObjectsApi): void {
   clientCache.set(cacheKey, { client, expiresAt: Date.now() + CLIENT_CACHE_TTL_MS });
 
   // Evict stale entries if cache grows (unlikely but defensive)
-  if (clientCache.size > 100) {
+  if (clientCache.size > CLIENT_CACHE_MAX_SIZE) {
     const now = Date.now();
     for (const [key, val] of clientCache) {
       if (now >= val.expiresAt) clientCache.delete(key);
@@ -128,12 +130,17 @@ function setCachedClient(cacheKey: string, client: CustomObjectsApi): void {
   }
 }
 
+/** Hash a JWT to use as a cache key instead of storing the full token string */
+function hashJWT(jwt: string): string {
+  return createHash('sha256').update(jwt).digest('hex');
+}
+
 export async function createUserK8sClient(jwt: string | null): Promise<CustomObjectsApi> {
   if (isLocalDevelopment()) {
     return createMockK8sClient();
   }
 
-  const cacheKey = jwt || CLIENT_CACHE_KEY_NO_JWT;
+  const cacheKey = jwt ? hashJWT(jwt) : CLIENT_CACHE_KEY_NO_JWT;
   const cached = getCachedClient(cacheKey);
   if (cached) return cached;
 
@@ -208,23 +215,7 @@ export function workspaceToResponse(ws: K8sWorkspace): WorkspaceResponse {
       annotations: ws.metadata?.annotations ?? {},
       creationTimestamp: ws.metadata?.creationTimestamp ?? '',
     },
-    spec: {
-      displayName: ws.spec?.displayName ?? '',
-      image: ws.spec?.image ?? '',
-      desiredStatus: ws.spec?.desiredStatus ?? '',
-      accessType: ws.spec?.accessType ?? '',
-      ownershipType: ws.spec?.ownershipType ?? '',
-      resources: {
-        limits: {
-          cpu: ws.spec?.resources?.limits?.cpu ?? '',
-          memory: ws.spec?.resources?.limits?.memory ?? '',
-        },
-        requests: {
-          cpu: ws.spec?.resources?.requests?.cpu ?? '',
-          memory: ws.spec?.resources?.requests?.memory ?? '',
-        },
-      },
-    },
+    spec: ws.spec ?? {},
     status: ws.status
       ? {
           accessURL: ws.status.accessURL ?? '',
@@ -240,61 +231,11 @@ export function workspaceToResponse(ws: K8sWorkspace): WorkspaceResponse {
 }
 
 export function templateToResponse(tmpl: K8sWorkspaceTemplate): TemplateResponse {
-  const resp: TemplateResponse = {
-    name: tmpl.metadata?.name ?? '',
-    namespace: tmpl.metadata?.namespace ?? '',
-    displayName: tmpl.spec?.displayName ?? '',
-    description: tmpl.spec?.description ?? '',
-    defaultImage: tmpl.spec?.defaultImage ?? '',
-    allowedImages: tmpl.spec?.allowedImages ?? [],
-    allowCustomImages: tmpl.spec?.allowCustomImages ?? false,
-    defaultAccessType: tmpl.spec?.defaultAccessType ?? '',
-    defaultOwnershipType: tmpl.spec?.defaultOwnershipType ?? '',
+  return {
+    metadata: {
+      name: tmpl.metadata?.name ?? '',
+      namespace: tmpl.metadata?.namespace ?? '',
+    },
+    spec: tmpl.spec ?? {},
   };
-
-  const bounds = tmpl.spec?.resourceBounds?.resources;
-  if (bounds) {
-    resp.resourceBounds = {};
-    if (bounds.cpu) {
-      resp.resourceBounds.cpu = { min: bounds.cpu.min ?? '', max: bounds.cpu.max ?? '' };
-    }
-    if (bounds.memory) {
-      resp.resourceBounds.memory = { min: bounds.memory.min ?? '', max: bounds.memory.max ?? '' };
-    }
-    if (bounds['nvidia.com/gpu']) {
-      resp.resourceBounds.gpu = {
-        min: bounds['nvidia.com/gpu'].min ?? '',
-        max: bounds['nvidia.com/gpu'].max ?? '',
-      };
-    }
-  }
-
-  if (tmpl.spec?.defaultResources) {
-    resp.defaultResources = {
-      cpu: tmpl.spec.defaultResources.requests?.cpu ?? '',
-      memory: tmpl.spec.defaultResources.requests?.memory ?? '',
-    };
-  }
-
-  if (tmpl.spec?.primaryStorage) {
-    resp.storageConfig = {
-      defaultSize: tmpl.spec.primaryStorage.defaultSize ?? '',
-      minSize: tmpl.spec.primaryStorage.minSize ?? '',
-      maxSize: tmpl.spec.primaryStorage.maxSize ?? '',
-      mountPath: tmpl.spec.primaryStorage.defaultMountPath ?? '',
-    };
-  }
-
-  if (tmpl.spec?.defaultIdleShutdown) {
-    resp.idleShutdown = {
-      enabled: tmpl.spec.defaultIdleShutdown.enabled ?? false,
-      defaultTimeoutMinutes: tmpl.spec.defaultIdleShutdown.idleTimeoutInMinutes ?? 0,
-    };
-    if (tmpl.spec.idleShutdownOverrides) {
-      resp.idleShutdown.minTimeoutMinutes = tmpl.spec.idleShutdownOverrides.minIdleTimeoutInMinutes;
-      resp.idleShutdown.maxTimeoutMinutes = tmpl.spec.idleShutdownOverrides.maxIdleTimeoutInMinutes;
-    }
-  }
-
-  return resp;
 }

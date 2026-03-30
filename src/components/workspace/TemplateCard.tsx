@@ -21,7 +21,7 @@ interface TemplateCardProps {
 }
 
 export function TemplateCard({ template, selected, onClick }: TemplateCardProps) {
-  const config = TEMPLATE_CONFIG[template.name] || DEFAULT_CONFIG;
+  const config = TEMPLATE_CONFIG[template.metadata.name] || DEFAULT_CONFIG;
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -39,14 +39,14 @@ export function TemplateCard({ template, selected, onClick }: TemplateCardProps)
       tabIndex={0}
       role="button"
       aria-pressed={selected}
-      aria-label={strings.a11y.templateCard(template.displayName)}
+      aria-label={strings.a11y.templateCard(template.spec.displayName ?? template.metadata.name)}
     >
       {selected && <Check className={styles.checkIcon} />}
       <Stack direction="row" alignItems="center" gap={2}>
         <Box className={styles.icon}>{config.icon}</Box>
         <Box>
-          <Typography className={styles.name}>{template.displayName}</Typography>
-          <Typography className={styles.description}>{template.description}</Typography>
+          <Typography className={styles.name}>{template.spec.displayName ?? template.metadata.name}</Typography>
+          <Typography className={styles.description}>{template.spec.description ?? ''}</Typography>
           <Typography className={styles.tag}>{config.tag}</Typography>
         </Box>
       </Stack>
