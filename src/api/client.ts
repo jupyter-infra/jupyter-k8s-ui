@@ -1,34 +1,33 @@
 import type { Workspace, WorkspaceTemplate, CreateWorkspaceRequest, UpdateWorkspaceRequest } from '../types';
+import { handleUnauthorized, clearAuthReloadFlag } from './auth-interceptor';
 
 const API_BASE = '/api/v1';
 
 class ApiClient {
   private async request<T>(path: string, options?: RequestInit): Promise<T> {
-    // Prepare headers
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
 
-    // Merge additional headers if provided
     if (options?.headers) {
-      const additionalHeaders = options.headers as Record<string, string>;
-      Object.assign(headers, additionalHeaders);
+      Object.assign(headers, options.headers as Record<string, string>);
     }
-
-    // In development, the backend reads DEV_ACCESS_TOKEN from .env
-    // No need to send Authorization header from frontend
 
     const response = await fetch(`${API_BASE}${path}`, {
       ...options,
-      credentials: 'include', // For production oauth2-proxy cookies
+      credentials: 'include',
       headers,
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        handleUnauthorized();
+      }
       const error = await response.text();
       throw new Error(error || `Request failed: ${response.status}`);
     }
 
+    clearAuthReloadFlag();
     return response.json();
   }
 

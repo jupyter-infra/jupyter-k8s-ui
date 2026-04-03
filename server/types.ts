@@ -167,6 +167,22 @@ export const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
 
 // --- Server Config ---
 
+export interface SessionConfig {
+  enabled: boolean;
+  cookieName: string;
+  cookiePath: string;
+  cookieMaxAgeSecs: number;
+  maxSessionLifetimeSecs: number;
+  nearExpiryThresholdSecs: number;
+  secretName: string;
+  secretNamespace: string;
+  keyPrefix: string;
+  newKeyUseDelaySecs: number;
+  cookieSizeWarnBytes: number;
+  cookieSizeMaxBytes: number;
+  expectedDomain: string;
+}
+
 export interface ServerConfig {
   namespace: string;
   staticDir: string;
@@ -174,4 +190,5 @@ export interface ServerConfig {
   devAccessToken: string;
   port: number;
   logLevel: LogLevel;
+  session: SessionConfig;
 }

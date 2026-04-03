@@ -21,8 +21,8 @@ COPY --from=builder --chown=1000:1000 /app/dist ./dist
 COPY --from=builder --chown=1000:1000 /app/server ./server
 COPY --from=builder --chown=1000:1000 /app/package.json ./package.json
 
-# Install production dependencies only
-RUN bun install --production --frozen-lockfile
+# Install production dependencies only (skip lifecycle scripts — husky is dev-only)
+RUN bun install --production --frozen-lockfile --ignore-scripts
 
 USER 1000:1000
 
