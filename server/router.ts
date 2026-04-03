@@ -11,11 +11,11 @@ import { handleGetMe } from './handlers/me';
 const API_PREFIX = '/api/v1';
 
 const ROUTES = {
-  health:     `${API_PREFIX}/health`,
-  me:         `${API_PREFIX}/me`,
+  health: `${API_PREFIX}/health`,
+  me: `${API_PREFIX}/me`,
   workspaces: `${API_PREFIX}/workspaces`,
-  workspace:  new RegExp(`^${API_PREFIX}/workspaces/([^/]+)$`),
-  templates:  `${API_PREFIX}/templates`,
+  workspace: new RegExp(`^${API_PREFIX}/workspaces/([^/]+)$`),
+  templates: `${API_PREFIX}/templates`,
 } as const;
 
 // --- Request Handler ---
@@ -52,7 +52,7 @@ async function routeRequest(req: Request): Promise<Response> {
 
     if (pathname === ROUTES.workspaces) {
       const handlers: Record<string, () => Promise<Response>> = {
-        GET:  () => handleListWorkspaces(jwt),
+        GET: () => handleListWorkspaces(jwt),
         POST: () => handleCreateWorkspace(jwt, req),
       };
       return handlers[method]?.() ?? errorResponse(405, 'Method not allowed');
@@ -62,9 +62,9 @@ async function routeRequest(req: Request): Promise<Response> {
     if (workspaceMatch) {
       const name = workspaceMatch[1];
       const handlers: Record<string, () => Promise<Response>> = {
-        GET:    () => handleGetWorkspace(jwt, name),
-        PUT:    () => handleUpdateWorkspace(jwt, name, req),
-        PATCH:  () => handleUpdateWorkspace(jwt, name, req),
+        GET: () => handleGetWorkspace(jwt, name),
+        PUT: () => handleUpdateWorkspace(jwt, name, req),
+        PATCH: () => handleUpdateWorkspace(jwt, name, req),
         DELETE: () => handleDeleteWorkspace(jwt, name),
       };
       return handlers[method]?.() ?? errorResponse(405, 'Method not allowed');

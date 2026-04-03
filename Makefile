@@ -57,6 +57,14 @@ lint: ## Run eslint linter.
 lint-fix: ## Run eslint linter and perform fixes.
 	bun run lint --fix
 
+.PHONY: format
+format: ## Format code with prettier.
+	bun run format
+
+.PHONY: format-check
+format-check: ## Check code formatting.
+	bun run format:check
+
 ##@ Build
 
 .PHONY: build

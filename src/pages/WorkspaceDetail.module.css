@@ -70,7 +70,7 @@
   background-color: rgba(79, 70, 229, 0.04);
 }
 
-[data-theme="dark"] .conditionActive {
+[data-theme='dark'] .conditionActive {
   background-color: rgba(99, 102, 241, 0.08);
 }
 

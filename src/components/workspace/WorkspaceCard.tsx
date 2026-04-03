@@ -1,11 +1,5 @@
-import {
-  Card, CardContent, Typography, IconButton, Chip, Tooltip, Menu, MenuItem,
-  ListItemIcon, Stack, Box, Divider,
-} from '@mui/material';
-import {
-  PlayArrow, Stop, OpenInNew, MoreVert, Delete, Circle, Memory,
-  Storage, Info,
-} from '@mui/icons-material';
+import { Card, CardContent, Typography, IconButton, Chip, Tooltip, Menu, MenuItem, ListItemIcon, Stack, Box, Divider } from '@mui/material';
+import { PlayArrow, Stop, OpenInNew, MoreVert, Delete, Circle, Memory, Storage, Info } from '@mui/icons-material';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Workspace } from '../../types';
@@ -69,8 +63,12 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
         <CardContent className={styles.cardContent}>
           <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="h6" component="h3" noWrap sx={{ mb: 0.5 }}>{spec.displayName ?? metadata.name}</Typography>
-              <Typography variant="body2" color="text.secondary">{metadata.name}</Typography>
+              <Typography variant="h6" component="h3" noWrap sx={{ mb: 0.5 }}>
+                {spec.displayName ?? metadata.name}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {metadata.name}
+              </Typography>
             </Box>
             <IconButton size="small" onClick={handleMenuOpen} aria-label={strings.workspace.moreOptions}>
               <MoreVert />
@@ -85,9 +83,7 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
               sx={{ bgcolor: `${statusColor}1a`, color: statusColor, border: 'none' }}
             />
             <Chip label={spec.image} size="small" variant="outlined" className={styles.imageChip} />
-            {spec.accessType === 'OwnerOnly' && (
-              <Chip label={strings.common.private} size="small" className={styles.privateChip} />
-            )}
+            {spec.accessType === 'OwnerOnly' && <Chip label={strings.common.private} size="small" className={styles.privateChip} />}
           </Stack>
 
           <Stack direction="row" gap={2} sx={{ color: 'text.secondary' }}>
@@ -115,8 +111,8 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
               </IconButton>
             </Tooltip>
           )}
-          {ownerMatch && (
-            isRunning ? (
+          {ownerMatch &&
+            (isRunning ? (
               <Tooltip title={strings.workspace.stop}>
                 <span>
                   <IconButton size="small" onClick={handleStop} disabled={stopMutation.isPending} aria-label={strings.workspace.stop}>
@@ -132,20 +128,25 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
                   </IconButton>
                 </span>
               </Tooltip>
-            )
-          )}
+            ))}
         </Box>
 
         <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
           <MenuItem onClick={handleViewDetails}>
-            <ListItemIcon><Info fontSize="small" /></ListItemIcon>
+            <ListItemIcon>
+              <Info fontSize="small" />
+            </ListItemIcon>
             <Typography variant="body2">{strings.workspace.viewDetails}</Typography>
           </MenuItem>
           {ownerMatch && <Divider />}
           {ownerMatch && (
             <MenuItem onClick={handleDeleteClick}>
-              <ListItemIcon><Delete fontSize="small" color="error" /></ListItemIcon>
-              <Typography variant="body2" color="error">{strings.common.delete}</Typography>
+              <ListItemIcon>
+                <Delete fontSize="small" color="error" />
+              </ListItemIcon>
+              <Typography variant="body2" color="error">
+                {strings.common.delete}
+              </Typography>
             </MenuItem>
           )}
         </Menu>

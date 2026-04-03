@@ -1,8 +1,5 @@
 import { Outlet, Link } from 'react-router-dom';
-import {
-  AppBar, Toolbar, Typography, Container, Avatar, IconButton,
-  Tooltip, Skeleton, Box, Stack,
-} from '@mui/material';
+import { AppBar, Toolbar, Typography, Container, Avatar, IconButton, Tooltip, Skeleton, Box, Stack } from '@mui/material';
 import { useAuth } from '../../context';
 import { ThemeSwitcher } from '../ui/ThemeSwitcher';
 import { strings } from '../../constants';
@@ -27,7 +24,9 @@ export function Layout() {
         <Toolbar className={styles.toolbar}>
           <Link to="/" className={styles.logoLink} aria-label={strings.a11y.homeLink}>
             <Box className={styles.logoBox} aria-hidden="true">
-              <Typography component="span" className={styles.logoText}>{strings.app.logo}</Typography>
+              <Typography component="span" className={styles.logoText}>
+                {strings.app.logo}
+              </Typography>
             </Box>
             <Typography variant="h6" component="span" className={styles.brandText}>
               {strings.app.name}

@@ -15,6 +15,7 @@ Thank you for your interest in contributing! This guide will help you get starte
 ### Development Setup
 
 1. **Fork and clone**:
+
    ```bash
    git clone https://github.com/YOUR_USERNAME/jupyter-k8s-ui.git
    cd jupyter-k8s-ui
@@ -23,26 +24,33 @@ Thank you for your interest in contributing! This guide will help you get starte
 2. **Configure kubeconfig** (one-time):
 
    Your kubeconfig needs OIDC credentials for the cluster. Run the `set-kubeconfig.sh` script from your cluster admin:
+
    ```bash
    bash set-kubeconfig.sh
    ```
+
    See [README.md](README.md#1-configure-kubeconfig-one-time) for details.
 
 3. **Install dependencies**:
+
    ```bash
    make deps
    ```
 
 4. **Get a development token**:
+
    ```bash
    make refresh-token
    ```
+
    A browser window opens for GitHub OAuth. The token is saved to `.env` automatically.
 
 5. **Start development servers**:
+
    ```bash
    make dev-full
    ```
+
    - Frontend: http://localhost:5173
    - Backend: http://localhost:8090
 
@@ -117,6 +125,7 @@ Commit prefixes: `feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `test:`, `chor
 ### 6. Open a Pull Request
 
 Include:
+
 - Clear title describing the change
 - Description of what changed and why
 - Link to related issues

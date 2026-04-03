@@ -34,17 +34,11 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <Box
-          display="flex"
-          flexDirection="column"
-          alignItems="center"
-          justifyContent="center"
-          minHeight="100vh"
-          p={4}
-          sx={{ textAlign: 'center' }}
-        >
+        <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" minHeight="100vh" p={4} sx={{ textAlign: 'center' }}>
           <ErrorOutline color="error" sx={{ fontSize: 64, mb: 2 }} />
-          <Typography variant="h4" gutterBottom>{strings.error.title}</Typography>
+          <Typography variant="h4" gutterBottom>
+            {strings.error.title}
+          </Typography>
           <Box maxWidth={400}>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               {strings.error.description}

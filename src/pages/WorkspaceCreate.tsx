@@ -1,18 +1,25 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Typography, TextField, Button, Slider, Autocomplete, Switch,
-  Box, Stack, ToggleButtonGroup, ToggleButton, CircularProgress,
-  Alert, Collapse,
+  Typography,
+  TextField,
+  Button,
+  Slider,
+  Autocomplete,
+  Switch,
+  Box,
+  Stack,
+  ToggleButtonGroup,
+  ToggleButton,
+  CircularProgress,
+  Alert,
+  Collapse,
 } from '@mui/material';
 import { Memory, Storage } from '@mui/icons-material';
 import { useCreateWorkspace, useTemplates } from '../api';
 import { TemplateCard } from '../components';
 import type { WorkspaceTemplate, CreateWorkspaceRequest } from '../types';
-import {
-  strings, imageOptions, resourceBounds as defaultResourceBounds,
-  RESOURCE_DEFAULTS, IDLE_SHUTDOWN_DEFAULTS,
-} from '../constants';
+import { strings, imageOptions, resourceBounds as defaultResourceBounds, RESOURCE_DEFAULTS, IDLE_SHUTDOWN_DEFAULTS } from '../constants';
 import { clamp, parseResourceValue, parseMemoryGi, sanitizeK8sName } from '../utils';
 import styles from './WorkspaceCreate.module.css';
 
@@ -48,18 +55,23 @@ export function WorkspaceCreate() {
         max: parseMemoryGi(res.memory?.max, defaultResourceBounds.memory.max),
         step: defaultResourceBounds.memory.step,
       },
-      storage: selectedTemplate.spec.primaryStorage ? {
-        min: parseMemoryGi(selectedTemplate.spec.primaryStorage.minSize, defaultResourceBounds.storage.min),
-        max: parseMemoryGi(selectedTemplate.spec.primaryStorage.maxSize, defaultResourceBounds.storage.max),
-        step: defaultResourceBounds.storage.step,
-      } : defaultResourceBounds.storage,
+      storage: selectedTemplate.spec.primaryStorage
+        ? {
+            min: parseMemoryGi(selectedTemplate.spec.primaryStorage.minSize, defaultResourceBounds.storage.min),
+            max: parseMemoryGi(selectedTemplate.spec.primaryStorage.maxSize, defaultResourceBounds.storage.max),
+            step: defaultResourceBounds.storage.step,
+          }
+        : defaultResourceBounds.storage,
     };
   }, [selectedTemplate]);
 
-  const idleShutdownBounds = useMemo(() => ({
-    min: selectedTemplate?.spec.idleShutdownOverrides?.minIdleTimeoutInMinutes ?? IDLE_SHUTDOWN_DEFAULTS.MIN_TIMEOUT,
-    max: selectedTemplate?.spec.idleShutdownOverrides?.maxIdleTimeoutInMinutes ?? IDLE_SHUTDOWN_DEFAULTS.MAX_TIMEOUT,
-  }), [selectedTemplate]);
+  const idleShutdownBounds = useMemo(
+    () => ({
+      min: selectedTemplate?.spec.idleShutdownOverrides?.minIdleTimeoutInMinutes ?? IDLE_SHUTDOWN_DEFAULTS.MIN_TIMEOUT,
+      max: selectedTemplate?.spec.idleShutdownOverrides?.maxIdleTimeoutInMinutes ?? IDLE_SHUTDOWN_DEFAULTS.MAX_TIMEOUT,
+    }),
+    [selectedTemplate],
+  );
 
   const availableImages = useMemo(() => {
     if (selectedTemplate?.spec.allowedImages?.length) {
@@ -158,19 +170,36 @@ export function WorkspaceCreate() {
 
   return (
     <Box className={styles.container}>
-      <Typography variant="h4" className={styles.title}>{ws.createTitle}</Typography>
+      <Typography variant="h4" className={styles.title}>
+        {ws.createTitle}
+      </Typography>
 
-      {createMutation.error && <Alert severity="error" className={styles.alert}>{createMutation.error.message}</Alert>}
+      {createMutation.error && (
+        <Alert severity="error" className={styles.alert}>
+          {createMutation.error.message}
+        </Alert>
+      )}
 
       <form onSubmit={handleSubmit}>
         {/* Workspace Name */}
         <Box className={styles.section}>
           <Typography className={styles.sectionLabel}>{ws.sectionWorkspace}</Typography>
           <Box className={styles.row}>
-            <TextField label={ws.fieldName} value={name} onChange={(e) => setName(sanitizeK8sName(e.target.value))}
-              required placeholder={ws.fieldNamePlaceholder} size="small" />
-            <TextField label={ws.fieldDisplayName} value={displayName} onChange={(e) => setDisplayName(e.target.value)}
-              placeholder={name || 'My Workspace'} size="small" />
+            <TextField
+              label={ws.fieldName}
+              value={name}
+              onChange={(e) => setName(sanitizeK8sName(e.target.value))}
+              required
+              placeholder={ws.fieldNamePlaceholder}
+              size="small"
+            />
+            <TextField
+              label={ws.fieldDisplayName}
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder={name || 'My Workspace'}
+              size="small"
+            />
           </Box>
         </Box>
 
@@ -178,12 +207,18 @@ export function WorkspaceCreate() {
         <Box className={styles.section}>
           <Typography className={styles.sectionLabel}>{ws.sectionTemplate}</Typography>
           {templatesLoading ? (
-            <Box className={styles.loading}><CircularProgress size={24} /></Box>
+            <Box className={styles.loading}>
+              <CircularProgress size={24} />
+            </Box>
           ) : (
             <Box className={styles.templateGrid}>
               {templates?.map((t) => (
-                <TemplateCard key={t.metadata.name} template={t} selected={selectedTemplate?.metadata.name === t.metadata.name}
-                  onClick={() => handleTemplateSelect(t)} />
+                <TemplateCard
+                  key={t.metadata.name}
+                  template={t}
+                  selected={selectedTemplate?.metadata.name === t.metadata.name}
+                  onClick={() => handleTemplateSelect(t)}
+                />
               ))}
             </Box>
           )}
@@ -198,12 +233,10 @@ export function WorkspaceCreate() {
               options={availableImages}
               getOptionLabel={(o) => (typeof o === 'string' ? o : o.value)}
               value={selectedImageValue}
-              onChange={(_, v) => setImage(typeof v === 'string' ? v : v?.value ?? '')}
+              onChange={(_, v) => setImage(typeof v === 'string' ? v : (v?.value ?? ''))}
               onInputChange={(_, v, r) => r === 'input' && allowCustomImages && setImage(v)}
               size="small"
-              renderInput={(params) => (
-                <TextField {...params} label={ws.fieldImage} />
-              )}
+              renderInput={(params) => <TextField {...params} label={ws.fieldImage} />}
             />
 
             {/* CPU */}
@@ -213,14 +246,26 @@ export function WorkspaceCreate() {
                   <Memory className={styles.resourceIcon} sx={{ fontSize: 20 }} />
                   <Typography variant="body2">{ws.resourceCpu}</Typography>
                 </Stack>
-                <Typography className={styles.resourceValue}>{cpuLimit} {common.cores}</Typography>
+                <Typography className={styles.resourceValue}>
+                  {cpuLimit} {common.cores}
+                </Typography>
               </Stack>
-              <Slider value={cpuLimit} onChange={(_, v) => setCpuLimit(v as number)}
-                min={resourceBounds.cpu.min} max={resourceBounds.cpu.max} step={resourceBounds.cpu.step}
-                size="small" aria-label={ws.resourceCpu} />
+              <Slider
+                value={cpuLimit}
+                onChange={(_, v) => setCpuLimit(v as number)}
+                min={resourceBounds.cpu.min}
+                max={resourceBounds.cpu.max}
+                step={resourceBounds.cpu.step}
+                size="small"
+                aria-label={ws.resourceCpu}
+              />
               <Stack direction="row" justifyContent="space-between">
-                <Typography variant="caption" color="text.secondary">{resourceBounds.cpu.min} {common.cores}</Typography>
-                <Typography variant="caption" color="text.secondary">{resourceBounds.cpu.max} {common.cores}</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {resourceBounds.cpu.min} {common.cores}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {resourceBounds.cpu.max} {common.cores}
+                </Typography>
               </Stack>
             </Box>
 
@@ -231,14 +276,26 @@ export function WorkspaceCreate() {
                   <Storage className={styles.resourceIcon} sx={{ fontSize: 20 }} />
                   <Typography variant="body2">{ws.resourceMemory}</Typography>
                 </Stack>
-                <Typography className={styles.resourceValue}>{memoryLimit} {common.gb}</Typography>
+                <Typography className={styles.resourceValue}>
+                  {memoryLimit} {common.gb}
+                </Typography>
               </Stack>
-              <Slider value={memoryLimit} onChange={(_, v) => setMemoryLimit(v as number)}
-                min={resourceBounds.memory.min} max={resourceBounds.memory.max} step={resourceBounds.memory.step}
-                size="small" aria-label={ws.resourceMemory} />
+              <Slider
+                value={memoryLimit}
+                onChange={(_, v) => setMemoryLimit(v as number)}
+                min={resourceBounds.memory.min}
+                max={resourceBounds.memory.max}
+                step={resourceBounds.memory.step}
+                size="small"
+                aria-label={ws.resourceMemory}
+              />
               <Stack direction="row" justifyContent="space-between">
-                <Typography variant="caption" color="text.secondary">{resourceBounds.memory.min} {common.gb}</Typography>
-                <Typography variant="caption" color="text.secondary">{resourceBounds.memory.max} {common.gb}</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {resourceBounds.memory.min} {common.gb}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {resourceBounds.memory.max} {common.gb}
+                </Typography>
               </Stack>
             </Box>
 
@@ -249,19 +306,36 @@ export function WorkspaceCreate() {
                   <Storage className={styles.resourceIcon} sx={{ fontSize: 20 }} />
                   <Typography variant="body2">{ws.resourceStorage}</Typography>
                 </Stack>
-                <Typography className={styles.resourceValue}>{storageSize} {common.gb}</Typography>
+                <Typography className={styles.resourceValue}>
+                  {storageSize} {common.gb}
+                </Typography>
               </Stack>
-              <Slider value={storageSize} onChange={(_, v) => setStorageSize(v as number)}
-                min={resourceBounds.storage.min} max={resourceBounds.storage.max} step={resourceBounds.storage.step}
-                size="small" aria-label={ws.resourceStorage} />
+              <Slider
+                value={storageSize}
+                onChange={(_, v) => setStorageSize(v as number)}
+                min={resourceBounds.storage.min}
+                max={resourceBounds.storage.max}
+                step={resourceBounds.storage.step}
+                size="small"
+                aria-label={ws.resourceStorage}
+              />
               <Stack direction="row" justifyContent="space-between">
-                <Typography variant="caption" color="text.secondary">{resourceBounds.storage.min} {common.gb}</Typography>
-                <Typography variant="caption" color="text.secondary">{resourceBounds.storage.max} {common.gb}</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {resourceBounds.storage.min} {common.gb}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {resourceBounds.storage.max} {common.gb}
+                </Typography>
               </Stack>
             </Box>
 
-            <TextField label={ws.fieldMountPath} value={storageMountPath}
-              onChange={(e) => setStorageMountPath(e.target.value)} size="small" helperText={ws.fieldMountPathHelper} />
+            <TextField
+              label={ws.fieldMountPath}
+              value={storageMountPath}
+              onChange={(e) => setStorageMountPath(e.target.value)}
+              size="small"
+              helperText={ws.fieldMountPathHelper}
+            />
           </Stack>
         </Box>
 
@@ -315,18 +389,32 @@ export function WorkspaceCreate() {
                   </Typography>
                 )}
               </Box>
-              <Switch size="small" checked={idleShutdownEnabled} onChange={(e) => setIdleShutdownEnabled(e.target.checked)}
-                inputProps={{ 'aria-label': ws.idleShutdownEnable }} />
+              <Switch
+                size="small"
+                checked={idleShutdownEnabled}
+                onChange={(e) => setIdleShutdownEnabled(e.target.checked)}
+                inputProps={{ 'aria-label': ws.idleShutdownEnable }}
+              />
             </Box>
 
             <Collapse in={idleShutdownEnabled}>
               <Box className={styles.resourceBlock}>
-                <Slider value={idleTimeoutMinutes} onChange={(_, v) => setIdleTimeoutMinutes(v as number)}
-                  min={idleShutdownBounds.min} max={idleShutdownBounds.max} step={IDLE_SHUTDOWN_DEFAULTS.STEP}
-                  size="small" aria-label={ws.idleShutdownTimeout} />
+                <Slider
+                  value={idleTimeoutMinutes}
+                  onChange={(_, v) => setIdleTimeoutMinutes(v as number)}
+                  min={idleShutdownBounds.min}
+                  max={idleShutdownBounds.max}
+                  step={IDLE_SHUTDOWN_DEFAULTS.STEP}
+                  size="small"
+                  aria-label={ws.idleShutdownTimeout}
+                />
                 <Stack direction="row" justifyContent="space-between">
-                  <Typography variant="caption" color="text.secondary">{idleShutdownBounds.min} {common.min}</Typography>
-                  <Typography variant="caption" color="text.secondary">{idleShutdownBounds.max} {common.min}</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {idleShutdownBounds.min} {common.min}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {idleShutdownBounds.max} {common.min}
+                  </Typography>
                 </Stack>
               </Box>
             </Collapse>
@@ -335,9 +423,10 @@ export function WorkspaceCreate() {
 
         {/* Actions */}
         <Stack direction="row" gap={2} className={styles.actions}>
-          <Button variant="text" onClick={() => navigate('/')}>{common.cancel}</Button>
-          <Button type="submit" variant="contained" disabled={!name || createMutation.isPending}
-            className={styles.submitBtn}>
+          <Button variant="text" onClick={() => navigate('/')}>
+            {common.cancel}
+          </Button>
+          <Button type="submit" variant="contained" disabled={!name || createMutation.isPending} className={styles.submitBtn}>
             {createMutation.isPending ? <CircularProgress size={20} color="inherit" /> : ws.createWorkspace}
           </Button>
         </Stack>

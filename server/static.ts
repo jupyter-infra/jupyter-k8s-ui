@@ -35,7 +35,7 @@ export async function serveStatic(pathname: string): Promise<Response | null> {
   const file = Bun.file(fullPath);
 
   // Check if file actually exists on disk
-  if (!await file.exists()) {
+  if (!(await file.exists())) {
     return null;
   }
 

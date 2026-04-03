@@ -1,11 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  Typography, Button, Chip, CircularProgress, Box, Stack, Paper,
-} from '@mui/material';
-import {
-  ArrowBack, PlayArrow, Stop, OpenInNew, Memory, Storage,
-  CheckCircle, Error as ErrorIcon, Schedule, Info,
-} from '@mui/icons-material';
+import { Typography, Button, Chip, CircularProgress, Box, Stack, Paper } from '@mui/material';
+import { ArrowBack, PlayArrow, Stop, OpenInNew, Memory, Storage, CheckCircle, Error as ErrorIcon, Schedule, Info } from '@mui/icons-material';
 import { useWorkspace, useStartWorkspace, useStopWorkspace } from '../api';
 import { useAuth } from '../context';
 import { isOwner as checkIsOwner, getWorkspaceState } from '../utils';
@@ -25,16 +20,17 @@ function getConditionIcon(type: string, status: string) {
 function ConditionCard({ condition }: { condition: WorkspaceCondition }) {
   const isActive = condition.status === 'True';
   return (
-    <Paper
-      className={`${styles.conditionCard} ${isActive ? styles.conditionActive : ''}`}
-      elevation={0}
-    >
+    <Paper className={`${styles.conditionCard} ${isActive ? styles.conditionActive : ''}`} elevation={0}>
       <Stack direction="row" alignItems="flex-start" gap={1.5}>
         {getConditionIcon(condition.type, condition.status)}
         <Box>
           <Typography variant="subtitle2">{condition.type}</Typography>
-          <Typography variant="body2" color="text.secondary">{condition.reason}</Typography>
-          <Typography variant="caption" color="text.secondary">{condition.message}</Typography>
+          <Typography variant="body2" color="text.secondary">
+            {condition.reason}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {condition.message}
+          </Typography>
         </Box>
       </Stack>
     </Paper>
@@ -47,7 +43,9 @@ function InfoRow({ label, value }: { label: React.ReactNode; value: React.ReactN
       <Typography variant="body2" color="text.secondary" className={styles.infoLabel} component="div">
         {label}
       </Typography>
-      <Typography variant="body2" className={styles.infoValue} component="div">{value}</Typography>
+      <Typography variant="body2" className={styles.infoValue} component="div">
+        {value}
+      </Typography>
     </Stack>
   );
 }
@@ -75,9 +73,7 @@ export function WorkspaceDetail() {
           {strings.common.back}
         </Button>
         <Paper className={styles.errorCard}>
-          <Typography color="error">
-            {error?.message ?? 'Workspace not found'}
-          </Typography>
+          <Typography color="error">{error?.message ?? 'Workspace not found'}</Typography>
         </Paper>
       </Box>
     );
@@ -98,41 +94,28 @@ export function WorkspaceDetail() {
 
   return (
     <Box className={styles.container}>
-      <Button
-        startIcon={<ArrowBack />}
-        onClick={() => navigate('/')}
-        className={styles.backButton}
-      >
+      <Button startIcon={<ArrowBack />} onClick={() => navigate('/')} className={styles.backButton}>
         {strings.common.back}
       </Button>
 
       <Stack direction="row" alignItems="center" justifyContent="space-between" className={styles.header}>
         <Box>
           <Typography variant="h4">{workspace.spec.displayName ?? workspace.metadata.name}</Typography>
-          <Typography variant="body2" color="text.secondary">{workspace.metadata.name}</Typography>
+          <Typography variant="body2" color="text.secondary">
+            {workspace.metadata.name}
+          </Typography>
         </Box>
         <Stack direction="row" gap={1}>
-          {ownerMatch && (
-            isRunning ? (
-              <Button
-                variant="outlined"
-                startIcon={<Stop />}
-                onClick={handleStop}
-                disabled={stopMutation.isPending}
-              >
+          {ownerMatch &&
+            (isRunning ? (
+              <Button variant="outlined" startIcon={<Stop />} onClick={handleStop} disabled={stopMutation.isPending}>
                 {strings.workspace.stop}
               </Button>
             ) : (
-              <Button
-                variant="contained"
-                startIcon={<PlayArrow />}
-                onClick={handleStart}
-                disabled={startMutation.isPending}
-              >
+              <Button variant="contained" startIcon={<PlayArrow />} onClick={handleStart} disabled={startMutation.isPending}>
                 {strings.workspace.start}
               </Button>
-            )
-          )}
+            ))}
           {canOpen && (
             <Button variant="contained" startIcon={<OpenInNew />} onClick={handleOpen}>
               {strings.workspace.openWorkspace}
@@ -148,9 +131,7 @@ export function WorkspaceDetail() {
               {strings.workspace.detailConditions}
             </Typography>
             <Stack gap={1.5}>
-              {workspace.status?.conditions?.map((condition) => (
-                <ConditionCard key={condition.type} condition={condition} />
-              )) ?? (
+              {workspace.status?.conditions?.map((condition) => <ConditionCard key={condition.type} condition={condition} />) ?? (
                 <Typography variant="body2" color="text.secondary">
                   No conditions available
                 </Typography>
@@ -165,24 +146,19 @@ export function WorkspaceDetail() {
               {strings.workspace.detailInfo}
             </Typography>
             <Stack gap={1}>
-              <InfoRow label="Status" value={
-                <Chip
-                  size="small"
-                  label={isProgressing ? 'Starting' : isAvailable ? 'Running' : 'Stopped'}
-                  color={isAvailable ? 'success' : isProgressing ? 'info' : 'default'}
-                />
-              } />
+              <InfoRow
+                label="Status"
+                value={
+                  <Chip
+                    size="small"
+                    label={isProgressing ? 'Starting' : isAvailable ? 'Running' : 'Stopped'}
+                    color={isAvailable ? 'success' : isProgressing ? 'info' : 'default'}
+                  />
+                }
+              />
               <InfoRow label="Image" value={workspace.spec.image ?? '—'} />
-              <InfoRow label="Access" value={
-                <Chip
-                  size="small"
-                  label={workspace.spec.accessType === 'Public' ? 'Public' : 'Private'}
-                  variant="outlined"
-                />
-              } />
-              <InfoRow label="Created" value={
-                new Date(workspace.metadata.creationTimestamp ?? '').toLocaleDateString()
-              } />
+              <InfoRow label="Access" value={<Chip size="small" label={workspace.spec.accessType === 'Public' ? 'Public' : 'Private'} variant="outlined" />} />
+              <InfoRow label="Created" value={new Date(workspace.metadata.creationTimestamp ?? '').toLocaleDateString()} />
             </Stack>
           </Paper>
 
@@ -192,11 +168,19 @@ export function WorkspaceDetail() {
             </Typography>
             <Stack gap={1}>
               <InfoRow
-                label={<Stack direction="row" alignItems="center" gap={0.5}><Memory sx={{ fontSize: 16 }} /> CPU</Stack>}
+                label={
+                  <Stack direction="row" alignItems="center" gap={0.5}>
+                    <Memory sx={{ fontSize: 16 }} /> CPU
+                  </Stack>
+                }
                 value={workspace.spec.resources?.limits?.cpu ?? '—'}
               />
               <InfoRow
-                label={<Stack direction="row" alignItems="center" gap={0.5}><Storage sx={{ fontSize: 16 }} /> Memory</Stack>}
+                label={
+                  <Stack direction="row" alignItems="center" gap={0.5}>
+                    <Storage sx={{ fontSize: 16 }} /> Memory
+                  </Stack>
+                }
                 value={workspace.spec.resources?.limits?.memory ?? '—'}
               />
             </Stack>

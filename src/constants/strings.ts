@@ -125,15 +125,15 @@ export const strings = {
 
 // Image options - using short names that map to built-in images in the controller
 export const imageOptions = [
-  { 
-    value: 'uv', 
-    label: 'Python UV', 
-    description: 'Fast Python with UV package manager' 
+  {
+    value: 'uv',
+    label: 'Python UV',
+    description: 'Fast Python with UV package manager',
   },
-  { 
-    value: 'jupyter/base-notebook:latest', 
-    label: 'JupyterLab', 
-    description: 'Classic Jupyter notebook environment' 
+  {
+    value: 'jupyter/base-notebook:latest',
+    label: 'JupyterLab',
+    description: 'Classic Jupyter notebook environment',
   },
 ] as const;
 

@@ -25,23 +25,23 @@ export function clamp(value: number, min: number, max: number): number {
  */
 const QUANTITY_SUFFIXES: Record<string, number> = {
   // Decimal sub-unit
-  'n': 1e-9,
-  'u': 1e-6,
-  'm': 1e-3,
+  n: 1e-9,
+  u: 1e-6,
+  m: 1e-3,
   // Decimal
-  'k': 1e3,
-  'M': 1e6,
-  'G': 1e9,
-  'T': 1e12,
-  'P': 1e15,
-  'E': 1e18,
+  k: 1e3,
+  M: 1e6,
+  G: 1e9,
+  T: 1e12,
+  P: 1e15,
+  E: 1e18,
   // Binary
-  'Ki': 2 ** 10,
-  'Mi': 2 ** 20,
-  'Gi': 2 ** 30,
-  'Ti': 2 ** 40,
-  'Pi': 2 ** 50,
-  'Ei': 2 ** 60,
+  Ki: 2 ** 10,
+  Mi: 2 ** 20,
+  Gi: 2 ** 30,
+  Ti: 2 ** 40,
+  Pi: 2 ** 50,
+  Ei: 2 ** 60,
 };
 
 // Sorted longest-first so "Ki" matches before "k"
@@ -86,7 +86,7 @@ export function parseMemoryGi(value: string | undefined, fallback: number): numb
   if (!value) return fallback;
   const base = parseQuantity(value);
   if (base === null) return fallback;
-  return base / (2 ** 30);
+  return base / 2 ** 30;
 }
 
 /**
@@ -106,12 +106,7 @@ export function parseCpuCores(value: string | undefined, fallback: number): numb
  */
 export function isOwner(owner: string | undefined, username: string | undefined): boolean {
   if (!owner || !username) return false;
-  return (
-    owner === username ||
-    owner === `github:${username}` ||
-    owner.endsWith(`/${username}`) ||
-    owner.includes(`:${username}`)
-  );
+  return owner === username || owner === `github:${username}` || owner.endsWith(`/${username}`) || owner.includes(`:${username}`);
 }
 
 /**

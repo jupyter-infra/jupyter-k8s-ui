@@ -51,8 +51,7 @@ export function useWorkspace(name: string) {
     queryKey: workspaceKeys.detail(name),
     queryFn: () => apiClient.getWorkspace(name),
     enabled: Boolean(name),
-    refetchInterval: (query) =>
-      isWorkspaceSettled(query.state.data) ? false : DETAIL_POLL_INTERVAL_MS,
+    refetchInterval: (query) => (isWorkspaceSettled(query.state.data) ? false : DETAIL_POLL_INTERVAL_MS),
     refetchIntervalInBackground: false,
   });
 
@@ -79,11 +78,9 @@ export function useDeleteWorkspace() {
     onMutate: async (name) => {
       await queryClient.cancelQueries({ queryKey: workspaceKeys.all });
       const previousWorkspaces = queryClient.getQueryData<Workspace[]>(workspaceKeys.all);
-      
-      queryClient.setQueryData<Workspace[]>(workspaceKeys.all, (old) =>
-        old?.filter((ws) => ws.metadata.name !== name) ?? []
-      );
-      
+
+      queryClient.setQueryData<Workspace[]>(workspaceKeys.all, (old) => old?.filter((ws) => ws.metadata.name !== name) ?? []);
+
       return { previousWorkspaces };
     },
     onError: (_err, _name, context) => {
@@ -107,15 +104,12 @@ export function useStartWorkspace() {
     onMutate: async (name) => {
       await queryClient.cancelQueries({ queryKey: workspaceKeys.all });
       const previousWorkspaces = queryClient.getQueryData<Workspace[]>(workspaceKeys.all);
-      
-      queryClient.setQueryData<Workspace[]>(workspaceKeys.all, (old) =>
-        old?.map((ws) =>
-          ws.metadata.name === name
-            ? { ...ws, spec: { ...ws.spec, desiredStatus: 'Running' as const } }
-            : ws
-        ) ?? []
+
+      queryClient.setQueryData<Workspace[]>(
+        workspaceKeys.all,
+        (old) => old?.map((ws) => (ws.metadata.name === name ? { ...ws, spec: { ...ws.spec, desiredStatus: 'Running' as const } } : ws)) ?? [],
       );
-      
+
       return { previousWorkspaces, name };
     },
     onError: (_err, _name, context) => {
@@ -139,15 +133,12 @@ export function useStopWorkspace() {
     onMutate: async (name) => {
       await queryClient.cancelQueries({ queryKey: workspaceKeys.all });
       const previousWorkspaces = queryClient.getQueryData<Workspace[]>(workspaceKeys.all);
-      
-      queryClient.setQueryData<Workspace[]>(workspaceKeys.all, (old) =>
-        old?.map((ws) =>
-          ws.metadata.name === name
-            ? { ...ws, spec: { ...ws.spec, desiredStatus: 'Stopped' as const } }
-            : ws
-        ) ?? []
+
+      queryClient.setQueryData<Workspace[]>(
+        workspaceKeys.all,
+        (old) => old?.map((ws) => (ws.metadata.name === name ? { ...ws, spec: { ...ws.spec, desiredStatus: 'Stopped' as const } } : ws)) ?? [],
       );
-      
+
       return { previousWorkspaces, name };
     },
     onError: (_err, _name, context) => {

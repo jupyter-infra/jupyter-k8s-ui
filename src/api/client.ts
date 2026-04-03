@@ -5,7 +5,7 @@ const API_BASE = '/api/v1';
 class ApiClient {
   private async request<T>(path: string, options?: RequestInit): Promise<T> {
     // Prepare headers
-    const headers: Record<string, string> = { 
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
 
@@ -38,25 +38,23 @@ class ApiClient {
 
   getWorkspace = (name: string) => this.request<Workspace>(`/workspaces/${name}`);
 
-  createWorkspace = (data: CreateWorkspaceRequest) =>
-    this.request<Workspace>('/workspaces', { method: 'POST', body: JSON.stringify(data) });
+  createWorkspace = (data: CreateWorkspaceRequest) => this.request<Workspace>('/workspaces', { method: 'POST', body: JSON.stringify(data) });
 
   updateWorkspace = (name: string, data: UpdateWorkspaceRequest) =>
     this.request<Workspace>(`/workspaces/${name}`, { method: 'PUT', body: JSON.stringify(data) });
 
-  deleteWorkspace = (name: string) =>
-    this.request<void>(`/workspaces/${name}`, { method: 'DELETE' });
+  deleteWorkspace = (name: string) => this.request<void>(`/workspaces/${name}`, { method: 'DELETE' });
 
   startWorkspace = (name: string) =>
-    this.request<Workspace>(`/workspaces/${name}`, { 
-      method: 'PATCH', 
-      body: JSON.stringify({ desiredStatus: 'Running' }) 
+    this.request<Workspace>(`/workspaces/${name}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ desiredStatus: 'Running' }),
     });
 
   stopWorkspace = (name: string) =>
-    this.request<Workspace>(`/workspaces/${name}`, { 
-      method: 'PATCH', 
-      body: JSON.stringify({ desiredStatus: 'Stopped' }) 
+    this.request<Workspace>(`/workspaces/${name}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ desiredStatus: 'Stopped' }),
     });
 }
 

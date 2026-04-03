@@ -3,13 +3,7 @@ import { existsSync } from 'fs';
 import { createHash } from 'crypto';
 import { homedir } from 'os';
 import { join } from 'path';
-import type {
-  K8sWorkspace,
-  K8sWorkspaceTemplate,
-  WorkspaceResponse,
-  TemplateResponse,
-  ServerConfig,
-} from './types';
+import type { K8sWorkspace, K8sWorkspaceTemplate, WorkspaceResponse, TemplateResponse, ServerConfig } from './types';
 
 // --- Server Configuration ---
 
@@ -30,7 +24,7 @@ export function initializeConfig(): void {
   serverConfig.namespace = process.env.NAMESPACE || 'default';
   serverConfig.staticDir = process.env.STATIC_DIR || './dist';
   serverConfig.devUser = process.env.DEV_USER || '';
-  serverConfig.devAccessToken = isDev ? (process.env.DEV_ACCESS_TOKEN || '') : '';
+  serverConfig.devAccessToken = isDev ? process.env.DEV_ACCESS_TOKEN || '' : '';
   serverConfig.port = parseInt(process.env.PORT || '8090', 10);
   serverConfig.logLevel = (process.env.LOG_LEVEL as ServerConfig['logLevel']) || (isDev ? 'debug' : 'info');
 
@@ -38,7 +32,6 @@ export function initializeConfig(): void {
     console.warn('⚠️  WARNING: DEV_ACCESS_TOKEN is set but will be ignored in production mode');
   }
 }
-
 
 // --- Environment Detection ---
 
@@ -170,7 +163,6 @@ function createMockK8sClient(): CustomObjectsApi {
   } as unknown as CustomObjectsApi;
 }
 
-
 // --- Service Account Client (cached singleton) ---
 
 let serviceAccountClient: CustomObjectsApi | null = null;
@@ -196,9 +188,7 @@ export async function createServiceAccountK8sClient(): Promise<CustomObjectsApi>
       serviceAccountClient = kc.makeApiClient(CustomObjectsApi);
       return serviceAccountClient;
     } catch (err) {
-      serviceAccountClientError = new Error(
-        'Unable to load Kubernetes configuration — expected in local dev without kubectl configured'
-      );
+      serviceAccountClientError = new Error('Unable to load Kubernetes configuration — expected in local dev without kubectl configured');
       serviceAccountClientError.cause = err;
       throw serviceAccountClientError;
     }

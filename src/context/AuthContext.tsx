@@ -33,8 +33,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     // In development, backend reads DEV_ACCESS_TOKEN from .env
     // No need to send Authorization header from frontend
-    fetch('/api/v1/me', { 
-      credentials: 'include'
+    fetch('/api/v1/me', {
+      credentials: 'include',
     })
       .then((res) => {
         if (res.ok) return res.json();
@@ -52,9 +52,5 @@ export function AuthProvider({ children }: AuthProviderProps) {
       .finally(() => setIsLoading(false));
   }, []);
 
-  return (
-    <AuthContext.Provider value={{ user, isLoading }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={{ user, isLoading }}>{children}</AuthContext.Provider>;
 }

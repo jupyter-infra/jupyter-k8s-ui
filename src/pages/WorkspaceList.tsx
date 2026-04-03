@@ -1,9 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Box, Typography, Button, Grid, CircularProgress, ToggleButtonGroup,
-  ToggleButton, InputBase, Stack, Paper,
-} from '@mui/material';
+import { Box, Typography, Button, Grid, CircularProgress, ToggleButtonGroup, ToggleButton, InputBase, Stack, Paper } from '@mui/material';
 import { Add, Search, Refresh } from '@mui/icons-material';
 import { useWorkspaces } from '../api';
 import { useAuth } from '../context';
@@ -30,8 +27,7 @@ export function WorkspaceList() {
 
       if (search) {
         const q = search.toLowerCase();
-        const matchesSearch = (ws.spec.displayName ?? ws.metadata.name).toLowerCase().includes(q) ||
-                             ws.metadata.name.toLowerCase().includes(q);
+        const matchesSearch = (ws.spec.displayName ?? ws.metadata.name).toLowerCase().includes(q) || ws.metadata.name.toLowerCase().includes(q);
         if (!matchesSearch) return false;
       }
 
@@ -64,7 +60,9 @@ export function WorkspaceList() {
   return (
     <Box>
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h2" sx={{ mb: 1 }}>{strings.workspace.listTitle}</Typography>
+        <Typography variant="h2" sx={{ mb: 1 }}>
+          {strings.workspace.listTitle}
+        </Typography>
         <Typography variant="body2" color="text.secondary">
           {strings.workspace.listDescription}
         </Typography>
@@ -83,25 +81,14 @@ export function WorkspaceList() {
             />
           </Paper>
 
-          <ToggleButtonGroup
-            value={filter}
-            exclusive
-            onChange={handleFilterChange}
-            size="small"
-            aria-label={strings.a11y.filterWorkspaces}
-          >
+          <ToggleButtonGroup value={filter} exclusive onChange={handleFilterChange} size="small" aria-label={strings.a11y.filterWorkspaces}>
             <ToggleButton value="mine">{strings.workspace.filterMine}</ToggleButton>
             <ToggleButton value="all">{strings.workspace.filterAll}</ToggleButton>
           </ToggleButtonGroup>
         </Stack>
 
         <Stack direction="row" gap={1}>
-          <Button
-            variant="outlined"
-            startIcon={isFetching ? <CircularProgress size={16} /> : <Refresh />}
-            onClick={() => refetch()}
-            disabled={isFetching}
-          >
+          <Button variant="outlined" startIcon={isFetching ? <CircularProgress size={16} /> : <Refresh />} onClick={() => refetch()} disabled={isFetching}>
             {strings.workspace.refresh}
           </Button>
           <Button variant="contained" startIcon={<Add />} onClick={handleCreateClick} className={styles.gradientButton}>
