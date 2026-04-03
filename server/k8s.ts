@@ -16,6 +16,21 @@ export const serverConfig: ServerConfig = {
   devAccessToken: '',
   port: 8090,
   logLevel: 'info',
+  session: {
+    enabled: false,
+    cookieName: 'workspace_console_session',
+    cookiePath: '/api/',
+    cookieMaxAgeSecs: 2700,
+    maxSessionLifetimeSecs: 3600,
+    nearExpiryThresholdSecs: 600,
+    secretName: 'web-app-session-secret',
+    secretNamespace: '',
+    keyPrefix: 'session-key-',
+    newKeyUseDelaySecs: 60,
+    cookieSizeWarnBytes: 3800,
+    cookieSizeMaxBytes: 4096,
+    expectedDomain: '',
+  },
 };
 
 export function initializeConfig(): void {
@@ -31,6 +46,19 @@ export function initializeConfig(): void {
   if (!isDev && process.env.DEV_ACCESS_TOKEN) {
     console.warn('⚠️  WARNING: DEV_ACCESS_TOKEN is set but will be ignored in production mode');
   }
+
+  // Session config
+  serverConfig.session.enabled = process.env.SESSION_ENABLED !== 'false';
+  serverConfig.session.cookieName = process.env.SESSION_COOKIE_NAME || 'workspace_console_session';
+  serverConfig.session.cookiePath = process.env.SESSION_COOKIE_PATH || '/api/';
+  serverConfig.session.cookieMaxAgeSecs = parseInt(process.env.SESSION_COOKIE_MAX_AGE_SECS || '2700', 10);
+  serverConfig.session.maxSessionLifetimeSecs = parseInt(process.env.SESSION_MAX_LIFETIME_SECS || '3600', 10);
+  serverConfig.session.nearExpiryThresholdSecs = parseInt(process.env.SESSION_NEAR_EXPIRY_THRESHOLD_SECS || '600', 10);
+  serverConfig.session.secretName = process.env.SESSION_SECRET_NAME || 'web-app-session-secret';
+  serverConfig.session.secretNamespace = process.env.SESSION_SECRET_NAMESPACE || serverConfig.namespace;
+  serverConfig.session.keyPrefix = process.env.SESSION_KEY_PREFIX || 'session-key-';
+  serverConfig.session.newKeyUseDelaySecs = parseInt(process.env.SESSION_NEW_KEY_USE_DELAY_SECS || '60', 10);
+  serverConfig.session.expectedDomain = process.env.SESSION_EXPECTED_DOMAIN || '';
 }
 
 // --- Environment Detection ---

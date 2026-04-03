@@ -10,6 +10,7 @@ interface ConfirmDialogProps {
   onCancel: () => void;
   isDestructive?: boolean;
   isLoading?: boolean;
+  loadingLabel?: string;
 }
 
 export function ConfirmDialog({
@@ -22,6 +23,7 @@ export function ConfirmDialog({
   onCancel,
   isDestructive = false,
   isLoading = false,
+  loadingLabel = 'Processing...',
 }: ConfirmDialogProps) {
   return (
     <Dialog open={open} onClose={onCancel} aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-description">
@@ -34,7 +36,7 @@ export function ConfirmDialog({
           {cancelLabel}
         </Button>
         <Button onClick={onConfirm} variant="contained" color={isDestructive ? 'error' : 'primary'} disabled={isLoading}>
-          {isLoading ? 'Deleting...' : confirmLabel}
+          {isLoading ? loadingLabel : confirmLabel}
         </Button>
       </DialogActions>
     </Dialog>

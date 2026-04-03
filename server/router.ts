@@ -1,5 +1,6 @@
 import { log } from './logger';
-import { extractJWT } from './auth';
+import { extractAuth, getSessionCookieHeader } from './auth';
+import { validateCSRF } from './csrf';
 import { jsonResponse, errorResponse } from './responses';
 import { serveStatic } from './static';
 import { handleListWorkspaces, handleGetWorkspace, handleCreateWorkspace, handleUpdateWorkspace, handleDeleteWorkspace } from './handlers/workspaces';
@@ -29,6 +30,19 @@ export async function handleRequest(req: Request): Promise<Response> {
   }
 }
 
+/**
+ * Attach a Set-Cookie header to a response if needed.
+ */
+function withSessionCookie(response: Response, jwt: string, source: import('./auth').TokenSource): Response {
+  const cookieHeader = getSessionCookieHeader(jwt, source);
+  if (!cookieHeader) return response;
+
+  // Clone response to add the Set-Cookie header
+  const newResponse = new Response(response.body, response);
+  newResponse.headers.append('Set-Cookie', cookieHeader);
+  return newResponse;
+}
+
 async function routeRequest(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const { pathname } = url;
@@ -47,15 +61,25 @@ async function routeRequest(req: Request): Promise<Response> {
 
   // Authenticated endpoints
   if (pathname.startsWith(`${API_PREFIX}/`)) {
-    const jwt = extractJWT(req);
-    if (!jwt) return errorResponse(401, 'Authentication required');
+    const auth = extractAuth(req);
+    if (!auth) return errorResponse(401, 'Authentication required');
+
+    const { jwt, source } = auth;
+
+    // CSRF check for mutations
+    if (!validateCSRF(req)) {
+      return errorResponse(403, 'CSRF validation failed');
+    }
+
+    let response: Response;
 
     if (pathname === ROUTES.workspaces) {
       const handlers: Record<string, () => Promise<Response>> = {
         GET: () => handleListWorkspaces(jwt),
         POST: () => handleCreateWorkspace(jwt, req),
       };
-      return handlers[method]?.() ?? errorResponse(405, 'Method not allowed');
+      response = await (handlers[method]?.() ?? Promise.resolve(errorResponse(405, 'Method not allowed')));
+      return withSessionCookie(response, jwt, source);
     }
 
     const workspaceMatch = pathname.match(ROUTES.workspace);
@@ -67,14 +91,16 @@ async function routeRequest(req: Request): Promise<Response> {
         PATCH: () => handleUpdateWorkspace(jwt, name, req),
         DELETE: () => handleDeleteWorkspace(jwt, name),
       };
-      return handlers[method]?.() ?? errorResponse(405, 'Method not allowed');
+      response = await (handlers[method]?.() ?? Promise.resolve(errorResponse(405, 'Method not allowed')));
+      return withSessionCookie(response, jwt, source);
     }
 
     if (pathname === ROUTES.templates) {
       const handlers: Record<string, () => Promise<Response>> = {
         GET: () => handleListTemplates(jwt),
       };
-      return handlers[method]?.() ?? errorResponse(405, 'Method not allowed');
+      response = await (handlers[method]?.() ?? Promise.resolve(errorResponse(405, 'Method not allowed')));
+      return withSessionCookie(response, jwt, source);
     }
 
     return errorResponse(404, 'API endpoint not found');

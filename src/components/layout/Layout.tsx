@@ -1,7 +1,8 @@
 import { Outlet, Link } from 'react-router-dom';
-import { AppBar, Toolbar, Typography, Container, Avatar, IconButton, Tooltip, Skeleton, Box, Stack } from '@mui/material';
+import { AppBar, Toolbar, Typography, Container, Skeleton, Box, Stack } from '@mui/material';
 import { useAuth } from '../../context';
 import { ThemeSwitcher } from '../ui/ThemeSwitcher';
+import { UserMenu } from './UserMenu';
 import { strings } from '../../constants';
 import styles from './Layout.module.css';
 
@@ -37,18 +38,7 @@ export function Layout() {
 
           <Stack direction="row" alignItems="center" gap={1}>
             <ThemeSwitcher />
-
-            {isLoading ? (
-              <Skeleton variant="circular" width={32} height={32} />
-            ) : user ? (
-              <Tooltip title={user.username}>
-                <IconButton size="small" aria-label={strings.a11y.userMenu(user.username)}>
-                  <Avatar className={styles.avatar} alt={user.username}>
-                    {user.username.charAt(0).toUpperCase()}
-                  </Avatar>
-                </IconButton>
-              </Tooltip>
-            ) : null}
+            {isLoading ? <Skeleton variant="circular" width={32} height={32} /> : user ? <UserMenu username={user.username} /> : null}
           </Stack>
         </Toolbar>
       </AppBar>
