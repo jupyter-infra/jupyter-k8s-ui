@@ -4,7 +4,7 @@ import { describe, test, expect, beforeEach, mock } from 'bun:test';
 // Each handler invocation talks to the cached mock. Tests can set return
 // values or error responses per-test by reassigning the mock implementations.
 const k8s = {
-  list: mock(async () => ({ body: { items: [] } })),
+  list: mock(async () => ({ body: { items: [] as Record<string, unknown>[] } })),
   get: mock(async () => ({ body: buildK8sWorkspace('ws-1') })),
   create: mock(async () => ({ body: buildK8sWorkspace('ws-1') })),
   replace: mock(async () => ({ body: buildK8sWorkspace('ws-1') })),

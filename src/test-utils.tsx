@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import React, { type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import type { Workspace } from './types';

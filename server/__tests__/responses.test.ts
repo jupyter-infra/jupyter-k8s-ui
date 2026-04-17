@@ -14,7 +14,7 @@ describe('handleK8sError', () => {
     const err = Object.assign(new Error('x'), { statusCode });
     const res = handleK8sError(err, 'fallback');
     expect(res.status).toBe(statusCode);
-    const body = await res.json();
+    const body = (await res.json()) as { error: string };
     expect(body.error.toLowerCase()).toContain(expectedText.toLowerCase());
   });
 
@@ -22,7 +22,7 @@ describe('handleK8sError', () => {
     const err = Object.assign(new Error('weird'), { statusCode: 999 });
     const res = handleK8sError(err, 'Something broke');
     expect(res.status).toBe(500);
-    const body = await res.json();
+    const body = (await res.json()) as { error: string; details: string };
     expect(body.error).toBe('Something broke');
     expect(body.details).toBe('weird');
   });
