@@ -1,0 +1,6 @@
+# Bun config for frontend tests.
+# Registers happy-dom so React components can render.
+# The root bunfig.toml has no preload — server tests use Bun's native
+# Request/Response (happy-dom strips forbidden headers like Origin/Referer).
+[test]
+preload = ["./test-dom-setup.ts"]

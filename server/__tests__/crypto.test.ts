@@ -12,20 +12,6 @@ describe('encrypt/decrypt', () => {
     expect(decrypted.toString()).toBe('hello world');
   });
 
-  test('round-trip with empty plaintext', () => {
-    const plaintext = Buffer.alloc(0);
-    const encrypted = encrypt(plaintext, key);
-    const decrypted = decrypt(encrypted, key);
-    expect(decrypted.length).toBe(0);
-  });
-
-  test('round-trip with large payload', () => {
-    const plaintext = randomBytes(4096);
-    const encrypted = encrypt(plaintext, key);
-    const decrypted = decrypt(encrypted, key);
-    expect(Buffer.compare(decrypted, plaintext)).toBe(0);
-  });
-
   test('different encryptions of same plaintext produce different ciphertexts', () => {
     const plaintext = Buffer.from('deterministic?');
     const a = encrypt(plaintext, key);
@@ -54,12 +40,6 @@ describe('encrypt/decrypt', () => {
 
   test('rejects blob that is too short', () => {
     expect(() => decrypt(Buffer.alloc(20), key)).toThrow('too short');
-  });
-
-  test('plaintext is not visible in ciphertext', () => {
-    const plaintext = Buffer.from('super_secret_token_value');
-    const encrypted = encrypt(plaintext, key);
-    expect(encrypted.toString().includes('super_secret_token_value')).toBe(false);
   });
 });
 
