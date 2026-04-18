@@ -31,7 +31,7 @@ const defaultConfig: SessionConfig = {
   nearExpiryThresholdSecs: 600,
   secretName: 'web-app-session-secret',
   secretNamespace: 'default',
-  keyPrefix: 'session-key-',
+  keyPrefix: 'jwt-signing-key-',
   newKeyUseDelaySecs: 60,
   cookieSizeWarnBytes: 3800,
   cookieSizeMaxBytes: 4096,

@@ -1,4 +1,4 @@
-import { encrypt, decrypt, sign, verify } from './crypto';
+import { deriveKeys, encrypt, decrypt, sign, verify } from './crypto';
 import type { SessionConfig } from './types';
 import { log } from './logger';
 
@@ -63,10 +63,11 @@ export function createSessionCookie(dexToken: string, keyMap: KeyMap, config: Se
   };
 
   const plaintext = Buffer.from(JSON.stringify(payload), 'utf-8');
-  const encrypted = encrypt(plaintext, signingEntry.key);
+  const { encryptionKey, signingKey } = deriveKeys(signingEntry.key);
+  const encrypted = encrypt(plaintext, encryptionKey);
 
   // Sign: HMAC(kid, encrypted_blob)
-  const signature = sign(encrypted, signingEntry.key, signingEntry.kid);
+  const signature = sign(encrypted, signingKey, signingEntry.kid);
 
   // Wire format: base64url(encrypted) . kid . base64url(signature)
   const cookieValue = `${base64urlEncode(encrypted)}.${signingEntry.kid}.${base64urlEncode(signature)}`;
@@ -118,11 +119,13 @@ export function validateSessionCookie(cookieValue: string, keyMap: KeyMap): Sess
 
 function tryValidate(encrypted: Buffer, signature: Buffer, entry: KeyEntry, kid: string): SessionPayload | null {
   try {
+    const { encryptionKey, signingKey } = deriveKeys(entry.key);
+
     // Verify HMAC signature
-    if (!verify(encrypted, signature, entry.key, kid)) return null;
+    if (!verify(encrypted, signature, signingKey, kid)) return null;
 
     // Decrypt
-    const plaintext = decrypt(encrypted, entry.key);
+    const plaintext = decrypt(encrypted, encryptionKey);
     const payload = JSON.parse(plaintext.toString('utf-8')) as SessionPayload;
 
     // Check session expiry
@@ -145,7 +148,14 @@ function tryValidate(encrypted: Buffer, signature: Buffer, entry: KeyEntry, kid:
  * Build a Set-Cookie header value with security attributes.
  */
 export function buildSetCookieHeader(cookieValue: string, config: SessionConfig): string {
-  const parts = [`${config.cookieName}=${cookieValue}`, `Path=${config.cookiePath}`, `Max-Age=${config.cookieMaxAgeSecs}`, 'HttpOnly', 'Secure', 'SameSite=Lax'];
+  const parts = [
+    `${config.cookieName}=${cookieValue}`,
+    `Path=${config.cookiePath}`,
+    `Max-Age=${config.cookieMaxAgeSecs}`,
+    'HttpOnly',
+    'Secure',
+    'SameSite=Lax',
+  ];
 
   return parts.join('; ');
 }
