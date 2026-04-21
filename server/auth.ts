@@ -93,4 +93,3 @@ export function decodeJWTPayload(jwt: string): Record<string, unknown> | null {
     return null;
   }
 }
-
