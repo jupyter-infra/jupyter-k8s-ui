@@ -25,10 +25,11 @@ describe('deriveKeys', () => {
     expect(Buffer.compare(a.signingKey, b.signingKey)).not.toBe(0);
   });
 
-  test('encryption and signing keys are different from each other', () => {
-    const { encryptionKey, signingKey } = deriveKeys(randomBytes(KEY_LENGTH));
-    // Different lengths, so they can't be equal
-    expect(encryptionKey.length).not.toBe(signingKey.length);
+  test('encryption and signing keys are not interchangeable', () => {
+    const { signingKey } = deriveKeys(randomBytes(KEY_LENGTH));
+    const plaintext = Buffer.from('test');
+    // Signing key must not work for encryption (wrong size for AES-256)
+    expect(() => encrypt(plaintext, signingKey)).toThrow();
   });
 
   test('rejects invalid master key length', () => {

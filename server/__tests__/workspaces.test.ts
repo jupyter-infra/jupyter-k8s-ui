@@ -53,10 +53,13 @@ interface CreatedObj {
   metadata: Record<string, unknown>;
   spec: Record<string, unknown>;
 }
+// Bun's mock types return `[] | undefined` for `.calls.at(-1)`, which TS won't
+// allow casting directly to a typed tuple. The `any` here is contained to these
+// two helpers — call sites get full type safety via the return types.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const lastCreated = (): CreatedObj => (mockedK8s.create.mock.calls.at(-1) as any[])[4];
+const lastCreated = (): CreatedObj => (mockedK8s.create.mock.calls.at(-1) as any)[4];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const lastReplaced = (): { spec: Record<string, unknown> } => (mockedK8s.replace.mock.calls.at(-1) as any[])[5];
+const lastReplaced = (): { spec: Record<string, unknown> } => (mockedK8s.replace.mock.calls.at(-1) as any)[5];
 
 beforeEach(() => {
   mockedK8s.list.mockClear();
