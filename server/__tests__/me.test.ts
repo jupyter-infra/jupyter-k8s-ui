@@ -1,12 +1,7 @@
 import { describe, test, expect, beforeEach } from 'bun:test';
 import { handleGetMe } from '../handlers/me';
 import { serverConfig } from '../k8s';
-
-function buildJWT(payload: Record<string, unknown>): string {
-  const header = Buffer.from(JSON.stringify({ alg: 'RS256' })).toString('base64url');
-  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  return `${header}.${body}.sig`;
-}
+import { buildJWT } from './test-helpers';
 
 function makeReqWithBearer(jwt: string): Request {
   return new Request('http://x/api/v1/me', {

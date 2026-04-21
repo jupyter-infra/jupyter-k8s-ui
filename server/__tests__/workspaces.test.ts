@@ -3,7 +3,7 @@ import { describe, test, expect, beforeEach, mock } from 'bun:test';
 // --- K8s client mock ---
 // Each handler invocation talks to the cached mock. Tests can set return
 // values or error responses per-test by reassigning the mock implementations.
-const k8s = {
+const mockedK8s = {
   list: mock(async () => ({ body: { items: [] as Record<string, unknown>[] } })),
   get: mock(async () => ({ body: buildK8sWorkspace('ws-1') })),
   create: mock(async () => ({ body: buildK8sWorkspace('ws-1') })),
@@ -22,11 +22,11 @@ mock.module('../k8s', () => ({
   ...k8sModule,
   serverConfig: { ...k8sModule.serverConfig, namespace: 'test-ns' },
   createUserK8sClient: async () => ({
-    listNamespacedCustomObject: k8s.list,
-    getNamespacedCustomObject: k8s.get,
-    createNamespacedCustomObject: k8s.create,
-    replaceNamespacedCustomObject: k8s.replace,
-    deleteNamespacedCustomObject: k8s.del,
+    listNamespacedCustomObject: mockedK8s.list,
+    getNamespacedCustomObject: mockedK8s.get,
+    createNamespacedCustomObject: mockedK8s.create,
+    replaceNamespacedCustomObject: mockedK8s.replace,
+    deleteNamespacedCustomObject: mockedK8s.del,
   }),
 }));
 
@@ -49,25 +49,34 @@ function jsonRequest(body: unknown, method = 'POST') {
   });
 }
 
+interface CreatedObj {
+  metadata: Record<string, unknown>;
+  spec: Record<string, unknown>;
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const lastCreated = (): CreatedObj => (mockedK8s.create.mock.calls.at(-1) as any[])[4];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const lastReplaced = (): { spec: Record<string, unknown> } => (mockedK8s.replace.mock.calls.at(-1) as any[])[5];
+
 beforeEach(() => {
-  k8s.list.mockClear();
-  k8s.get.mockClear();
-  k8s.create.mockClear();
-  k8s.replace.mockClear();
-  k8s.del.mockClear();
+  mockedK8s.list.mockClear();
+  mockedK8s.get.mockClear();
+  mockedK8s.create.mockClear();
+  mockedK8s.replace.mockClear();
+  mockedK8s.del.mockClear();
 });
 
 describe('handleCreateWorkspace', () => {
   test('rejects invalid workspace names with 400 before calling K8s', async () => {
     const res = await handleCreateWorkspace('jwt', jsonRequest({ name: 'Invalid_Name' }));
     expect(res.status).toBe(400);
-    expect(k8s.create).not.toHaveBeenCalled();
+    expect(mockedK8s.create).not.toHaveBeenCalled();
   });
 
   test('defaults missing spec fields to Running/Public/OwnerOnly and uses name as displayName fallback', async () => {
     await handleCreateWorkspace('jwt', jsonRequest({ name: 'my-ws' }));
 
-    const [, , , , obj] = k8s.create.mock.calls[0] as unknown[] as [string, string, string, string, { spec: Record<string, unknown> }];
+    const obj = lastCreated();
     expect(obj.spec.displayName).toBe('my-ws');
     expect(obj.spec.desiredStatus).toBe('Running');
     expect(obj.spec.accessType).toBe('Public');
@@ -84,7 +93,7 @@ describe('handleCreateWorkspace', () => {
       }),
     );
 
-    const [, , , , obj] = k8s.create.mock.calls[0] as unknown[] as [string, string, string, string, { spec: Record<string, unknown> }];
+    const obj = lastCreated();
     expect(obj.spec.image).toBe('jupyter:latest');
     expect(obj.spec.resources).toEqual({ limits: { cpu: '2' } });
     // unset fields must not appear
@@ -104,13 +113,13 @@ describe('handleCreateWorkspace', () => {
       }),
     );
 
-    const [, , , , obj] = k8s.create.mock.calls[0] as unknown[] as [string, string, string, string, { spec: { idleShutdown: Record<string, unknown> } }];
+    const obj = lastCreated();
     expect(obj.spec.idleShutdown).toEqual({ enabled: true, idleTimeoutInMinutes: 30 });
   });
 
   test('sends workspace into configured namespace', async () => {
     await handleCreateWorkspace('jwt', jsonRequest({ name: 'ws' }));
-    const [, , , , obj] = k8s.create.mock.calls[0] as unknown[] as [string, string, string, string, { metadata: { namespace: string } }];
+    const obj = lastCreated();
     expect(obj.metadata.namespace).toBe('test-ns');
   });
 
@@ -120,7 +129,7 @@ describe('handleCreateWorkspace', () => {
   });
 
   test('maps K8s errors to the correct HTTP status', async () => {
-    k8s.create.mockImplementationOnce(async () => {
+    mockedK8s.create.mockImplementationOnce(async () => {
       throw Object.assign(new Error('conflict'), { statusCode: 409 });
     });
     const res = await handleCreateWorkspace('jwt', jsonRequest({ name: 'ws' }));
@@ -130,7 +139,7 @@ describe('handleCreateWorkspace', () => {
 
 describe('handleUpdateWorkspace', () => {
   test('merges body fields into existing spec, leaving unspecified fields untouched', async () => {
-    k8s.get.mockImplementationOnce(async () => ({
+    mockedK8s.get.mockImplementationOnce(async () => ({
       body: {
         apiVersion: 'workspace.jupyter.org/v1alpha1',
         kind: 'Workspace',
@@ -141,41 +150,34 @@ describe('handleUpdateWorkspace', () => {
 
     await handleUpdateWorkspace('jwt', 'ws', jsonRequest({ displayName: 'new' }, 'PUT'));
 
-    const [, , , , , updated] = k8s.replace.mock.calls[0] as unknown[] as [string, string, string, string, string, { spec: Record<string, unknown> }];
+    const updated = lastReplaced();
     expect(updated.spec.displayName).toBe('new');
     expect(updated.spec.image).toBe('old:img'); // preserved
     expect(updated.spec.desiredStatus).toBe('Running'); // preserved
   });
 
   test('renames idleShutdown.timeoutInMinutes on update too', async () => {
-    k8s.get.mockImplementationOnce(async () => ({ body: buildK8sWorkspace('ws') }));
+    mockedK8s.get.mockImplementationOnce(async () => ({ body: buildK8sWorkspace('ws') }));
 
     await handleUpdateWorkspace('jwt', 'ws', jsonRequest({ idleShutdown: { enabled: true, timeoutInMinutes: 45 } }, 'PATCH'));
 
-    const [, , , , , updated] = k8s.replace.mock.calls[0] as unknown[] as [
-      string,
-      string,
-      string,
-      string,
-      string,
-      { spec: { idleShutdown: Record<string, unknown> } },
-    ];
+    const updated = lastReplaced();
     expect(updated.spec.idleShutdown).toEqual({ enabled: true, idleTimeoutInMinutes: 45 });
   });
 
   test('returns 404 when workspace does not exist', async () => {
-    k8s.get.mockImplementationOnce(async () => {
+    mockedK8s.get.mockImplementationOnce(async () => {
       throw Object.assign(new Error('not found'), { statusCode: 404 });
     });
     const res = await handleUpdateWorkspace('jwt', 'missing', jsonRequest({ displayName: 'x' }, 'PUT'));
     expect(res.status).toBe(404);
-    expect(k8s.replace).not.toHaveBeenCalled();
+    expect(mockedK8s.replace).not.toHaveBeenCalled();
   });
 });
 
 describe('handleListWorkspaces / handleGetWorkspace / handleDeleteWorkspace', () => {
   test('list returns mapped array from K8s items', async () => {
-    k8s.list.mockImplementationOnce(async () => ({
+    mockedK8s.list.mockImplementationOnce(async () => ({
       body: { items: [buildK8sWorkspace('a'), buildK8sWorkspace('b')] },
     }));
 
@@ -186,7 +188,7 @@ describe('handleListWorkspaces / handleGetWorkspace / handleDeleteWorkspace', ()
   });
 
   test('get returns 404 when K8s returns 404', async () => {
-    k8s.get.mockImplementationOnce(async () => {
+    mockedK8s.get.mockImplementationOnce(async () => {
       throw Object.assign(new Error('nf'), { statusCode: 404 });
     });
     const res = await handleGetWorkspace('jwt', 'ghost');
@@ -196,6 +198,6 @@ describe('handleListWorkspaces / handleGetWorkspace / handleDeleteWorkspace', ()
   test('delete returns 200 with success message', async () => {
     const res = await handleDeleteWorkspace('jwt', 'ws');
     expect(res.status).toBe(200);
-    expect(k8s.del).toHaveBeenCalled();
+    expect(mockedK8s.del).toHaveBeenCalled();
   });
 });

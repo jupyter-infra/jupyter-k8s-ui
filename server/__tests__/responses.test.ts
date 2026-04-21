@@ -51,7 +51,7 @@ describe('isValidK8sName', () => {
     expect(isValidK8sName(name)).toBe(false);
   });
 
-  test('rejects non-string values', () => {
+  test('rejects null', () => {
     expect(isValidK8sName(null)).toBe(false);
   });
 });

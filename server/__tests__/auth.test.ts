@@ -1,11 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { decodeJWTPayload } from '../auth';
-
-function buildJWT(payload: Record<string, unknown>): string {
-  const header = Buffer.from(JSON.stringify({ alg: 'RS256' })).toString('base64url');
-  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  return `${header}.${body}.signature`;
-}
+import { buildJWT } from './test-helpers';
 
 describe('decodeJWTPayload', () => {
   test('decodes the JSON payload from a well-formed JWT', () => {

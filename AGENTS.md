@@ -35,48 +35,46 @@ make deploy-aws          # Build + push to ECR + deploy to EKS
 make help                # Show all Makefile targets
 ```
 
+## Makefile Targets
+
+```bash
+make build               # Build frontend + server (bun run build:full)
+make docker-build        # Build container image
+make docker-push         # Push container image
+make deploy-kind         # Build + load image into Kind cluster + restart
+make deploy-aws          # Build + push to ECR + restart deployment
+make load-image-aws      # Build + push to ECR (no restart)
+make kubectl-aws         # Switch kubectl to EKS context
+make refresh-token       # Fetch fresh OIDC token for local dev
+make clean               # Remove build artifacts
+make info                # Show current configuration
+make help                # Show all targets
+```
+
 ## Project Structure
 
 ```
 server/                    # Backend (Bun + TypeScript)
-  index.ts                 # Server entry point, graceful shutdown
-  router.ts                # Route dispatcher, all endpoint definitions
-  auth.ts                  # JWT extraction and decoding
-  k8s.ts                   # K8s client factory with caching, response mappers
-  types.ts                 # CRD type definitions (K8sWorkspace, K8sWorkspaceTemplate)
-  logger.ts                # Level-based logging
+  __tests__/               # Server unit tests
+  handlers/                # Route handlers (workspaces, templates, me)
+  index.ts                 # Server entry point
+  router.ts                # Route dispatcher
+  auth.ts                  # JWT extraction, session cookie auth
+  k8s.ts                   # K8s client factory, response mappers
+  session.ts               # Session cookie create/validate
+  crypto.ts                # AES-256-GCM encryption, HMAC signing, HKDF key derivation
+  secret-watcher.ts        # K8s secret informer for key rotation
+  types.ts                 # CRD type definitions
   responses.ts             # JSON response helpers, K8s error mapping
-  static.ts                # Static file serving with SPA fallback
-  handlers/
-    workspaces.ts          # CRUD operations on workspace CRDs
-    templates.ts           # List workspace templates from K8s
-    me.ts                  # Current user endpoint (JWT decode)
 
 src/                       # Frontend (React + Vite)
-  main.tsx                 # React root mount
-  App.tsx                  # Providers (QueryClient, Theme, Auth) + routing
-  theme.ts                 # MUI light/dark theme definitions
-  api/
-    client.ts              # ApiClient singleton (fetch-based)
-    hooks.ts               # React Query hooks with polling & optimistic updates
-  components/
-    layout/Layout.tsx      # AppBar, user avatar, theme switcher, Outlet
-    ui/ThemeSwitcher.tsx   # Light/dark toggle
-    ui/ConfirmDialog.tsx   # Reusable delete confirmation
-    ui/ErrorBoundary.tsx   # Error boundary with reset
-    workspace/WorkspaceCard.tsx   # Workspace card with status + actions
-    workspace/TemplateCard.tsx    # Template selection card
-  context/
-    AuthContext.tsx         # User auth state from /api/v1/me
-    ThemeContext.tsx        # Theme state with localStorage persistence
-  pages/
-    WorkspaceList.tsx      # List page with filtering, search, pagination
-    WorkspaceCreate.tsx    # Multi-section creation form
-    WorkspaceDetail.tsx    # Detail page with conditions and resources
-  constants/strings.ts     # All UI strings, resource bounds, defaults
-  types/workspace.ts       # Frontend TypeScript types
-  utils/workspace.ts       # Status helpers, K8s quantity parsing, validation
-  styles/variables.css     # CSS custom properties for theming
+  api/                     # API client, React Query hooks, auth interceptor
+  components/              # UI components (layout, workspace cards, dialogs)
+  context/                 # React contexts (auth, theme)
+  pages/                   # Route pages (list, create, detail)
+  constants/               # UI strings, resource bounds
+  types/                   # Frontend TypeScript types
+  utils/                   # Status helpers, validation, K8s quantity parsing
 ```
 
 ## API Endpoints

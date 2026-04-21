@@ -70,6 +70,22 @@ describe('ThemeContext', () => {
     expect(result.current.theme).toBe('dark');
   });
 
+  test('should toggle theme from dark to light', () => {
+    localStorageMock.setItem('app-theme', 'dark');
+
+    const { result } = renderHook(() => useTheme(), {
+      wrapper: ThemeProvider,
+    });
+
+    expect(result.current.theme).toBe('dark');
+
+    act(() => {
+      result.current.toggleTheme();
+    });
+
+    expect(result.current.theme).toBe('light');
+  });
+
   test('should persist theme to localStorage', () => {
     const { result } = renderHook(() => useTheme(), {
       wrapper: ThemeProvider,

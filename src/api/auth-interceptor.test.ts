@@ -37,6 +37,7 @@ describe('handleUnauthorized', () => {
     handleUnauthorized();
 
     expect(reload).toHaveBeenCalledTimes(1);
+    expect(sessionStorage.getItem('auth_reload_ts')).not.toBeNull();
   });
 });
 

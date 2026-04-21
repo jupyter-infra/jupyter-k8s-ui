@@ -16,6 +16,14 @@ mock.module('../../api', () => ({
   useDeleteWorkspace: () => mutationStub,
 }));
 
+function renderCard(ws: ReturnType<typeof makeWorkspace>) {
+  return render(
+    <TestProviders>
+      <WorkspaceCard workspace={ws} />
+    </TestProviders>,
+  );
+}
+
 describe('WorkspaceCard', () => {
   beforeEach(() => {
     cleanup();
@@ -24,11 +32,7 @@ describe('WorkspaceCard', () => {
 
   test('shows Running status when workspace is running + available', () => {
     const ws = makeWorkspace({ owner: 'alice' });
-    render(
-      <TestProviders>
-        <WorkspaceCard workspace={ws} />
-      </TestProviders>,
-    );
+    renderCard(ws);
     expect(screen.getByText('Running')).toBeDefined();
   });
 
@@ -38,11 +42,7 @@ describe('WorkspaceCard', () => {
       spec: { desiredStatus: 'Stopped', displayName: 'Test', image: 'img', accessType: 'Public', ownershipType: 'OwnerOnly' },
       status: { accessURL: '', conditions: [] },
     });
-    render(
-      <TestProviders>
-        <WorkspaceCard workspace={ws} />
-      </TestProviders>,
-    );
+    renderCard(ws);
     expect(screen.getByText('Stopped')).toBeDefined();
   });
 
@@ -54,21 +54,13 @@ describe('WorkspaceCard', () => {
         conditions: [{ type: 'Progressing', status: 'True', reason: '', message: '' }],
       },
     });
-    render(
-      <TestProviders>
-        <WorkspaceCard workspace={ws} />
-      </TestProviders>,
-    );
+    renderCard(ws);
     expect(screen.getByText('Starting')).toBeDefined();
   });
 
   test('shows stop button when owner + running', () => {
     const ws = makeWorkspace({ owner: 'alice' });
-    render(
-      <TestProviders>
-        <WorkspaceCard workspace={ws} />
-      </TestProviders>,
-    );
+    renderCard(ws);
     expect(screen.getAllByLabelText(/stop/i).length).toBeGreaterThan(0);
   });
 
@@ -78,32 +70,20 @@ describe('WorkspaceCard', () => {
       spec: { desiredStatus: 'Stopped', displayName: 'T', image: 'i', accessType: 'Public', ownershipType: 'OwnerOnly' },
       status: { accessURL: '', conditions: [] },
     });
-    render(
-      <TestProviders>
-        <WorkspaceCard workspace={ws} />
-      </TestProviders>,
-    );
+    renderCard(ws);
     expect(screen.getAllByLabelText(/start/i).length).toBeGreaterThan(0);
   });
 
   test('hides start/stop buttons for non-owner', () => {
     const ws = makeWorkspace({ owner: 'bob' });
-    render(
-      <TestProviders>
-        <WorkspaceCard workspace={ws} />
-      </TestProviders>,
-    );
+    renderCard(ws);
     expect(screen.queryByLabelText(/^stop$/i)).toBeNull();
     expect(screen.queryByLabelText(/^start$/i)).toBeNull();
   });
 
   test('shows Open button when running + available + public', () => {
     const ws = makeWorkspace({ owner: 'bob' }); // not owner but public
-    render(
-      <TestProviders>
-        <WorkspaceCard workspace={ws} />
-      </TestProviders>,
-    );
+    renderCard(ws);
     expect(screen.getByLabelText(/open workspace/i)).toBeDefined();
   });
 
@@ -112,11 +92,7 @@ describe('WorkspaceCard', () => {
       owner: 'bob',
       spec: { accessType: 'OwnerOnly', desiredStatus: 'Running', displayName: 'T', image: 'i', ownershipType: 'OwnerOnly' },
     });
-    render(
-      <TestProviders>
-        <WorkspaceCard workspace={ws} />
-      </TestProviders>,
-    );
+    renderCard(ws);
     expect(screen.queryByLabelText(/open workspace/i)).toBeNull();
   });
 
@@ -125,11 +101,7 @@ describe('WorkspaceCard', () => {
       owner: 'alice',
       status: { accessURL: 'https://ws.example.com', conditions: [] },
     });
-    render(
-      <TestProviders>
-        <WorkspaceCard workspace={ws} />
-      </TestProviders>,
-    );
+    renderCard(ws);
     expect(screen.queryByLabelText(/open workspace/i)).toBeNull();
   });
 
@@ -138,11 +110,7 @@ describe('WorkspaceCard', () => {
       owner: 'alice',
       spec: { displayName: 'My Display', image: 'i', desiredStatus: 'Running', accessType: 'Public', ownershipType: 'OwnerOnly' },
     });
-    render(
-      <TestProviders>
-        <WorkspaceCard workspace={ws} />
-      </TestProviders>,
-    );
+    renderCard(ws);
     expect(screen.getByText('My Display')).toBeDefined();
   });
 });

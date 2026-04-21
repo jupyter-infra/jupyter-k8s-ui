@@ -19,7 +19,7 @@ WORKDIR /app
 # Copy built application with correct ownership in one step (avoids slow recursive chown)
 COPY --from=builder --chown=1000:1000 /app/dist ./dist
 COPY --from=builder --chown=1000:1000 /app/server ./server
-COPY --from=builder --chown=1000:1000 /app/package.json ./package.json
+COPY --from=builder --chown=1000:1000 /app/package.json /app/bun.lock ./
 
 # Install production dependencies only (skip lifecycle scripts — husky is dev-only)
 RUN bun install --production --frozen-lockfile --ignore-scripts
