@@ -216,6 +216,7 @@ deploy-aws-internal: load-image-aws-internal
 E2E_CONTROLLER_IMAGE ?= ghcr.io/jupyter-infra/jupyter-k8s-controller:latest
 E2E_ROTATOR_IMAGE ?= ghcr.io/jupyter-infra/jupyter-k8s-rotator:latest
 E2E_CHART_SOURCE ?= oci://ghcr.io/jupyter-infra/charts/jupyter-k8s
+# Update when CRD contract changes
 E2E_CHART_VERSION ?= 0.1.0-rc.2
 # Image used for workspace pods in E2E tests. Defaults to nginx because the real
 # Jupyter UV image (jk8s-application-jupyter-uv) isn't public on GHCR. The controller
@@ -227,7 +228,7 @@ E2E_SERVER_PORT ?= 8091
 E2E_SERVER_PID_FILE := /tmp/jupyter-k8s-ui-e2e-server.pid
 
 .PHONY: test-e2e
-test-e2e: setup-e2e load-images-e2e _e2e-create-sa deploy-e2e ## Run Playwright E2E tests (sets up cluster + server automatically).
+test-e2e: setup-e2e load-images-e2e deploy-e2e ## Run Playwright E2E tests (sets up cluster + server automatically).
 	@$(MAKE) _e2e-start-server
 	@E2E_BASE_URL=http://localhost:$(E2E_SERVER_PORT) E2E_WORKSPACE_IMAGE=$(E2E_WORKSPACE_IMAGE) bunx playwright test; \
 		EXIT_CODE=$$?; \
@@ -285,26 +286,18 @@ deploy-e2e: ## Install jupyter-k8s Helm chart into Kind cluster.
 		if [ $$i -eq 30 ]; then echo "ERROR: CRD API not ready after 60s."; exit 1; fi; \
 		sleep 2; \
 	done
+	@echo "Applying E2E fixtures (RBAC + test data)..."
+	@kubectl --context kind-$(E2E_KIND_CLUSTER) apply -f e2e/fixtures/
 	@kubectl --context kind-$(E2E_KIND_CLUSTER) auth can-i create workspaces.workspace.jupyter.org \
 		--as=system:serviceaccount:default:e2e-test -n default | grep -q "yes" || \
 		{ echo "ERROR: e2e-test SA lacks workspace create permission"; exit 1; }
-	@echo "Applying E2E fixtures..."
-	@kubectl --context kind-$(E2E_KIND_CLUSTER) apply -f e2e/fixtures/
-
-.PHONY: _e2e-create-sa
-_e2e-create-sa:
-	@kubectl --context kind-$(E2E_KIND_CLUSTER) create serviceaccount e2e-test -n default \
-		--dry-run=client -o yaml | kubectl --context kind-$(E2E_KIND_CLUSTER) apply -f -
-	@kubectl --context kind-$(E2E_KIND_CLUSTER) create clusterrolebinding e2e-test-admin \
-		--clusterrole=cluster-admin --serviceaccount=default:e2e-test \
-		--dry-run=client -o yaml | kubectl --context kind-$(E2E_KIND_CLUSTER) apply -f -
 
 .PHONY: _e2e-start-server
 _e2e-start-server:
 	@$(MAKE) _e2e-stop-server 2>/dev/null || true
 	@echo "Building frontend..."
 	@bun run build:full
-	@E2E_TOKEN=$$(kubectl --context kind-$(E2E_KIND_CLUSTER) create token e2e-test -n default --duration=1h) && \
+	@E2E_TOKEN=$$(kubectl --context kind-$(E2E_KIND_CLUSTER) create token e2e-test -n default --duration=10m) && \
 		NODE_ENV=development \
 		DEV_ACCESS_TOKEN=$$E2E_TOKEN \
 		NAMESPACE=default \

@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: e2e-test
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: e2e-workspace-user
+  namespace: default
+rules:
+  - apiGroups: ['workspace.jupyter.org']
+    resources: ['workspaces']
+    verbs: ['get', 'list', 'create', 'update', 'patch', 'delete']
+  - apiGroups: ['workspace.jupyter.org']
+    resources: ['workspaceaccessstrategies']
+    verbs: ['get', 'list']
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: e2e-test-binding
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: e2e-test
+    namespace: default
+roleRef:
+  kind: Role
+  name: e2e-workspace-user
+  apiGroup: rbac.authorization.k8s.io
