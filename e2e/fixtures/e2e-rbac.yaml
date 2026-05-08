@@ -14,7 +14,7 @@ rules:
     resources: ['workspaces']
     verbs: ['get', 'list', 'create', 'update', 'patch', 'delete']
   - apiGroups: ['workspace.jupyter.org']
-    resources: ['workspaceaccessstrategies']
+    resources: ['workspacetemplates']
     verbs: ['get', 'list']
 ---
 apiVersion: rbac.authorization.k8s.io/v1
