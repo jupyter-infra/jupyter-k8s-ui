@@ -46,6 +46,8 @@ make deploy-aws          # Build + push to ECR + restart deployment
 make load-image-aws      # Build + push to ECR (no restart)
 make kubectl-aws         # Switch kubectl to EKS context
 make refresh-token       # Fetch fresh OIDC token for local dev
+make test-e2e            # Run Playwright E2E tests (sets up cluster + server automatically)
+make cleanup-e2e         # Delete the E2E Kind cluster
 make clean               # Remove build artifacts
 make info                # Show current configuration
 make help                # Show all targets
@@ -135,7 +137,7 @@ When adding a new test:
 
 - Server test → put it in `server/__tests__/` — no DOM, no React imports
 - Frontend test → colocate next to the source (`src/**/*.test.ts` or `*.test.tsx`) — DOM is auto-available via preload
-- E2E test → goes in `e2e/` (separate config, see E2E section when it's added)
+- E2E test → goes in `e2e/` (Playwright, see E2E section below)
 
 ### Writing tests that earn their keep
 
@@ -166,6 +168,42 @@ When adding a new test:
 - Thin wrappers over framework primitives
 - Getters that return a field directly
 - Code paths the type system already guarantees
+
+## E2E Testing (Playwright)
+
+E2E tests use Playwright against a real K8s cluster (Kind) with the jupyter-k8s operator. Tests interact with the actual UI and verify workspace CRUD against the real K8s API.
+
+### Prerequisites
+
+Same as local development: a Kind cluster with the operator deployed. If the cluster doesn't exist, `test-e2e` will create one automatically using the public GHCR images (no controller source checkout needed).
+
+### Running
+
+```bash
+make test-e2e             # Sets up cluster (if needed), starts server, runs Playwright, stops server
+make cleanup-e2e          # Delete the Kind cluster when done
+```
+
+### Writing E2E tests
+
+- Files go in `e2e/` with `.spec.ts` suffix
+- Tests run serially (CRUD tests share workspace state within a describe block)
+- Use accessibility selectors: `getByRole`, `getByText`, `getByLabel` — never CSS selectors
+- Each test run uses a unique name prefix (`e2e-<timestamp>`) to avoid collisions
+- Use 30s timeouts for K8s assertions — the operator reconciles in seconds
+
+### What to E2E test
+
+- Full user flows: create workspace, wait for Running, stop, start, delete
+- Form validation visible in the UI
+- Status badge transitions (Starting -> Running, Stopped)
+- Button visibility based on workspace state
+
+### What NOT to E2E test
+
+- API payload shapes (unit tests cover this)
+- Auth/OAuth flows (bypassed with dev token in E2E)
+- Operator internals (tested in jupyter-k8s repo)
 
 ## Project Links
 

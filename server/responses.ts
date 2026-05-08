@@ -31,7 +31,8 @@ interface K8sError {
 
 export function handleK8sError(error: unknown, fallbackMessage: string): Response {
   const err = error as K8sError;
-  log('error', fallbackMessage, err.message || error);
+  const body = (error as { body?: unknown })?.body;
+  log('error', fallbackMessage, err.message || error, body ? JSON.stringify(body) : '');
 
   const mapped = err.statusCode ? K8S_STATUS_MAP.get(err.statusCode) : undefined;
   if (mapped) {

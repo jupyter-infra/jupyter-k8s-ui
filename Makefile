@@ -210,6 +210,122 @@ deploy-aws-internal: load-image-aws-internal
 	$(KUBECTL) rollout restart deployment/$(DEPLOYMENT) -n $(NAMESPACE)
 	@echo "Web app deployment restarted in AWS cluster"
 
+##@ E2E Testing
+
+# Public GHCR images (no auth required)
+E2E_CONTROLLER_IMAGE ?= ghcr.io/jupyter-infra/jupyter-k8s-controller:latest
+E2E_ROTATOR_IMAGE ?= ghcr.io/jupyter-infra/jupyter-k8s-rotator:latest
+E2E_CHART_SOURCE ?= oci://ghcr.io/jupyter-infra/charts/jupyter-k8s
+E2E_CHART_VERSION ?= 0.1.0-rc.2
+E2E_KIND_CLUSTER ?= jupyter-k8s-dev
+E2E_SERVER_PORT ?= 8091
+E2E_SERVER_PID_FILE := /tmp/jupyter-k8s-ui-e2e-server.pid
+
+.PHONY: test-e2e
+test-e2e: setup-e2e load-images-e2e _e2e-create-sa deploy-e2e ## Run Playwright E2E tests (sets up cluster + server automatically).
+	@$(MAKE) _e2e-start-server
+	@E2E_BASE_URL=http://localhost:$(E2E_SERVER_PORT) bunx playwright test; \
+		EXIT_CODE=$$?; \
+		$(MAKE) _e2e-stop-server; \
+		exit $$EXIT_CODE
+
+.PHONY: setup-e2e
+setup-e2e: ## Create Kind cluster and install cert-manager.
+	@if ! $(KIND) get clusters 2>/dev/null | grep -q "$(E2E_KIND_CLUSTER)"; then \
+		echo "Creating Kind cluster '$(E2E_KIND_CLUSTER)'..."; \
+		$(KIND) create cluster --name $(E2E_KIND_CLUSTER) --wait 60s; \
+	else \
+		echo "Kind cluster '$(E2E_KIND_CLUSTER)' already running."; \
+	fi
+	@if ! kubectl --context kind-$(E2E_KIND_CLUSTER) get namespace cert-manager > /dev/null 2>&1; then \
+		echo "Installing cert-manager..."; \
+		helm repo add jetstack https://charts.jetstack.io --force-update; \
+		helm install cert-manager jetstack/cert-manager \
+			--namespace cert-manager --create-namespace \
+			--set crds.enabled=true \
+			--kube-context kind-$(E2E_KIND_CLUSTER) \
+			--wait --timeout 120s; \
+	fi
+
+.PHONY: load-images-e2e
+load-images-e2e: ## Pull and load controller images into Kind.
+	@$(CONTAINER_TOOL) pull --platform linux/amd64 $(E2E_CONTROLLER_IMAGE)
+	@$(CONTAINER_TOOL) pull --platform linux/amd64 $(E2E_ROTATOR_IMAGE)
+	@mkdir -p /tmp/kind-images
+	$(CONTAINER_TOOL) save $(E2E_CONTROLLER_IMAGE) -o /tmp/kind-images/controller.tar
+	$(KIND) load image-archive /tmp/kind-images/controller.tar --name $(E2E_KIND_CLUSTER)
+	@rm -f /tmp/kind-images/controller.tar
+	$(CONTAINER_TOOL) save $(E2E_ROTATOR_IMAGE) -o /tmp/kind-images/rotator.tar
+	$(KIND) load image-archive /tmp/kind-images/rotator.tar --name $(E2E_KIND_CLUSTER)
+	@rm -f /tmp/kind-images/rotator.tar
+
+.PHONY: deploy-e2e
+deploy-e2e: ## Install jupyter-k8s Helm chart into Kind cluster.
+	@helm upgrade --install jupyter-k8s $(E2E_CHART_SOURCE) \
+		--version $(E2E_CHART_VERSION) \
+		--namespace jupyter-k8s-system --create-namespace \
+		--set manager.image.repository=$$(echo $(E2E_CONTROLLER_IMAGE) | rev | cut -d: -f2- | rev) \
+		--set manager.image.tag=$$(echo $(E2E_CONTROLLER_IMAGE) | rev | cut -d: -f1 | rev) \
+		--kube-context kind-$(E2E_KIND_CLUSTER) \
+		--wait --timeout 120s
+	@echo "Verifying CRD API accepts writes..."
+	@for i in $$(seq 1 30); do \
+		RESULT=$$(echo '{"apiVersion":"workspace.jupyter.org/v1alpha1","kind":"Workspace","metadata":{"name":"e2e-readiness-check","namespace":"default"},"spec":{"desiredStatus":"Stopped"}}' | \
+			kubectl --context kind-$(E2E_KIND_CLUSTER) create --dry-run=server -f - 2>&1 || true); \
+		if echo "$$RESULT" | grep -q "created"; then \
+			echo "  CRD API ready."; \
+			break; \
+		fi; \
+		echo "  Attempt $$i: $$RESULT"; \
+		if [ $$i -eq 30 ]; then echo "ERROR: CRD API not ready after 60s."; exit 1; fi; \
+		sleep 2; \
+	done
+	@kubectl --context kind-$(E2E_KIND_CLUSTER) auth can-i create workspaces.workspace.jupyter.org \
+		--as=system:serviceaccount:default:e2e-test -n default | grep -q "yes" || \
+		{ echo "ERROR: e2e-test SA lacks workspace create permission"; exit 1; }
+	@echo "Applying E2E fixtures..."
+	@kubectl --context kind-$(E2E_KIND_CLUSTER) apply -f e2e/fixtures/
+
+.PHONY: _e2e-create-sa
+_e2e-create-sa:
+	@kubectl --context kind-$(E2E_KIND_CLUSTER) create serviceaccount e2e-test -n default \
+		--dry-run=client -o yaml | kubectl --context kind-$(E2E_KIND_CLUSTER) apply -f -
+	@kubectl --context kind-$(E2E_KIND_CLUSTER) create clusterrolebinding e2e-test-admin \
+		--clusterrole=cluster-admin --serviceaccount=default:e2e-test \
+		--dry-run=client -o yaml | kubectl --context kind-$(E2E_KIND_CLUSTER) apply -f -
+
+.PHONY: _e2e-start-server
+_e2e-start-server:
+	@$(MAKE) _e2e-stop-server 2>/dev/null || true
+	@echo "Building frontend..."
+	@bun run build:full
+	@E2E_TOKEN=$$(kubectl --context kind-$(E2E_KIND_CLUSTER) create token e2e-test -n default --duration=1h) && \
+		NODE_ENV=development \
+		DEV_ACCESS_TOKEN=$$E2E_TOKEN \
+		NAMESPACE=default \
+		SESSION_ENABLED=false \
+		PORT=$(E2E_SERVER_PORT) \
+		bun run server/index.ts & echo $$! > $(E2E_SERVER_PID_FILE)
+	@for i in $$(seq 1 30); do \
+		if curl -sf http://localhost:$(E2E_SERVER_PORT)/api/v1/health > /dev/null 2>&1; then \
+			echo "Server ready on port $(E2E_SERVER_PORT)."; \
+			break; \
+		fi; \
+		if [ $$i -eq 30 ]; then echo "Server failed to start."; $(MAKE) _e2e-stop-server; exit 1; fi; \
+		sleep 1; \
+	done
+
+.PHONY: _e2e-stop-server
+_e2e-stop-server:
+	@if [ -f $(E2E_SERVER_PID_FILE) ]; then \
+		kill $$(cat $(E2E_SERVER_PID_FILE)) 2>/dev/null || true; \
+		rm -f $(E2E_SERVER_PID_FILE); \
+	fi
+
+.PHONY: cleanup-e2e
+cleanup-e2e: ## Delete the E2E Kind cluster.
+	$(KIND) delete cluster --name $(E2E_KIND_CLUSTER)
+
 ##@ Cleanup
 
 .PHONY: clean
