@@ -217,6 +217,11 @@ E2E_CONTROLLER_IMAGE ?= ghcr.io/jupyter-infra/jupyter-k8s-controller:latest
 E2E_ROTATOR_IMAGE ?= ghcr.io/jupyter-infra/jupyter-k8s-rotator:latest
 E2E_CHART_SOURCE ?= oci://ghcr.io/jupyter-infra/charts/jupyter-k8s
 E2E_CHART_VERSION ?= 0.1.0-rc.2
+# Image used for workspace pods in E2E tests. Defaults to nginx because the real
+# Jupyter UV image (jk8s-application-jupyter-uv) isn't public on GHCR. The controller
+# has no custom readiness probes — any running container reaches "Running" status.
+# Override: make test-e2e E2E_WORKSPACE_IMAGE=jk8s-application-jupyter-uv:latest
+E2E_WORKSPACE_IMAGE ?= nginx:latest
 E2E_KIND_CLUSTER ?= jupyter-k8s-dev
 E2E_SERVER_PORT ?= 8091
 E2E_SERVER_PID_FILE := /tmp/jupyter-k8s-ui-e2e-server.pid
@@ -224,7 +229,7 @@ E2E_SERVER_PID_FILE := /tmp/jupyter-k8s-ui-e2e-server.pid
 .PHONY: test-e2e
 test-e2e: setup-e2e load-images-e2e _e2e-create-sa deploy-e2e ## Run Playwright E2E tests (sets up cluster + server automatically).
 	@$(MAKE) _e2e-start-server
-	@E2E_BASE_URL=http://localhost:$(E2E_SERVER_PORT) bunx playwright test; \
+	@E2E_BASE_URL=http://localhost:$(E2E_SERVER_PORT) E2E_WORKSPACE_IMAGE=$(E2E_WORKSPACE_IMAGE) bunx playwright test; \
 		EXIT_CODE=$$?; \
 		$(MAKE) _e2e-stop-server; \
 		exit $$EXIT_CODE

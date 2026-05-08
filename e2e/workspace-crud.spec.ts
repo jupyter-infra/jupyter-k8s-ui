@@ -4,13 +4,9 @@ import { test, expect, type Page, type Locator } from '@playwright/test';
 const RUN_ID = `e2e-${Date.now()}`;
 const WS_NAME = `${RUN_ID}-ws`;
 
-// We use nginx instead of the real Jupyter UV image because:
-// 1. The UV image isn't publicly available on GHCR and would need to be built from source (+1-2 min CI time)
-// 2. The controller doesn't set readiness probes — it marks a workspace "Running" when the Deployment is Available,
-//    which only requires the container to start. Any image that stays running works.
-// 3. We can't actually open the Jupyter UI anyway — that requires Traefik + IngressRoute (full JD stack).
-// 4. Our E2E scope is testing the UI flow (create, status transitions, stop/start, delete), not Jupyter itself.
-const E2E_IMAGE = 'nginx:latest';
+// Workspace image — override via E2E_WORKSPACE_IMAGE env var or Makefile variable.
+// Defaults to nginx because the real UV image isn't public on GHCR (see Makefile comments).
+const E2E_WORKSPACE_IMAGE = process.env.E2E_WORKSPACE_IMAGE || 'nginx:latest';
 
 /** Click the Refresh button and wait for the expected text to appear on a card. */
 async function refreshUntilCardShows(page: Page, card: Locator, text: string, timeoutMs = 30_000) {
@@ -55,7 +51,7 @@ test.describe('Workspace CRUD', () => {
     // Override the default image with one that's available in Kind without building
     const imageInput = page.getByLabel(/image/i);
     await imageInput.clear();
-    await imageInput.fill(E2E_IMAGE);
+    await imageInput.fill(E2E_WORKSPACE_IMAGE);
 
     // Submit the form
     await page.getByRole('button', { name: /create workspace/i }).click();
