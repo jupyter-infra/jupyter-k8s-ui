@@ -1,4 +1,4 @@
-import { test, expect, type Page, type Locator } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 
 // Unique prefix per test run to avoid collisions
 const RUN_ID = `e2e-${Date.now()}`;
@@ -8,22 +8,20 @@ const WS_NAME = `${RUN_ID}-ws`;
 // Defaults to nginx because the real UV image isn't public on GHCR (see Makefile comments).
 const E2E_WORKSPACE_IMAGE = process.env.E2E_WORKSPACE_IMAGE || 'nginx:latest';
 
-/** Click the Refresh button and wait for the expected text to appear on a card. */
-async function refreshUntilCardShows(page: Page, card: Locator, text: string, timeoutMs = 30_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (
-      await card
-        .getByText(text)
-        .isVisible()
-        .catch(() => false)
+/** Click Refresh and wait for the expected status text using Playwright's polling assertion. */
+async function waitForCardStatus(page: Page, card: Locator, text: string) {
+  await expect
+    .poll(
+      async () => {
+        await page.getByRole('button', { name: /refresh/i }).click();
+        return card
+          .getByText(text)
+          .isVisible()
+          .catch(() => false);
+      },
+      { timeout: 30_000, intervals: [2_000] },
     )
-      return;
-    await page.getByRole('button', { name: /refresh/i }).click();
-    await page.waitForTimeout(2_000);
-  }
-  // Final assertion to get a proper Playwright error
-  await expect(card.getByText(text)).toBeVisible({ timeout: 5_000 });
+    .toBeTruthy();
 }
 
 test.describe('Workspace CRUD', () => {
@@ -67,7 +65,7 @@ test.describe('Workspace CRUD', () => {
     await expect(card).toBeVisible({ timeout: 10_000 });
 
     // Refresh until status transitions to "Running" (operator reconciles in seconds)
-    await refreshUntilCardShows(page, card, 'Running');
+    await waitForCardStatus(page, card, 'Running');
   });
 
   test('stops a running workspace', async ({ page }) => {
@@ -80,7 +78,7 @@ test.describe('Workspace CRUD', () => {
     await card.getByRole('button', { name: /stop/i }).click();
 
     // Refresh until status transitions to Stopped
-    await refreshUntilCardShows(page, card, 'Stopped');
+    await waitForCardStatus(page, card, 'Stopped');
 
     // Stop button should be gone, Start button should appear
     await expect(card.getByRole('button', { name: /start/i })).toBeVisible();
@@ -97,7 +95,7 @@ test.describe('Workspace CRUD', () => {
     await card.getByRole('button', { name: /start/i }).click();
 
     // Refresh until Running
-    await refreshUntilCardShows(page, card, 'Running');
+    await waitForCardStatus(page, card, 'Running');
 
     // Stop button should be back
     await expect(card.getByRole('button', { name: /stop/i })).toBeVisible();

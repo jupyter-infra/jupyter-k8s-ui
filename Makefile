@@ -213,7 +213,9 @@ deploy-aws-internal: load-image-aws-internal
 ##@ E2E Testing
 
 # Public GHCR images (no auth required)
-E2E_CONTROLLER_IMAGE ?= ghcr.io/jupyter-infra/jupyter-k8s-controller:latest
+E2E_CONTROLLER_REPO ?= ghcr.io/jupyter-infra/jupyter-k8s-controller
+E2E_CONTROLLER_TAG ?= latest
+E2E_CONTROLLER_IMAGE := $(E2E_CONTROLLER_REPO):$(E2E_CONTROLLER_TAG)
 E2E_ROTATOR_IMAGE ?= ghcr.io/jupyter-infra/jupyter-k8s-rotator:latest
 E2E_CHART_SOURCE ?= oci://ghcr.io/jupyter-infra/charts/jupyter-k8s
 # Update when CRD contract changes
@@ -225,7 +227,7 @@ E2E_CHART_VERSION ?= 0.1.0-rc.2
 E2E_WORKSPACE_IMAGE ?= nginx:latest
 E2E_KIND_CLUSTER ?= jupyter-k8s-dev
 E2E_SERVER_PORT ?= 8091
-E2E_SERVER_PID_FILE := /tmp/jupyter-k8s-ui-e2e-server.pid
+E2E_SERVER_PID_FILE := /tmp/jupyter-k8s-ui-e2e-server-$(E2E_SERVER_PORT).pid
 
 .PHONY: test-e2e
 test-e2e: setup-e2e load-images-e2e deploy-e2e ## Run Playwright E2E tests (sets up cluster + server automatically).
@@ -254,9 +256,10 @@ setup-e2e: ## Create Kind cluster and install cert-manager.
 	fi
 
 .PHONY: load-images-e2e
-load-images-e2e: ## Pull and load controller images into Kind.
+load-images-e2e: ## Pull and load all E2E images into Kind.
 	@$(CONTAINER_TOOL) pull --platform linux/amd64 $(E2E_CONTROLLER_IMAGE)
 	@$(CONTAINER_TOOL) pull --platform linux/amd64 $(E2E_ROTATOR_IMAGE)
+	@$(CONTAINER_TOOL) pull --platform linux/amd64 $(E2E_WORKSPACE_IMAGE)
 	@mkdir -p /tmp/kind-images
 	$(CONTAINER_TOOL) save $(E2E_CONTROLLER_IMAGE) -o /tmp/kind-images/controller.tar
 	$(KIND) load image-archive /tmp/kind-images/controller.tar --name $(E2E_KIND_CLUSTER)
@@ -264,14 +267,17 @@ load-images-e2e: ## Pull and load controller images into Kind.
 	$(CONTAINER_TOOL) save $(E2E_ROTATOR_IMAGE) -o /tmp/kind-images/rotator.tar
 	$(KIND) load image-archive /tmp/kind-images/rotator.tar --name $(E2E_KIND_CLUSTER)
 	@rm -f /tmp/kind-images/rotator.tar
+	$(CONTAINER_TOOL) save $(E2E_WORKSPACE_IMAGE) -o /tmp/kind-images/workspace.tar
+	$(KIND) load image-archive /tmp/kind-images/workspace.tar --name $(E2E_KIND_CLUSTER)
+	@rm -f /tmp/kind-images/workspace.tar
 
 .PHONY: deploy-e2e
 deploy-e2e: ## Install jupyter-k8s Helm chart into Kind cluster.
 	@helm upgrade --install jupyter-k8s $(E2E_CHART_SOURCE) \
 		--version $(E2E_CHART_VERSION) \
 		--namespace jupyter-k8s-system --create-namespace \
-		--set manager.image.repository=$$(echo $(E2E_CONTROLLER_IMAGE) | rev | cut -d: -f2- | rev) \
-		--set manager.image.tag=$$(echo $(E2E_CONTROLLER_IMAGE) | rev | cut -d: -f1 | rev) \
+		--set manager.image.repository=$(E2E_CONTROLLER_REPO) \
+		--set manager.image.tag=$(E2E_CONTROLLER_TAG) \
 		--kube-context kind-$(E2E_KIND_CLUSTER) \
 		--wait --timeout 120s
 	@echo "Verifying CRD API accepts writes..."
@@ -297,7 +303,7 @@ _e2e-start-server:
 	@$(MAKE) _e2e-stop-server 2>/dev/null || true
 	@echo "Building frontend..."
 	@bun run build:full
-	@E2E_TOKEN=$$(kubectl --context kind-$(E2E_KIND_CLUSTER) create token e2e-test -n default --duration=10m) && \
+	@E2E_TOKEN=$$(kubectl --context kind-$(E2E_KIND_CLUSTER) create token e2e-test -n default --duration=30m) && \
 		NODE_ENV=development \
 		DEV_ACCESS_TOKEN=$$E2E_TOKEN \
 		NAMESPACE=default \
