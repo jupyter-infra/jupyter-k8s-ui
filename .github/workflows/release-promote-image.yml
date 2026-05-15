@@ -1,0 +1,56 @@
+name: 'Release: Promote Image'
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      short_sha:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Image tag to promote (e.g. v0.2.0)'
+        required: true
+      short_sha:
+        description: 'Short SHA tag to promote'
+        required: true
+
+env:
+  STAGING_REGISTRY: ghcr.io/jupyter-infra/staging
+  PROD_REGISTRY: ghcr.io/jupyter-infra
+  IMAGE_NAME: jupyter-k8s-ui
+
+jobs:
+  promote:
+    name: Promote jupyter-k8s-ui
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install crane
+        uses: imjasonh/setup-crane@v0.4
+
+      - name: Copy from staging to production
+        run: |
+          VERSION="${{ inputs.version }}"
+          SHA="${{ inputs.short_sha }}"
+          crane copy \
+            "${{ env.STAGING_REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}" \
+            "${{ env.PROD_REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}"
+          crane copy \
+            "${{ env.STAGING_REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${SHA}" \
+            "${{ env.PROD_REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${SHA}"
+          crane copy \
+            "${{ env.STAGING_REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}" \
+            "${{ env.PROD_REGISTRY }}/${{ env.IMAGE_NAME }}:latest"

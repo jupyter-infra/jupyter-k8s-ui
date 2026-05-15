@@ -1,0 +1,57 @@
+name: 'Release: E2E'
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Staging image tag (e.g. v0.2.0)'
+        required: true
+
+env:
+  STAGING_REGISTRY: ghcr.io/jupyter-infra/staging
+  IMAGE_NAME: jupyter-k8s-ui
+
+jobs:
+  smoke:
+    name: Smoke-test staged image
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull staged image
+        run: docker pull "${{ env.STAGING_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.version }}"
+
+      - name: Start container and verify health
+        run: |
+          IMAGE="${{ env.STAGING_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.version }}"
+          CID=$(docker run -d \
+            -p 8090:8090 \
+            -e NODE_ENV=production \
+            -e SESSION_ENABLED=false \
+            -e PORT=8090 \
+            "$IMAGE")
+          trap "docker logs $CID || true; docker stop $CID || true" EXIT
+
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8090/api/v1/health > /dev/null; then
+              echo "Health endpoint OK on attempt $i"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Image did not become healthy within 30s"
+          exit 1

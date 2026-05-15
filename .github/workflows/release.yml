@@ -1,0 +1,117 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. v0.2.0)'
+        required: true
+      dry_run:
+        description: 'Push to staging + run e2e, skip promotion and release'
+        type: boolean
+        default: false
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.validate.outputs.version }}
+      short_sha: ${{ steps.validate.outputs.short_sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate inputs
+        id: validate
+        run: |
+          VERSION="${{ inputs.version }}"
+
+          # Validate semver format
+          if ! echo "$VERSION" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$'; then
+            echo "::error::Invalid version format: $VERSION (expected vX.Y.Z or vX.Y.Z-prerelease)"
+            exit 1
+          fi
+
+          # Check tag doesn't already exist
+          if git rev-parse "refs/tags/$VERSION" >/dev/null 2>&1; then
+            echo "::error::Tag $VERSION already exists"
+            exit 1
+          fi
+
+          # Verify on main branch (skip for dry_run)
+          if [ "${{ inputs.dry_run }}" != "true" ]; then
+            if [ "${{ github.ref_name }}" != "main" ]; then
+              echo "::error::Release must be from main branch (currently on ${{ github.ref_name }}). Use dry_run for testing from other branches."
+              exit 1
+            fi
+          fi
+
+          SHORT_SHA=$(git rev-parse --short HEAD)
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+
+          echo "## Release validation passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Version: $VERSION" >> "$GITHUB_STEP_SUMMARY"
+          echo "- SHA: $SHORT_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Dry run: ${{ inputs.dry_run }}" >> "$GITHUB_STEP_SUMMARY"
+
+  stage-image:
+    name: Stage image
+    needs: validate
+    uses: ./.github/workflows/release-stage-image.yml
+    with:
+      version: ${{ needs.validate.outputs.version }}
+      short_sha: ${{ needs.validate.outputs.short_sha }}
+    permissions:
+      contents: read
+      packages: write
+
+  e2e:
+    name: E2E
+    needs: [validate, stage-image]
+    uses: ./.github/workflows/release-e2e.yml
+    with:
+      version: ${{ needs.validate.outputs.version }}
+    permissions:
+      contents: read
+      packages: read
+
+  promote-image:
+    name: Promote image
+    needs: [validate, e2e]
+    if: inputs.dry_run == false
+    uses: ./.github/workflows/release-promote-image.yml
+    with:
+      version: ${{ needs.validate.outputs.version }}
+      short_sha: ${{ needs.validate.outputs.short_sha }}
+    permissions:
+      contents: read
+      packages: write
+
+  release:
+    name: Create release
+    needs: [validate, promote-image]
+    if: inputs.dry_run == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create tag
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          git tag "$VERSION"
+          git push origin "$VERSION"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.validate.outputs.version }}
+          generate_release_notes: true
