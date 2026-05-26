@@ -31,13 +31,14 @@ export function useTemplates() {
   });
 }
 
-export function useClusterAccess() {
+export function useClusterAccess(enabled = true) {
   return useQuery({
     queryKey: clusterAccessKeys.all,
     queryFn: () => apiClient.getClusterAccess(),
     staleTime: 30 * 60 * 1000,
     gcTime: 60 * 60 * 1000,
     retry: false,
+    enabled,
   });
 }
 

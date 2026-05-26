@@ -83,6 +83,7 @@ export function KubectlAccess() {
   const [copied, setCopied] = useState(false);
 
   const script = data ? generateScript(data, os) : '';
+  const issuerHostname = data ? (URL.canParse(data.oidcIssuerUrl) ? new URL(data.oidcIssuerUrl).hostname : data.oidcIssuerUrl) : '';
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(script);
@@ -142,7 +143,7 @@ export function KubectlAccess() {
           </Box>
           <Box className={styles.infoItem}>
             <span className={styles.infoLabel}>{strings.kubectl.issuerLabel}</span>
-            <span className={styles.infoValue}>{new URL(data.oidcIssuerUrl).hostname}</span>
+            <span className={styles.infoValue}>{issuerHostname}</span>
           </Box>
           <Box className={styles.infoItem}>
             <span className={styles.infoLabel}>{strings.kubectl.clientLabel}</span>

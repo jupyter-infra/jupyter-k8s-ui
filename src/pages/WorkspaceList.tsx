@@ -16,10 +16,10 @@ export function WorkspaceList() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { data: workspaces, isLoading, error, refetch, isFetching } = useWorkspaces();
-  const { data: clusterAccess } = useClusterAccess();
   const [filter, setFilter] = useState<'all' | 'mine'>('mine');
   const [search, setSearch] = useState('');
   const [bannerDismissed, setBannerDismissed] = useState(() => localStorage.getItem(KUBECTL_BANNER_DISMISSED_KEY) === 'true');
+  const { data: clusterAccess } = useClusterAccess(!bannerDismissed);
 
   const showKubectlBanner = !bannerDismissed && !!clusterAccess;
 
