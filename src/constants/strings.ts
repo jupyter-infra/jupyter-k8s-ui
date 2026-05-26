@@ -34,6 +34,9 @@ export const strings = {
     noWorkspacesFound: 'No workspaces found',
     noWorkspacesDescription: 'Create your first workspace to get started',
     noWorkspacesSearchDescription: 'Try adjusting your search or filters',
+    sessionExpired: 'Session expired',
+    sessionExpiredDescription: 'Your session has expired. Please sign in again to continue.',
+    signInAgain: 'Sign in again',
 
     // Card
     moreOptions: 'More options',
@@ -98,6 +101,28 @@ export const strings = {
     // Delete dialog
     deleteTitle: 'Delete Workspace',
     deleteMessage: (name: string) => `Are you sure you want to delete "${name}"? This action cannot be undone.`,
+  },
+
+  kubectl: {
+    navTooltip: 'Kubectl Access',
+    navAriaLabel: 'Kubectl access',
+    title: 'Kubectl Access',
+    description: 'Connect to this cluster from your terminal.',
+    copy: 'Copy',
+    download: 'Download',
+    copied: 'Copied to clipboard',
+    unavailable: 'Cluster access configuration is not available. An administrator needs to configure the OIDC environment variables on the server.',
+    osMac: 'macOS',
+    osLinux: 'Linux',
+    osWindows: 'Windows',
+    clusterLabel: 'Cluster',
+    issuerLabel: 'Issuer',
+    clientLabel: 'Client ID',
+    bannerTitle: 'Prefer the terminal?',
+    bannerDescription: 'Run a one-time script to configure kubectl for this cluster.',
+    bannerAction: 'Get script',
+    bannerHint: 'Always available via the',
+    bannerHintIcon: 'in the toolbar.',
   },
 
   error: {

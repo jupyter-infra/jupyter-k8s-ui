@@ -1,0 +1,184 @@
+import { useState } from 'react';
+import { Box, Typography, Button, Alert, CircularProgress, Snackbar, Stack, ToggleButtonGroup, ToggleButton } from '@mui/material';
+import { ContentCopy, Download } from '@mui/icons-material';
+import { useClusterAccess } from '../api';
+import { strings } from '../constants';
+import type { ClusterAccessInfo } from '../types';
+import styles from './KubectlAccess.module.css';
+
+type OS = 'mac' | 'linux' | 'windows';
+
+function generateScript(data: ClusterAccessInfo, os: OS): string {
+  const { clusterName, apiServer, caCertBase64, oidcIssuerUrl, oidcClientId, oidcClientSecret, oidcCallbackPort } = data;
+
+  if (os === 'windows') {
+    return `# PowerShell — Run as Administrator
+# Install kubelogin plugin
+winget install kubectl
+winget install int128.kubelogin
+
+# Kill any process on callback port
+$proc = Get-NetTCPConnection -LocalPort ${oidcCallbackPort} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess
+if ($proc) { Stop-Process -Id $proc -Force }
+
+# Write cluster CA certificate
+New-Item -ItemType Directory -Force -Path $env:TEMP\\eks-certs | Out-Null
+[System.IO.File]::WriteAllBytes("$env:TEMP\\eks-certs\\${clusterName}-ca.crt", [System.Convert]::FromBase64String("${caCertBase64}"))
+
+# Configure kubectl
+kubectl config set-cluster ${clusterName} --embed-certs --certificate-authority="$env:TEMP\\eks-certs\\${clusterName}-ca.crt" --server ${apiServer}
+
+kubectl config set-credentials ${clusterName}-oidc --exec-api-version=client.authentication.k8s.io/v1 --exec-interactive-mode=IfAvailable --exec-command=kubectl --exec-arg=oidc-login --exec-arg=get-token --exec-arg="--oidc-issuer-url=${oidcIssuerUrl}" --exec-arg="--oidc-client-id=${oidcClientId}" --exec-arg="--oidc-client-secret=${oidcClientSecret}" --exec-arg="--listen-address=localhost:${oidcCallbackPort}" --exec-arg="--oidc-extra-scope=profile" --exec-arg="--oidc-extra-scope=groups"
+
+kubectl config set-context ${clusterName} --cluster=${clusterName} --user=${clusterName}-oidc
+
+kubectl config use-context ${clusterName}
+
+Write-Host "Done! Run 'kubectl get workspaces' to verify."`;
+  }
+
+  const installCmd = os === 'mac' ? 'brew install kubelogin' : 'krew install oidc-login';
+  const killCmd =
+    os === 'mac'
+      ? `PID=$(lsof -i :${oidcCallbackPort} 2>/dev/null | awk 'NR>1 {print $2}' || true)
+if [ -n "$PID" ]; then
+    echo "Terminating existing process on port ${oidcCallbackPort}"
+    kill -9 $PID
+fi`
+      : `PID=$(ss -tlnp 2>/dev/null | grep :${oidcCallbackPort} | awk '{print $6}' | grep -oP '\\d+' || true)
+if [ -n "$PID" ]; then
+    echo "Terminating existing process on port ${oidcCallbackPort}"
+    kill -9 $PID
+fi`;
+
+  return `bash << 'KUBECONFIG_SETUP'
+set -eo pipefail
+
+# Install kubelogin plugin
+command -v kubectl-oidc_login >/dev/null 2>&1 || ${installCmd}
+
+# Kill any process on callback port
+${killCmd}
+
+# Write cluster CA certificate
+mkdir -p /tmp/eks-certs
+printf '%s' '${caCertBase64}' | base64 --decode > /tmp/eks-certs/${clusterName}-ca.crt
+
+# Configure kubectl
+kubectl config set-cluster ${clusterName} --embed-certs --certificate-authority=/tmp/eks-certs/${clusterName}-ca.crt --server ${apiServer}
+
+kubectl config set-credentials ${clusterName}-oidc --exec-api-version=client.authentication.k8s.io/v1 --exec-interactive-mode=IfAvailable --exec-command=kubectl --exec-arg=oidc-login --exec-arg=get-token --exec-arg="--oidc-issuer-url=${oidcIssuerUrl}" --exec-arg="--oidc-client-id=${oidcClientId}" --exec-arg="--oidc-client-secret=${oidcClientSecret}" --exec-arg="--listen-address=localhost:${oidcCallbackPort}" --exec-arg="--oidc-extra-scope=profile" --exec-arg="--oidc-extra-scope=groups"
+
+kubectl config set-context ${clusterName} --cluster=${clusterName} --user=${clusterName}-oidc
+
+kubectl config use-context ${clusterName}
+
+echo "Done! Run 'kubectl get workspaces' to verify."
+KUBECONFIG_SETUP`;
+}
+
+export function KubectlAccess() {
+  const { data, isLoading, error } = useClusterAccess();
+  const [os, setOs] = useState<OS>('mac');
+  const [copied, setCopied] = useState(false);
+
+  const script = data ? generateScript(data, os) : '';
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(script);
+    setCopied(true);
+  };
+
+  const handleDownload = () => {
+    if (!data) return;
+    const ext = os === 'windows' ? 'ps1' : 'sh';
+    const mime = os === 'windows' ? 'text/plain' : 'text/x-shellscript';
+    const blob = new Blob([script], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `set-kubeconfig-${data.clusterName}.${ext}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  if (isLoading) {
+    return (
+      <Box className={styles.loadingContainer}>
+        <CircularProgress size={32} />
+      </Box>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <Box className={styles.page}>
+        <Box className={styles.header}>
+          <Typography variant="h5" fontWeight={600}>
+            {strings.kubectl.title}
+          </Typography>
+        </Box>
+        <Alert severity="info">{strings.kubectl.unavailable}</Alert>
+      </Box>
+    );
+  }
+
+  return (
+    <Box className={styles.page}>
+      <Box className={styles.header}>
+        <Typography variant="h5" fontWeight={600}>
+          {strings.kubectl.title}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+          {strings.kubectl.description}
+        </Typography>
+      </Box>
+
+      <Box className={styles.content}>
+        <Box className={styles.infoBar}>
+          <Box className={styles.infoItem}>
+            <span className={styles.infoLabel}>{strings.kubectl.clusterLabel}</span>
+            <span className={styles.infoValue}>{data.clusterName}</span>
+          </Box>
+          <Box className={styles.infoItem}>
+            <span className={styles.infoLabel}>{strings.kubectl.issuerLabel}</span>
+            <span className={styles.infoValue}>{new URL(data.oidcIssuerUrl).hostname}</span>
+          </Box>
+          <Box className={styles.infoItem}>
+            <span className={styles.infoLabel}>{strings.kubectl.clientLabel}</span>
+            <span className={styles.infoValue}>{data.oidcClientId}</span>
+          </Box>
+        </Box>
+
+        <Box className={styles.scriptCard}>
+          <Box className={styles.scriptToolbar}>
+            <ToggleButtonGroup
+              value={os}
+              exclusive
+              onChange={(_, v) => v && setOs(v)}
+              size="small"
+              sx={{ '& .MuiToggleButton-root': { textTransform: 'none', px: 2, py: 0.5, fontSize: '0.8125rem' } }}
+            >
+              <ToggleButton value="mac">{strings.kubectl.osMac}</ToggleButton>
+              <ToggleButton value="linux">{strings.kubectl.osLinux}</ToggleButton>
+              <ToggleButton value="windows">{strings.kubectl.osWindows}</ToggleButton>
+            </ToggleButtonGroup>
+            <Stack direction="row" spacing={1}>
+              <Button size="small" startIcon={<ContentCopy />} onClick={handleCopy} sx={{ textTransform: 'none' }}>
+                {strings.kubectl.copy}
+              </Button>
+              <Button size="small" startIcon={<Download />} onClick={handleDownload} sx={{ textTransform: 'none' }}>
+                {strings.kubectl.download}
+              </Button>
+            </Stack>
+          </Box>
+          <Box className={styles.codeBlock}>
+            <pre>{script}</pre>
+          </Box>
+        </Box>
+      </Box>
+
+      <Snackbar open={copied} autoHideDuration={2000} onClose={() => setCopied(false)} message={strings.kubectl.copied} />
+    </Box>
+  );
+}

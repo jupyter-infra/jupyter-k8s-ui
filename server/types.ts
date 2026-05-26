@@ -183,6 +183,16 @@ export interface SessionConfig {
   expectedDomain: string;
 }
 
+export interface ClusterAccessConfig {
+  clusterName: string;
+  apiServer: string;
+  caCertBase64: string;
+  oidcIssuerUrl: string;
+  oidcClientId: string;
+  oidcClientSecret: string;
+  oidcCallbackPort: number;
+}
+
 export interface ServerConfig {
   namespace: string;
   staticDir: string;
@@ -191,4 +201,5 @@ export interface ServerConfig {
   port: number;
   logLevel: LogLevel;
   session: SessionConfig;
+  clusterAccess: ClusterAccessConfig;
 }

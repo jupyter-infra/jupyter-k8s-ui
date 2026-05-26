@@ -111,3 +111,13 @@ export interface UpdateWorkspaceRequest {
   podSecurityContext?: Record<string, unknown>;
   accessStrategy?: { name: string; namespace?: string };
 }
+
+export interface ClusterAccessInfo {
+  clusterName: string;
+  apiServer: string;
+  caCertBase64: string;
+  oidcIssuerUrl: string;
+  oidcClientId: string;
+  oidcClientSecret: string;
+  oidcCallbackPort: number;
+}

@@ -4,15 +4,24 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CircularProgress, Box } from '@mui/material';
 import { AuthProvider, ThemeProvider } from './context';
 import { ErrorBoundary, Layout } from './components';
+import { isAuthError } from './api/auth-interceptor';
 
 // Lazy load pages for code splitting
 const WorkspaceList = lazy(() => import('./pages/WorkspaceList').then((m) => ({ default: m.WorkspaceList })));
 const WorkspaceCreate = lazy(() => import('./pages/WorkspaceCreate').then((m) => ({ default: m.WorkspaceCreate })));
 const WorkspaceDetail = lazy(() => import('./pages/WorkspaceDetail').then((m) => ({ default: m.WorkspaceDetail })));
+const KubectlAccess = lazy(() => import('./pages/KubectlAccess').then((m) => ({ default: m.KubectlAccess })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { retry: 1, staleTime: 5000, refetchOnWindowFocus: false },
+    queries: {
+      retry: (failureCount, error) => {
+        if (isAuthError(error)) return false;
+        return failureCount < 1;
+      },
+      staleTime: 5000,
+      refetchOnWindowFocus: false,
+    },
     mutations: { retry: 0 },
   },
 });
@@ -35,6 +44,7 @@ function AppContent() {
               <Route index element={<WorkspaceList />} />
               <Route path="create" element={<WorkspaceCreate />} />
               <Route path="workspace/:name" element={<WorkspaceDetail />} />
+              <Route path="kubectl" element={<KubectlAccess />} />
             </Route>
           </Routes>
         </Suspense>

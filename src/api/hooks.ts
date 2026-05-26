@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from './client';
 import type { CreateWorkspaceRequest, Workspace } from '../types';
 import { getWorkspaceState } from '../utils';
+import { isAuthError } from './auth-interceptor';
 
 // Query keys as constants for consistency
 export const workspaceKeys = {
@@ -13,6 +14,10 @@ export const templateKeys = {
   all: ['templates'] as const,
 };
 
+export const clusterAccessKeys = {
+  all: ['cluster-access'] as const,
+};
+
 // Polling configuration
 const LIST_POLL_INTERVAL_MS = 60_000; // 60 seconds
 const DETAIL_POLL_INTERVAL_MS = 3_000; // 3 seconds (only while workspace is transitioning)
@@ -21,8 +26,18 @@ export function useTemplates() {
   return useQuery({
     queryKey: templateKeys.all,
     queryFn: () => apiClient.listTemplates(),
-    staleTime: 5 * 60 * 1000, // 5 minutes - templates don't change often
-    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+}
+
+export function useClusterAccess() {
+  return useQuery({
+    queryKey: clusterAccessKeys.all,
+    queryFn: () => apiClient.getClusterAccess(),
+    staleTime: 30 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
+    retry: false,
   });
 }
 
@@ -30,7 +45,10 @@ export function useWorkspaces() {
   return useQuery({
     queryKey: workspaceKeys.all,
     queryFn: () => apiClient.listWorkspaces(),
-    refetchInterval: LIST_POLL_INTERVAL_MS,
+    refetchInterval: (query) => {
+      if (query.state.error && isAuthError(query.state.error)) return false;
+      return LIST_POLL_INTERVAL_MS;
+    },
     refetchIntervalInBackground: false,
   });
 }
@@ -51,7 +69,10 @@ export function useWorkspace(name: string) {
     queryKey: workspaceKeys.detail(name),
     queryFn: () => apiClient.getWorkspace(name),
     enabled: Boolean(name),
-    refetchInterval: (query) => (isWorkspaceSettled(query.state.data) ? false : DETAIL_POLL_INTERVAL_MS),
+    refetchInterval: (query) => {
+      if (query.state.error && isAuthError(query.state.error)) return false;
+      return isWorkspaceSettled(query.state.data) ? false : DETAIL_POLL_INTERVAL_MS;
+    },
     refetchIntervalInBackground: false,
   });
 

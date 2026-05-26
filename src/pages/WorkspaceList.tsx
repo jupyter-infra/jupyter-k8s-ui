@@ -1,20 +1,32 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, Typography, Button, Grid, CircularProgress, ToggleButtonGroup, ToggleButton, InputBase, Stack, Paper } from '@mui/material';
-import { Add, Search, Refresh } from '@mui/icons-material';
-import { useWorkspaces } from '../api';
+import { Box, Typography, Button, Grid, CircularProgress, ToggleButtonGroup, ToggleButton, InputBase, Stack, Paper, IconButton, Alert } from '@mui/material';
+import { Add, Search, Refresh, Terminal, Close, ArrowForward } from '@mui/icons-material';
+import { useWorkspaces, useClusterAccess } from '../api';
+import { isAuthError } from '../api/auth-interceptor';
 import { useAuth } from '../context';
 import { isOwner as checkIsOwner } from '../utils';
 import { WorkspaceCard } from '../components';
 import { strings } from '../constants';
 import styles from './WorkspaceList.module.css';
 
+const KUBECTL_BANNER_DISMISSED_KEY = 'kubectl-banner-dismissed';
+
 export function WorkspaceList() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { data: workspaces, isLoading, refetch, isFetching } = useWorkspaces();
+  const { data: workspaces, isLoading, error, refetch, isFetching } = useWorkspaces();
+  const { data: clusterAccess } = useClusterAccess();
   const [filter, setFilter] = useState<'all' | 'mine'>('mine');
   const [search, setSearch] = useState('');
+  const [bannerDismissed, setBannerDismissed] = useState(() => localStorage.getItem(KUBECTL_BANNER_DISMISSED_KEY) === 'true');
+
+  const showKubectlBanner = !bannerDismissed && !!clusterAccess;
+
+  const dismissBanner = () => {
+    setBannerDismissed(true);
+    localStorage.setItem(KUBECTL_BANNER_DISMISSED_KEY, 'true');
+  };
 
   const filteredWorkspaces = useMemo(() => {
     if (!workspaces) return [];
@@ -68,6 +80,31 @@ export function WorkspaceList() {
         </Typography>
       </Box>
 
+      {showKubectlBanner && (
+        <Alert
+          severity="info"
+          icon={<Terminal fontSize="small" />}
+          action={
+            <Stack direction="row" alignItems="center" gap={0.5}>
+              <Button size="small" color="inherit" onClick={() => navigate('/kubectl')} sx={{ textTransform: 'none', fontWeight: 600 }}>
+                {strings.kubectl.bannerAction}
+                <ArrowForward sx={{ fontSize: 14, ml: 0.5 }} />
+              </Button>
+              <IconButton size="small" color="inherit" onClick={dismissBanner} aria-label="Dismiss">
+                <Close sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Stack>
+          }
+          variant="outlined"
+          sx={{ mb: 3 }}
+        >
+          <strong>{strings.kubectl.bannerTitle}</strong> {strings.kubectl.bannerDescription}{' '}
+          <Typography component="span" variant="body2" color="text.secondary">
+            {strings.kubectl.bannerHint} <Terminal sx={{ fontSize: 13, verticalAlign: 'middle', mx: 0.25 }} /> {strings.kubectl.bannerHintIcon}
+          </Typography>
+        </Alert>
+      )}
+
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3, flexWrap: 'wrap' }} gap={2}>
         <Stack direction="row" gap={2} alignItems="center">
           <Paper className={styles.searchContainer} elevation={0}>
@@ -88,16 +125,33 @@ export function WorkspaceList() {
         </Stack>
 
         <Stack direction="row" gap={1}>
-          <Button variant="outlined" startIcon={isFetching ? <CircularProgress size={16} /> : <Refresh />} onClick={() => refetch()} disabled={isFetching}>
+          <Button
+            variant="outlined"
+            startIcon={isFetching ? <CircularProgress size={16} /> : <Refresh />}
+            onClick={() => refetch()}
+            disabled={isFetching || isAuthError(error)}
+          >
             {strings.workspace.refresh}
           </Button>
-          <Button variant="contained" startIcon={<Add />} onClick={handleCreateClick} className={styles.gradientButton}>
+          <Button variant="contained" startIcon={<Add />} onClick={handleCreateClick} className={styles.gradientButton} disabled={isAuthError(error)}>
             {strings.workspace.newWorkspace}
           </Button>
         </Stack>
       </Stack>
 
-      {isEmpty ? (
+      {error && isAuthError(error) ? (
+        <Paper className={styles.emptyState} elevation={0}>
+          <Typography variant="h6" color="text.secondary" gutterBottom>
+            {strings.workspace.sessionExpired}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" className={styles.emptyStateDescription}>
+            {strings.workspace.sessionExpiredDescription}
+          </Typography>
+          <Button variant="contained" onClick={() => window.location.reload()}>
+            {strings.workspace.signInAgain}
+          </Button>
+        </Paper>
+      ) : isEmpty ? (
         <Paper className={styles.emptyState} elevation={0}>
           <Typography variant="h6" color="text.secondary" gutterBottom>
             {search ? strings.workspace.noWorkspacesFound : strings.workspace.noWorkspacesYet}

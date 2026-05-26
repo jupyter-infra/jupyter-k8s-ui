@@ -31,6 +31,15 @@ export const serverConfig: ServerConfig = {
     cookieSizeMaxBytes: 4096,
     expectedDomain: '',
   },
+  clusterAccess: {
+    clusterName: '',
+    apiServer: '',
+    caCertBase64: '',
+    oidcIssuerUrl: '',
+    oidcClientId: '',
+    oidcClientSecret: '',
+    oidcCallbackPort: 9800,
+  },
 };
 
 export function initializeConfig(): void {
@@ -59,6 +68,15 @@ export function initializeConfig(): void {
   serverConfig.session.keyPrefix = process.env.SESSION_KEY_PREFIX || 'session-key-';
   serverConfig.session.newKeyUseDelaySecs = parseInt(process.env.SESSION_NEW_KEY_USE_DELAY_SECS || '60', 10);
   serverConfig.session.expectedDomain = process.env.SESSION_EXPECTED_DOMAIN || '';
+
+  // Cluster access config (for kubectl access page)
+  serverConfig.clusterAccess.clusterName = process.env.CLUSTER_NAME || '';
+  serverConfig.clusterAccess.apiServer = process.env.CLUSTER_API_SERVER || '';
+  serverConfig.clusterAccess.caCertBase64 = process.env.CLUSTER_CA_CERT_BASE64 || '';
+  serverConfig.clusterAccess.oidcIssuerUrl = process.env.OIDC_ISSUER_URL || '';
+  serverConfig.clusterAccess.oidcClientId = process.env.OIDC_CLIENT_ID || '';
+  serverConfig.clusterAccess.oidcClientSecret = process.env.OIDC_CLIENT_SECRET || '';
+  serverConfig.clusterAccess.oidcCallbackPort = parseInt(process.env.OIDC_CALLBACK_PORT || '9800', 10);
 }
 
 // --- Environment Detection ---

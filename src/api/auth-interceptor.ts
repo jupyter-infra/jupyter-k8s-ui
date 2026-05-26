@@ -1,24 +1,29 @@
-const RELOAD_FLAG_KEY = 'auth_reload_ts';
-const RELOAD_LOOP_THRESHOLD_MS = 30_000;
+let authFailed = false;
 
 /**
- * Handle 401 responses with reload loop protection (Thread 11).
- * First 401: set timestamp flag, reload page to trigger OAuth2 Proxy re-auth.
- * If flag was set < 30s ago: we're in a loop, don't reload.
+ * Handle 401 responses. Sets an in-memory flag so all subsequent API calls
+ * know auth is broken — no page reloads. The UI should check `isAuthFailed()`
+ * and show a re-login prompt instead.
  */
 export function handleUnauthorized(): void {
-  const lastReload = sessionStorage.getItem(RELOAD_FLAG_KEY);
-  const now = Date.now();
-
-  if (lastReload && now - parseInt(lastReload, 10) < RELOAD_LOOP_THRESHOLD_MS) {
-    sessionStorage.removeItem(RELOAD_FLAG_KEY);
-    return;
-  }
-
-  sessionStorage.setItem(RELOAD_FLAG_KEY, String(now));
-  window.location.reload();
+  authFailed = true;
 }
 
 export function clearAuthReloadFlag(): void {
-  sessionStorage.removeItem(RELOAD_FLAG_KEY);
+  authFailed = false;
+}
+
+export function isAuthFailed(): boolean {
+  return authFailed;
+}
+
+export class AuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AuthError';
+  }
+}
+
+export function isAuthError(error: unknown): boolean {
+  return error instanceof AuthError;
 }

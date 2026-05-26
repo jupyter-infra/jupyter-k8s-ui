@@ -20,6 +20,7 @@
   --color-success: #16a34a;
   --color-error: #dc2626;
   --color-info: #0284c7;
+  --appbar-bg: 255, 255, 255;
   --border-radius-sm: 6px;
   --border-radius-lg: 12px;
 }
@@ -39,4 +40,5 @@
   --color-success: #22c55e;
   --color-error: #ef4444;
   --color-info: #0ea5e9;
+  --appbar-bg: 20, 20, 22;
 }

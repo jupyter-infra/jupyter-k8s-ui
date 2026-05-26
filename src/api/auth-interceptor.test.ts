@@ -1,50 +1,47 @@
-import { describe, test, expect, beforeEach, mock, spyOn } from 'bun:test';
-import { handleUnauthorized, clearAuthReloadFlag } from './auth-interceptor';
+import { describe, test, expect, beforeEach } from 'bun:test';
+import { handleUnauthorized, clearAuthReloadFlag, isAuthFailed, AuthError, isAuthError } from './auth-interceptor';
 
 describe('handleUnauthorized', () => {
   beforeEach(() => {
-    sessionStorage.clear();
+    clearAuthReloadFlag();
   });
 
-  test('first 401 sets flag and triggers reload', () => {
-    const reload = mock(() => {});
-    spyOn(window.location, 'reload').mockImplementation(reload);
-
+  test('sets auth failed flag', () => {
+    expect(isAuthFailed()).toBe(false);
     handleUnauthorized();
-
-    expect(sessionStorage.getItem('auth_reload_ts')).not.toBeNull();
-    expect(reload).toHaveBeenCalledTimes(1);
-  });
-
-  test('second 401 within 30s does not reload (loop protection)', () => {
-    const reload = mock(() => {});
-    spyOn(window.location, 'reload').mockImplementation(reload);
-
-    sessionStorage.setItem('auth_reload_ts', String(Date.now() - 5_000));
-
-    handleUnauthorized();
-
-    expect(reload).not.toHaveBeenCalled();
-    expect(sessionStorage.getItem('auth_reload_ts')).toBeNull();
-  });
-
-  test('401 after 30s triggers reload again', () => {
-    const reload = mock(() => {});
-    spyOn(window.location, 'reload').mockImplementation(reload);
-
-    sessionStorage.setItem('auth_reload_ts', String(Date.now() - 60_000));
-
-    handleUnauthorized();
-
-    expect(reload).toHaveBeenCalledTimes(1);
-    expect(sessionStorage.getItem('auth_reload_ts')).not.toBeNull();
+    expect(isAuthFailed()).toBe(true);
   });
 });
 
 describe('clearAuthReloadFlag', () => {
-  test('removes the flag from sessionStorage', () => {
-    sessionStorage.setItem('auth_reload_ts', String(Date.now()));
+  test('resets the auth failed flag', () => {
+    handleUnauthorized();
+    expect(isAuthFailed()).toBe(true);
     clearAuthReloadFlag();
-    expect(sessionStorage.getItem('auth_reload_ts')).toBeNull();
+    expect(isAuthFailed()).toBe(false);
+  });
+});
+
+describe('AuthError', () => {
+  test('is an instance of Error', () => {
+    const err = new AuthError('unauthorized');
+    expect(err).toBeInstanceOf(Error);
+    expect(err.name).toBe('AuthError');
+    expect(err.message).toBe('unauthorized');
+  });
+});
+
+describe('isAuthError', () => {
+  test('returns true for AuthError instances', () => {
+    expect(isAuthError(new AuthError('test'))).toBe(true);
+  });
+
+  test('returns false for regular errors', () => {
+    expect(isAuthError(new Error('test'))).toBe(false);
+  });
+
+  test('returns false for non-errors', () => {
+    expect(isAuthError(null)).toBe(false);
+    expect(isAuthError('string')).toBe(false);
   });
 });

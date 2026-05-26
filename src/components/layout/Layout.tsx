@@ -1,5 +1,6 @@
 import { Outlet, Link } from 'react-router-dom';
-import { AppBar, Toolbar, Typography, Container, Skeleton, Box, Stack } from '@mui/material';
+import { AppBar, Toolbar, Typography, Container, Skeleton, Box, Stack, IconButton, Tooltip } from '@mui/material';
+import { Terminal } from '@mui/icons-material';
 import { useAuth } from '../../context';
 import { ThemeSwitcher } from '../ui/ThemeSwitcher';
 import { UserMenu } from './UserMenu';
@@ -37,6 +38,11 @@ export function Layout() {
           <Box sx={{ flex: 1 }} />
 
           <Stack direction="row" alignItems="center" gap={1}>
+            <Tooltip title={strings.kubectl.navTooltip}>
+              <IconButton component={Link} to="/kubectl" size="small" aria-label={strings.kubectl.navAriaLabel}>
+                <Terminal fontSize="small" />
+              </IconButton>
+            </Tooltip>
             <ThemeSwitcher />
             {isLoading ? <Skeleton variant="circular" width={32} height={32} /> : user ? <UserMenu username={user.username} /> : null}
           </Stack>

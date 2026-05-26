@@ -6,6 +6,7 @@ import { serveStatic } from './static';
 import { handleListWorkspaces, handleGetWorkspace, handleCreateWorkspace, handleUpdateWorkspace, handleDeleteWorkspace } from './handlers/workspaces';
 import { handleListTemplates } from './handlers/templates';
 import { handleGetMe } from './handlers/me';
+import { handleGetClusterAccess } from './handlers/cluster-access';
 
 // --- Route paths ---
 
@@ -17,6 +18,7 @@ const ROUTES = {
   workspaces: `${API_PREFIX}/workspaces`,
   workspace: new RegExp(`^${API_PREFIX}/workspaces/([^/]+)$`),
   templates: `${API_PREFIX}/templates`,
+  clusterAccess: `${API_PREFIX}/cluster-access`,
 } as const;
 
 // --- Request Handler ---
@@ -100,6 +102,11 @@ async function routeRequest(req: Request): Promise<Response> {
         GET: () => handleListTemplates(jwt),
       };
       response = await (handlers[method]?.() ?? Promise.resolve(errorResponse(405, 'Method not allowed')));
+      return withSessionCookie(response, jwt, source);
+    }
+
+    if (pathname === ROUTES.clusterAccess && method === 'GET') {
+      response = handleGetClusterAccess();
       return withSessionCookie(response, jwt, source);
     }
 

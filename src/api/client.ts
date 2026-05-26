@@ -1,5 +1,5 @@
-import type { Workspace, WorkspaceTemplate, CreateWorkspaceRequest, UpdateWorkspaceRequest } from '../types';
-import { handleUnauthorized, clearAuthReloadFlag } from './auth-interceptor';
+import type { Workspace, WorkspaceTemplate, CreateWorkspaceRequest, UpdateWorkspaceRequest, ClusterAccessInfo } from '../types';
+import { handleUnauthorized, clearAuthReloadFlag, AuthError } from './auth-interceptor';
 
 const API_BASE = '/api/v1';
 
@@ -22,6 +22,8 @@ class ApiClient {
     if (!response.ok) {
       if (response.status === 401) {
         handleUnauthorized();
+        const error = await response.text();
+        throw new AuthError(error || 'Unauthorized');
       }
       const error = await response.text();
       throw new Error(error || `Request failed: ${response.status}`);
@@ -55,6 +57,8 @@ class ApiClient {
       method: 'PATCH',
       body: JSON.stringify({ desiredStatus: 'Stopped' }),
     });
+
+  getClusterAccess = () => this.request<ClusterAccessInfo>('/cluster-access');
 }
 
 export const apiClient = new ApiClient();
