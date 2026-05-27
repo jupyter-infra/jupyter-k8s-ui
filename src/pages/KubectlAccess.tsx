@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Box, Typography, Button, Alert, CircularProgress, Snackbar, Stack, ToggleButtonGroup, ToggleButton } from '@mui/material';
-import { ContentCopy, Download } from '@mui/icons-material';
+import { Box, Typography, Button, Alert, CircularProgress, Stack, ToggleButtonGroup, ToggleButton } from '@mui/material';
+import { ContentCopy, Check, Download } from '@mui/icons-material';
 import { useClusterAccess } from '../api';
 import { strings } from '../constants';
 import type { ClusterAccessInfo } from '../types';
@@ -88,6 +88,7 @@ export function KubectlAccess() {
   const handleCopy = async () => {
     await navigator.clipboard.writeText(script);
     setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleDownload = () => {
@@ -165,8 +166,14 @@ export function KubectlAccess() {
               <ToggleButton value="windows">{strings.kubectl.osWindows}</ToggleButton>
             </ToggleButtonGroup>
             <Stack direction="row" spacing={1}>
-              <Button size="small" startIcon={<ContentCopy />} onClick={handleCopy} sx={{ textTransform: 'none' }}>
-                {strings.kubectl.copy}
+              <Button
+                size="small"
+                startIcon={copied ? <Check /> : <ContentCopy />}
+                onClick={handleCopy}
+                sx={{ textTransform: 'none' }}
+                color={copied ? 'success' : 'primary'}
+              >
+                {copied ? strings.kubectl.copied : strings.kubectl.copy}
               </Button>
               <Button size="small" startIcon={<Download />} onClick={handleDownload} sx={{ textTransform: 'none' }}>
                 {strings.kubectl.download}
@@ -178,8 +185,6 @@ export function KubectlAccess() {
           </Box>
         </Box>
       </Box>
-
-      <Snackbar open={copied} autoHideDuration={2000} onClose={() => setCopied(false)} message={strings.kubectl.copied} />
     </Box>
   );
 }
