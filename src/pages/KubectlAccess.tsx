@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Typography, Button, Alert, CircularProgress, Stack, ToggleButtonGroup, ToggleButton } from '@mui/material';
+import { Box, Typography, Button, Alert, CircularProgress, Stack, Paper, ToggleButtonGroup, ToggleButton, Chip } from '@mui/material';
 import { ContentCopy, Check, Download } from '@mui/icons-material';
 import { useClusterAccess } from '../api';
 import { strings } from '../constants';
@@ -106,7 +106,7 @@ export function KubectlAccess() {
 
   if (isLoading) {
     return (
-      <Box className={styles.loadingContainer}>
+      <Box display="flex" justifyContent="center" alignItems="center" height="60vh">
         <CircularProgress size={32} />
       </Box>
     );
@@ -114,77 +114,99 @@ export function KubectlAccess() {
 
   if (error || !data) {
     return (
-      <Box className={styles.page}>
-        <Box className={styles.header}>
-          <Typography variant="h5" fontWeight={600}>
-            {strings.kubectl.title}
-          </Typography>
-        </Box>
+      <Stack spacing={2}>
+        <Typography variant="h5" fontWeight={600}>
+          {strings.kubectl.title}
+        </Typography>
         <Alert severity="info">{strings.kubectl.unavailable}</Alert>
-      </Box>
+      </Stack>
     );
   }
 
   return (
-    <Box className={styles.page}>
-      <Box className={styles.header}>
+    <Stack spacing={2} height="calc(100vh - 64px - 64px)">
+      {/* Header */}
+      <Box>
         <Typography variant="h5" fontWeight={600}>
           {strings.kubectl.title}
         </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+        <Typography variant="body2" color="text.secondary">
           {strings.kubectl.description}
         </Typography>
       </Box>
 
-      <Box className={styles.content}>
-        <Box className={styles.infoBar}>
-          <Box className={styles.infoItem}>
-            <span className={styles.infoLabel}>{strings.kubectl.clusterLabel}</span>
-            <span className={styles.infoValue}>{data.clusterName}</span>
-          </Box>
-          <Box className={styles.infoItem}>
-            <span className={styles.infoLabel}>{strings.kubectl.issuerLabel}</span>
-            <span className={styles.infoValue}>{issuerHostname}</span>
-          </Box>
-          <Box className={styles.infoItem}>
-            <span className={styles.infoLabel}>{strings.kubectl.clientLabel}</span>
-            <span className={styles.infoValue}>{data.oidcClientId}</span>
-          </Box>
-        </Box>
+      {/* Cluster info */}
+      <Paper variant="outlined">
+        <Stack direction="row" spacing={4} padding={2} alignItems="center" flexWrap="wrap">
+          <Stack>
+            <Typography variant="caption" color="text.secondary" fontWeight={600} textTransform="uppercase" letterSpacing={0.5}>
+              {strings.kubectl.clusterLabel}
+            </Typography>
+            <Typography variant="body2" fontWeight={600} fontFamily="monospace">
+              {data.clusterName}
+            </Typography>
+          </Stack>
+          <Stack>
+            <Typography variant="caption" color="text.secondary" fontWeight={600} textTransform="uppercase" letterSpacing={0.5}>
+              {strings.kubectl.issuerLabel}
+            </Typography>
+            <Typography variant="body2" fontWeight={600} fontFamily="monospace">
+              {issuerHostname}
+            </Typography>
+          </Stack>
+          <Stack>
+            <Typography variant="caption" color="text.secondary" fontWeight={600} textTransform="uppercase" letterSpacing={0.5}>
+              {strings.kubectl.clientLabel}
+            </Typography>
+            <Typography variant="body2" fontWeight={600} fontFamily="monospace">
+              {data.oidcClientId}
+            </Typography>
+          </Stack>
+        </Stack>
+      </Paper>
 
-        <Box className={styles.scriptCard}>
-          <Box className={styles.scriptToolbar}>
-            <ToggleButtonGroup
-              value={os}
-              exclusive
-              onChange={(_, v) => v && setOs(v)}
+      {/* Instruction */}
+      <Typography variant="body2">{strings.kubectl.instruction}</Typography>
+
+      {/* Script card */}
+      <Paper variant="outlined" component={Stack} flex={1} minHeight={0} overflow="hidden">
+        <Stack direction="row" justifyContent="space-between" alignItems="center" padding={1.5} paddingX={2} borderBottom={1} borderColor="divider">
+          <ToggleButtonGroup value={os} exclusive onChange={(_, v) => v && setOs(v)} size="small">
+            <ToggleButton value="mac">{strings.kubectl.osMac}</ToggleButton>
+            <ToggleButton value="linux">{strings.kubectl.osLinux}</ToggleButton>
+            <ToggleButton value="windows">{strings.kubectl.osWindows}</ToggleButton>
+          </ToggleButtonGroup>
+          <Stack direction="row" spacing={1}>
+            <Button
               size="small"
-              sx={{ '& .MuiToggleButton-root': { textTransform: 'none', px: 2, py: 0.5, fontSize: '0.8125rem' } }}
+              variant="contained"
+              startIcon={copied ? <Check /> : <ContentCopy />}
+              onClick={handleCopy}
+              color={copied ? 'success' : 'primary'}
             >
-              <ToggleButton value="mac">{strings.kubectl.osMac}</ToggleButton>
-              <ToggleButton value="linux">{strings.kubectl.osLinux}</ToggleButton>
-              <ToggleButton value="windows">{strings.kubectl.osWindows}</ToggleButton>
-            </ToggleButtonGroup>
-            <Stack direction="row" spacing={1}>
-              <Button
-                size="small"
-                startIcon={copied ? <Check /> : <ContentCopy />}
-                onClick={handleCopy}
-                sx={{ textTransform: 'none' }}
-                color={copied ? 'success' : 'primary'}
-              >
-                {copied ? strings.kubectl.copied : strings.kubectl.copy}
-              </Button>
-              <Button size="small" startIcon={<Download />} onClick={handleDownload} sx={{ textTransform: 'none' }}>
-                {strings.kubectl.download}
-              </Button>
-            </Stack>
-          </Box>
-          <Box className={styles.codeBlock}>
-            <pre>{script}</pre>
-          </Box>
+              {copied ? strings.kubectl.copied : strings.kubectl.copy}
+            </Button>
+            <Button size="small" startIcon={<Download />} onClick={handleDownload} color="secondary">
+              {strings.kubectl.download}
+            </Button>
+          </Stack>
+        </Stack>
+        <Box overflow="auto" padding={2.5} flex={1} bgcolor="background.default" className={styles.codeBlock}>
+          <pre>
+            {script.split('\n').map((line, i) => (
+              <span key={i} className={line.trimStart().startsWith('#') ? styles.comment : undefined}>
+                {line}
+                {'\n'}
+              </span>
+            ))}
+          </pre>
         </Box>
-      </Box>
-    </Box>
+      </Paper>
+
+      {/* Verify hint */}
+      <Alert severity="success" variant="outlined">
+        {strings.kubectl.verifyHint} <Chip label={strings.kubectl.verifyCommand} size="small" variant="outlined" />
+      </Alert>
+    </Stack>
   );
 }

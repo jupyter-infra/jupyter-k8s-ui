@@ -91,17 +91,15 @@ describe('handleCreateWorkspace', () => {
       'jwt',
       jsonRequest({
         name: 'ws',
-        image: 'jupyter:latest',
         resources: { limits: { cpu: '2' } },
+        storage: { size: '20Gi' },
       }),
     );
 
     const obj = lastCreated();
-    expect(obj.spec.image).toBe('jupyter:latest');
     expect(obj.spec.resources).toEqual({ limits: { cpu: '2' } });
+    expect(obj.spec.storage).toEqual({ size: '20Gi' });
     // unset fields must not appear
-    expect(obj.spec).not.toHaveProperty('storage');
-    expect(obj.spec).not.toHaveProperty('templateRef');
     expect(obj.spec).not.toHaveProperty('idleShutdown');
   });
 

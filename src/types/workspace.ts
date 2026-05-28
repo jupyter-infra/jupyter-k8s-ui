@@ -87,15 +87,11 @@ export interface WorkspaceTemplate {
 export interface CreateWorkspaceRequest {
   name: string;
   displayName: string;
-  templateRef?: { name: string; namespace?: string };
-  image?: string;
   resources?: ResourceRequirements;
-  storage?: { size?: string; mountPath?: string; storageClassName?: string };
+  storage?: { size: string };
   accessType?: string;
   ownershipType?: string;
   idleShutdown?: { enabled: boolean; timeoutInMinutes?: number };
-  podSecurityContext?: { fsGroup?: number };
-  accessStrategy?: { name: string; namespace?: string };
 }
 
 export interface UpdateWorkspaceRequest {

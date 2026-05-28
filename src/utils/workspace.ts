@@ -1,9 +1,9 @@
 // Workspace status helpers
 
 export function getStatusColor(isRunning: boolean, isAvailable: boolean, isPending: boolean): string {
-  if (isRunning && isAvailable) return 'var(--color-success)';
-  if (isPending) return 'var(--color-warning)';
-  return 'var(--color-neutral)';
+  if (isRunning && isAvailable) return 'success.main';
+  if (isPending) return 'warning.main';
+  return 'text.disabled';
 }
 
 export function getStatusText(isRunning: boolean, isAvailable: boolean, isPending: boolean): string {

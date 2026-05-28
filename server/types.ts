@@ -128,16 +128,12 @@ export interface TemplateResponse {
 export interface CreateWorkspaceBody {
   name: string;
   displayName?: string;
-  image?: string;
   desiredStatus?: string;
   accessType?: string;
   ownershipType?: string;
   resources?: K8sResourceRequirements;
-  storage?: Record<string, unknown>;
-  templateRef?: { name: string; namespace?: string };
+  storage?: { size: string };
   idleShutdown?: { enabled: boolean; timeoutInMinutes?: number };
-  podSecurityContext?: Record<string, unknown>;
-  accessStrategy?: { name: string; namespace?: string };
 }
 
 export interface UpdateWorkspaceBody {

@@ -2,43 +2,49 @@
  * CSS custom properties used by component CSS modules.
  * Color theming is handled by MUI's ThemeProvider — these variables
  * bridge the gap for CSS modules that can't access the MUI theme directly.
+ *
+ * Brand: Jupyter — #F37626 orange, Source Sans 3, warm grey scale.
  */
 
 :root,
 [data-theme='light'] {
-  --color-primary: #4f46e5;
-  --color-primary-light: #6366f1;
-  --color-primary-dark: #3730a3;
-  --color-background: #f8fafc;
+  --color-primary: #f37626;
+  --color-primary-light: #f59b5c;
+  --color-primary-dark: #d35f15;
+  --color-background: #fafafa;
   --color-background-paper: #ffffff;
-  --color-text: #0f172a;
-  --color-text-primary: #0f172a;
-  --color-text-secondary: #64748b;
+  --color-text: #4d4d4d;
+  --color-text-primary: #4d4d4d;
+  --color-text-secondary: #757575;
   --color-divider: rgba(0, 0, 0, 0.08);
-  --gradient-primary: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-  --gradient-primary-hover: linear-gradient(135deg, #3730a3 0%, #6d28d9 100%);
-  --color-success: #16a34a;
-  --color-error: #dc2626;
-  --color-info: #0284c7;
+  --gradient-primary: linear-gradient(135deg, #f37626 0%, #f59b5c 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #d35f15 0%, #f37626 100%);
+  --color-success: #2e7d32;
+  --color-warning: #ed6c02;
+  --color-error: #d32f2f;
+  --color-info: #757575;
+  --color-neutral: #9e9e9e;
   --appbar-bg: 255, 255, 255;
   --border-radius-sm: 6px;
-  --border-radius-lg: 12px;
+  --border-radius-lg: 10px;
 }
 
 [data-theme='dark'] {
-  --color-primary: #6366f1;
-  --color-primary-light: #818cf8;
-  --color-primary-dark: #4f46e5;
-  --color-background: #0a0a0b;
-  --color-background-paper: #141416;
-  --color-text: #fafafa;
-  --color-text-primary: #fafafa;
-  --color-text-secondary: #a1a1aa;
-  --color-divider: rgba(255, 255, 255, 0.12);
-  --gradient-primary: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  --gradient-primary-hover: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-  --color-success: #22c55e;
-  --color-error: #ef4444;
-  --color-info: #0ea5e9;
-  --appbar-bg: 20, 20, 22;
+  --color-primary: #f59b5c;
+  --color-primary-light: #f7b98a;
+  --color-primary-dark: #f37626;
+  --color-background: #1a1a1a;
+  --color-background-paper: #242424;
+  --color-text: #eeeeee;
+  --color-text-primary: #eeeeee;
+  --color-text-secondary: #9e9e9e;
+  --color-divider: rgba(255, 255, 255, 0.1);
+  --gradient-primary: linear-gradient(135deg, #f37626 0%, #f59b5c 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #d35f15 0%, #f37626 100%);
+  --color-success: #66bb6a;
+  --color-warning: #ffa726;
+  --color-error: #ef5350;
+  --color-info: #9e9e9e;
+  --color-neutral: #757575;
+  --appbar-bg: 26, 26, 26;
 }

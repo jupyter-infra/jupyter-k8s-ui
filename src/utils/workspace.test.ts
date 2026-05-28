@@ -150,9 +150,9 @@ describe('sanitizeK8sName', () => {
 describe('getStatusColor / getStatusText', () => {
   // These are a 3-way branch on (running, available, pending). Exhaustive == 3 cases.
   test.each([
-    [true, true, false, 'var(--color-success)', 'Running'],
-    [true, false, true, 'var(--color-warning)', 'Starting'],
-    [false, false, false, 'var(--color-neutral)', 'Stopped'],
+    [true, true, false, 'success.main', 'Running'],
+    [true, false, true, 'warning.main', 'Starting'],
+    [false, false, false, 'text.disabled', 'Stopped'],
   ])('running=%s available=%s pending=%s → %s / %s', (run, avail, pending, color, text) => {
     expect(getStatusColor(run, avail, pending)).toBe(color);
     expect(getStatusText(run, avail, pending)).toBe(text);

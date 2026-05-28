@@ -61,7 +61,7 @@ describe('WorkspaceCard', () => {
   test('shows stop button when owner + running', () => {
     const ws = makeWorkspace({ owner: 'alice' });
     renderCard(ws);
-    expect(screen.getAllByLabelText(/stop/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /stop/i })).toBeDefined();
   });
 
   test('shows start button when owner + stopped', () => {
@@ -71,20 +71,20 @@ describe('WorkspaceCard', () => {
       status: { accessURL: '', conditions: [] },
     });
     renderCard(ws);
-    expect(screen.getAllByLabelText(/start/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /start/i })).toBeDefined();
   });
 
   test('hides start/stop buttons for non-owner', () => {
     const ws = makeWorkspace({ owner: 'bob' });
     renderCard(ws);
-    expect(screen.queryByLabelText(/^stop$/i)).toBeNull();
-    expect(screen.queryByLabelText(/^start$/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /^stop$/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^start$/i })).toBeNull();
   });
 
   test('shows Open button when running + available + public', () => {
     const ws = makeWorkspace({ owner: 'bob' }); // not owner but public
     renderCard(ws);
-    expect(screen.getByLabelText(/open workspace/i)).toBeDefined();
+    expect(screen.getByRole('button', { name: /open/i })).toBeDefined();
   });
 
   test('hides Open button for non-owner on OwnerOnly workspace', () => {
@@ -93,7 +93,7 @@ describe('WorkspaceCard', () => {
       spec: { accessType: 'OwnerOnly', desiredStatus: 'Running', displayName: 'T', image: 'i', ownershipType: 'OwnerOnly' },
     });
     renderCard(ws);
-    expect(screen.queryByLabelText(/open workspace/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /open/i })).toBeNull();
   });
 
   test('hides Open button when workspace is not available', () => {
@@ -102,7 +102,7 @@ describe('WorkspaceCard', () => {
       status: { accessURL: 'https://ws.example.com', conditions: [] },
     });
     renderCard(ws);
-    expect(screen.queryByLabelText(/open workspace/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /open/i })).toBeNull();
   });
 
   test('shows displayName when set, falls back to name', () => {

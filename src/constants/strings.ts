@@ -41,6 +41,8 @@ export const strings = {
     // Card
     moreOptions: 'More options',
     openWorkspace: 'Open workspace',
+    open: 'Open',
+    details: 'Details',
     start: 'Start',
     stop: 'Stop',
     viewOnly: 'View only',
@@ -98,6 +100,12 @@ export const strings = {
     accessPrivateTitle: 'Private',
     accessPrivateDescription: 'Only you can connect',
 
+    // Create page hints
+    advancedHint: 'Need more options (custom images, GPU, pod security)?',
+    advancedHintKubectl: 'Use kubectl',
+    advancedHintDocs: 'full CRD reference',
+    advancedHintDocsUrl: 'https://jupyter-k8s.readthedocs.io/en/latest/reference/custom-resources/workspace.html',
+
     // Delete dialog
     deleteTitle: 'Delete Workspace',
     deleteMessage: (name: string) => `Are you sure you want to delete "${name}"? This action cannot be undone.`,
@@ -108,9 +116,13 @@ export const strings = {
     navAriaLabel: 'Kubectl access',
     title: 'Kubectl Access',
     description: 'Connect to this cluster from your terminal.',
+    instruction: 'Copy the script below and paste it into your terminal. It will configure kubectl to connect to this cluster.',
+    infoCaption: 'These values are pre-configured in the script below.',
+    verifyHint: 'After running, verify with:',
+    verifyCommand: 'kubectl get workspaces',
     copy: 'Copy',
     download: 'Download',
-    copied: 'Copied to clipboard',
+    copied: 'Copied!',
     unavailable: 'Cluster access configuration is not available. An administrator needs to configure the OIDC environment variables on the server.',
     osMac: 'macOS',
     osLinux: 'Linux',

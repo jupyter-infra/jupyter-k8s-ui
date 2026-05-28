@@ -37,7 +37,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0px 2px 4px rgba(79, 70, 229, 0.2);
+  box-shadow: 0px 2px 4px rgba(243, 118, 38, 0.2);
   transition:
     transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
     box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -45,7 +45,7 @@
 
 .logoLink:hover .logoBox {
   transform: translateY(-1px);
-  box-shadow: 0px 4px 8px rgba(79, 70, 229, 0.3);
+  box-shadow: 0px 4px 8px rgba(243, 118, 38, 0.3);
 }
 
 .logoText {

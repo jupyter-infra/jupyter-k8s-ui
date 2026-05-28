@@ -1,4 +1,4 @@
-import { Card, CardContent, Typography, IconButton, Chip, Tooltip, Menu, MenuItem, ListItemIcon, Stack, Box, Divider } from '@mui/material';
+import { Card, CardContent, Typography, IconButton, Chip, Button, Menu, MenuItem, ListItemIcon, Stack, Box, Divider } from '@mui/material';
 import { PlayArrow, Stop, OpenInNew, MoreVert, Delete, Circle, Memory, Storage, Info } from '@mui/icons-material';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -77,10 +77,18 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
 
           <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 2.5, flexWrap: 'wrap' }}>
             <Chip
-              icon={<Circle sx={{ fontSize: 8, color: statusColor }} />}
+              icon={<Circle sx={{ fontSize: 8 }} />}
               label={statusText}
               size="small"
-              sx={{ bgcolor: `${statusColor}1a`, color: statusColor, border: 'none' }}
+              sx={(theme) => {
+                const [group, shade] = statusColor.split('.') as [keyof typeof theme.palette, string];
+                const palette = theme.palette[group];
+                const color =
+                  typeof palette === 'object' && palette !== null && shade in palette
+                    ? (palette as unknown as Record<string, string>)[shade]
+                    : theme.palette.text.disabled;
+                return { bgcolor: `${color}1a`, color, border: 'none', '& .MuiChip-icon': { color } };
+              }}
             />
             <Chip label={spec.image} size="small" variant="outlined" className={styles.imageChip} />
             {spec.accessType === 'OwnerOnly' && <Chip label={strings.common.private} size="small" className={styles.privateChip} />}
@@ -99,35 +107,23 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
         </CardContent>
 
         <Box className={styles.actions}>
-          <Tooltip title={strings.workspace.viewDetails}>
-            <IconButton size="small" onClick={handleViewDetails} aria-label={strings.workspace.viewDetails}>
-              <Info fontSize="small" />
-            </IconButton>
-          </Tooltip>
+          <Button size="small" startIcon={<Info fontSize="small" />} onClick={handleViewDetails} color="secondary">
+            {strings.workspace.details}
+          </Button>
           {canOpen && (
-            <Tooltip title={strings.workspace.openWorkspace}>
-              <IconButton size="small" onClick={handleOpen} aria-label={strings.workspace.openWorkspace} color="primary">
-                <OpenInNew fontSize="small" />
-              </IconButton>
-            </Tooltip>
+            <Button size="small" startIcon={<OpenInNew fontSize="small" />} onClick={handleOpen} color="primary">
+              {strings.workspace.open}
+            </Button>
           )}
           {ownerMatch &&
             (isRunning ? (
-              <Tooltip title={strings.workspace.stop}>
-                <span>
-                  <IconButton size="small" onClick={handleStop} disabled={stopMutation.isPending} aria-label={strings.workspace.stop}>
-                    <Stop fontSize="small" />
-                  </IconButton>
-                </span>
-              </Tooltip>
+              <Button size="small" startIcon={<Stop fontSize="small" />} onClick={handleStop} disabled={stopMutation.isPending} color="secondary">
+                {strings.workspace.stop}
+              </Button>
             ) : (
-              <Tooltip title={strings.workspace.start}>
-                <span>
-                  <IconButton size="small" onClick={handleStart} disabled={startMutation.isPending} aria-label={strings.workspace.start} color="primary">
-                    <PlayArrow fontSize="small" />
-                  </IconButton>
-                </span>
-              </Tooltip>
+              <Button size="small" startIcon={<PlayArrow fontSize="small" />} onClick={handleStart} disabled={startMutation.isPending} color="primary">
+                {strings.workspace.start}
+              </Button>
             ))}
         </Box>
 

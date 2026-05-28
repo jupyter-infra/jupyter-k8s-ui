@@ -49,12 +49,8 @@ export async function handleCreateWorkspace(jwt: string, req: Request): Promise<
       ownershipType: body.ownershipType || 'OwnerOnly',
     };
 
-    if (body.image) spec.image = body.image;
     if (body.resources) spec.resources = body.resources;
     if (body.storage) spec.storage = body.storage;
-    if (body.templateRef) spec.templateRef = body.templateRef;
-    if (body.podSecurityContext) spec.podSecurityContext = body.podSecurityContext;
-    if (body.accessStrategy) spec.accessStrategy = body.accessStrategy;
 
     if (body.idleShutdown) {
       spec.idleShutdown = {
