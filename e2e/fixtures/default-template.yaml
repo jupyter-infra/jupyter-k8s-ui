@@ -1,0 +1,23 @@
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: default
+  namespace: default
+  labels:
+    workspace.jupyter.org/default-template: 'true'
+spec:
+  displayName: Default
+  description: Default workspace template for E2E tests
+  defaultImage: nginx:latest
+  defaultResources:
+    requests:
+      cpu: '100m'
+      memory: '128Mi'
+    limits:
+      cpu: '500m'
+      memory: '512Mi'
+  primaryStorage:
+    defaultSize: '1Gi'
+    minSize: '1Gi'
+    maxSize: '10Gi'
+    defaultMountPath: '/data'

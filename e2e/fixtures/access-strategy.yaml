@@ -1,8 +1,0 @@
-apiVersion: workspace.jupyter.org/v1alpha1
-kind: WorkspaceAccessStrategy
-metadata:
-  name: sample-access-strategy
-  namespace: default
-spec:
-  displayName: E2E Access Strategy
-  accessResourceTemplates: []

@@ -220,10 +220,8 @@ E2E_ROTATOR_IMAGE ?= ghcr.io/jupyter-infra/jupyter-k8s-rotator:latest
 E2E_CHART_SOURCE ?= oci://ghcr.io/jupyter-infra/charts/jupyter-k8s
 # Update when CRD contract changes
 E2E_CHART_VERSION ?= 0.1.0-rc.2
-# Image used for workspace pods in E2E tests. Defaults to nginx because the real
-# Jupyter UV image (jk8s-application-jupyter-uv) isn't public on GHCR. The controller
-# has no custom readiness probes — any running container reaches "Running" status.
-# Override: make test-e2e E2E_WORKSPACE_IMAGE=jk8s-application-jupyter-uv:latest
+# Image for workspace pods is injected by the default WorkspaceTemplate fixture
+# (e2e/fixtures/default-template.yaml). No need to pass it to the test.
 E2E_WORKSPACE_IMAGE ?= nginx:latest
 E2E_KIND_CLUSTER ?= jupyter-k8s-dev
 E2E_SERVER_PORT ?= 8091
@@ -280,8 +278,11 @@ deploy-e2e: ## Install jupyter-k8s Helm chart into Kind cluster.
 		--set manager.image.tag=$(E2E_CONTROLLER_TAG) \
 		--kube-context kind-$(E2E_KIND_CLUSTER) \
 		--wait --timeout 120s
+	@echo "Waiting for webhook to accept connections..."
+	@kubectl --context kind-$(E2E_KIND_CLUSTER) wait --for=condition=Available \
+		deployment/jupyter-k8s-controller-manager -n jupyter-k8s-system --timeout=120s
 	@echo "Verifying CRD API accepts writes..."
-	@for i in $$(seq 1 30); do \
+	@for i in $$(seq 1 45); do \
 		RESULT=$$(echo '{"apiVersion":"workspace.jupyter.org/v1alpha1","kind":"Workspace","metadata":{"name":"e2e-readiness-check","namespace":"default"},"spec":{"desiredStatus":"Stopped"}}' | \
 			kubectl --context kind-$(E2E_KIND_CLUSTER) create --dry-run=server -f - 2>&1 || true); \
 		if echo "$$RESULT" | grep -q "created"; then \
@@ -289,7 +290,7 @@ deploy-e2e: ## Install jupyter-k8s Helm chart into Kind cluster.
 			break; \
 		fi; \
 		echo "  Attempt $$i: $$RESULT"; \
-		if [ $$i -eq 30 ]; then echo "ERROR: CRD API not ready after 60s."; exit 1; fi; \
+		if [ $$i -eq 45 ]; then echo "ERROR: CRD API not ready after 90s."; exit 1; fi; \
 		sleep 2; \
 	done
 	@echo "Applying E2E fixtures (RBAC + test data)..."

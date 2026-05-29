@@ -103,6 +103,7 @@ export const strings = {
     // Create page hints
     advancedHint: 'Need more options (custom images, GPU, pod security)?',
     advancedHintKubectl: 'Use kubectl',
+    advancedHintOr: 'or see the',
     advancedHintDocs: 'full CRD reference',
     advancedHintDocsUrl: 'https://jupyter-k8s.readthedocs.io/en/latest/reference/custom-resources/workspace.html',
 

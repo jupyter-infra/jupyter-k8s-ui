@@ -4,10 +4,6 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
 const RUN_ID = `e2e-${Date.now()}`;
 const WS_NAME = `${RUN_ID}-ws`;
 
-// Workspace image — override via E2E_WORKSPACE_IMAGE env var or Makefile variable.
-// Defaults to nginx because the real UV image isn't public on GHCR (see Makefile comments).
-const E2E_WORKSPACE_IMAGE = process.env.E2E_WORKSPACE_IMAGE || 'nginx:latest';
-
 /** Click Refresh and wait for the expected status text using Playwright's polling assertion. */
 async function waitForCardStatus(page: Page, card: Locator, text: string) {
   await expect
@@ -43,15 +39,11 @@ test.describe('Workspace CRUD', () => {
     await page.getByRole('button', { name: /new workspace/i }).click();
     await expect(page).toHaveURL('/create');
 
-    // Fill workspace name
-    await page.getByLabel(/^name/i).fill(WS_NAME);
+    // Fill both name fields using role selectors for MUI TextFields
+    await page.getByRole('textbox', { name: /^name$/i }).fill(WS_NAME);
+    await page.getByRole('textbox', { name: /display name/i }).fill(WS_NAME);
 
-    // Override the default image with one that's available in Kind without building
-    const imageInput = page.getByLabel(/image/i);
-    await imageInput.clear();
-    await imageInput.fill(E2E_WORKSPACE_IMAGE);
-
-    // Submit the form
+    // Submit the form — image comes from the default WorkspaceTemplate via operator webhook
     await page.getByRole('button', { name: /create workspace/i }).click();
 
     // Should redirect back to list
@@ -60,7 +52,7 @@ test.describe('Workspace CRUD', () => {
     // Switch to "All" filter so we can see the workspace regardless of owner matching
     await page.getByRole('button', { name: /all/i }).click();
 
-    // Workspace card should appear (scoped by aria-label to avoid strict mode violation)
+    // Workspace card should appear (aria-label format: "{displayName} workspace, {status}")
     const card = page.getByLabel(new RegExp(`${WS_NAME}.*workspace`, 'i'));
     await expect(card).toBeVisible({ timeout: 10_000 });
 
@@ -108,8 +100,8 @@ test.describe('Workspace CRUD', () => {
     const card = page.getByLabel(new RegExp(`${WS_NAME}.*workspace`, 'i'));
     await expect(card).toBeVisible({ timeout: 10_000 });
 
-    // Click view details
-    await card.getByRole('button', { name: /view details/i }).click();
+    // Click details button
+    await card.getByRole('button', { name: /^details$/i }).click();
 
     // Should navigate to detail page
     await expect(page).toHaveURL(new RegExp(`/workspace/${WS_NAME}`));
@@ -162,7 +154,7 @@ test.describe('Workspace CRUD', () => {
 
     // The name field sanitizes input (sanitizeK8sName strips invalid chars)
     // so typing uppercase results in lowercase
-    const nameField = page.getByLabel(/^name/i);
+    const nameField = page.getByRole('textbox', { name: /^name$/i });
     await nameField.fill('INVALID');
     await expect(nameField).toHaveValue('invalid');
 

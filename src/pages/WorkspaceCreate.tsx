@@ -298,7 +298,7 @@ export function WorkspaceCreate() {
           <Link component={RouterLink} to="/kubectl" underline="hover">
             {ws.advancedHintKubectl}
           </Link>{' '}
-          or see the{' '}
+          {ws.advancedHintOr}{' '}
           <Link href={ws.advancedHintDocsUrl} target="_blank" rel="noopener" underline="hover">
             {ws.advancedHintDocs}
           </Link>
