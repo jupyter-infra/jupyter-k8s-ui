@@ -67,11 +67,11 @@
 
 .conditionActive {
   border-color: var(--color-primary);
-  background-color: rgba(243, 118, 38, 0.04);
+  background-color: var(--color-primary-4);
 }
 
 [data-theme='dark'] .conditionActive {
-  background-color: rgba(243, 118, 38, 0.08);
+  background-color: var(--color-primary-8);
 }
 
 .infoRow {

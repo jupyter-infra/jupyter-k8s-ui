@@ -1,4 +1,5 @@
 import { Card, CardContent, Typography, IconButton, Chip, Button, Menu, MenuItem, ListItemIcon, Stack, Box, Divider } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { PlayArrow, Stop, OpenInNew, MoreVert, Delete, Circle, Memory, Storage, Info } from '@mui/icons-material';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -6,7 +7,7 @@ import type { Workspace } from '../../types';
 import { useStartWorkspace, useStopWorkspace, useDeleteWorkspace } from '../../api';
 import { useAuth } from '../../context';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { getStatusColor, getStatusText, isOwner as checkIsOwner, getWorkspaceState } from '../../utils';
+import { getStatusText, isOwner as checkIsOwner, getWorkspaceState } from '../../utils';
 import { strings } from '../../constants';
 import styles from './WorkspaceCard.module.css';
 
@@ -32,7 +33,6 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
 
   const canOpen = isRunning && isAvailable && accessURL && (ownerMatch || spec.accessType === 'Public');
 
-  const statusColor = getStatusColor(isRunning, isAvailable, isPending);
   const statusText = getStatusText(isRunning, isAvailable, isPending);
 
   const handleOpen = () => {
@@ -81,13 +81,8 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
               label={statusText}
               size="small"
               sx={(theme) => {
-                const [group, shade] = statusColor.split('.') as [keyof typeof theme.palette, string];
-                const palette = theme.palette[group];
-                const color =
-                  typeof palette === 'object' && palette !== null && shade in palette
-                    ? (palette as unknown as Record<string, string>)[shade]
-                    : theme.palette.text.disabled;
-                return { bgcolor: `${color}1a`, color, border: 'none', '& .MuiChip-icon': { color } };
+                const color = isRunning && isAvailable ? theme.palette.success.main : isPending ? theme.palette.warning.main : theme.palette.text.disabled;
+                return { bgcolor: alpha(color, 0.1), color, border: 'none', '& .MuiChip-icon': { color } };
               }}
             />
             <Chip label={spec.image} size="small" variant="outlined" className={styles.imageChip} />

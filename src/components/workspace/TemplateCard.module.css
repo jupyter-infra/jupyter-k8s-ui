@@ -13,21 +13,21 @@
   border-color: var(--color-primary);
   outline: none;
   transform: translateY(-2px);
-  box-shadow: 0px 4px 12px rgba(243, 118, 38, 0.15);
+  box-shadow: 0px 4px 12px var(--color-primary-15);
 }
 
 .card:focus-visible {
-  box-shadow: 0 0 0 3px rgba(243, 118, 38, 0.2);
+  box-shadow: 0 0 0 3px var(--color-primary-20);
 }
 
 .selected {
   border-color: var(--color-primary);
-  background: rgba(243, 118, 38, 0.04);
-  box-shadow: 0px 2px 8px rgba(243, 118, 38, 0.12);
+  background: var(--color-primary-4);
+  box-shadow: 0px 2px 8px var(--color-primary-12);
 }
 
 [data-theme='dark'] .selected {
-  background: rgba(243, 118, 38, 0.08);
+  background: var(--color-primary-8);
 }
 
 .icon {
@@ -38,20 +38,20 @@
   align-items: center;
   justify-content: center;
   border-radius: 10px;
-  background: rgba(243, 118, 38, 0.12);
+  background: var(--color-primary-12);
   color: var(--color-primary);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .card:hover .icon {
-  background: rgba(243, 118, 38, 0.18);
+  background: var(--color-primary-18);
   transform: scale(1.05);
 }
 
 .selected .icon {
   background: var(--color-primary);
   color: white;
-  box-shadow: 0px 2px 8px rgba(243, 118, 38, 0.3);
+  box-shadow: 0px 2px 8px var(--color-primary-30);
 }
 
 .name {
@@ -74,7 +74,7 @@
   font-size: 11px;
   font-weight: 600;
   color: var(--color-primary);
-  background: rgba(243, 118, 38, 0.1);
+  background: var(--color-primary-10);
   padding: 4px 10px;
   border-radius: 6px;
   letter-spacing: 0.3px;
