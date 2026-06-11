@@ -1,7 +1,9 @@
 import { log } from './logger';
+import { serverConfig } from './k8s';
 import { extractAuth, getSessionCookieHeader } from './auth';
 import { validateCSRF } from './csrf';
 import { jsonResponse, errorResponse } from './responses';
+import { buildClearCookieHeader } from './session';
 import { serveStatic } from './static';
 import { handleListWorkspaces, handleGetWorkspace, handleCreateWorkspace, handleUpdateWorkspace, handleDeleteWorkspace } from './handlers/workspaces';
 import { handleListTemplates } from './handlers/templates';
@@ -64,7 +66,17 @@ async function routeRequest(req: Request): Promise<Response> {
   // Authenticated endpoints
   if (pathname.startsWith(`${API_PREFIX}/`)) {
     const auth = extractAuth(req);
-    if (!auth) return errorResponse(401, 'Authentication required');
+    if (!auth) {
+      // Clear the session cookie so the browser stops sending it. Traefik's
+      // fast-path IngressRoute matches on cookie presence (HeaderRegexp); if a
+      // stale cookie remains, every reload bypasses OAuth2 Proxy and lands here
+      // again — the user can never re-authenticate. Clearing it lets the next
+      // request fall to the auth-path route where OAuth2 Proxy triggers a fresh
+      // OIDC flow with Dex.
+      const resp = errorResponse(401, 'Authentication required');
+      resp.headers.append('Set-Cookie', buildClearCookieHeader(serverConfig.session));
+      return resp;
+    }
 
     const { jwt, source } = auth;
 

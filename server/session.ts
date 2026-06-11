@@ -160,6 +160,21 @@ export function buildSetCookieHeader(cookieValue: string, config: SessionConfig)
   return parts.join('; ');
 }
 
+/**
+ * Build a Set-Cookie header that expires the session cookie.
+ *
+ * Traefik routes requests with a session cookie present (HeaderRegexp match)
+ * directly to Bun, bypassing OAuth2 Proxy. When the embedded Dex token expires,
+ * the cookie becomes invalid but still triggers the fast path — trapping the
+ * user in an auth loop. Clearing it on 401 lets subsequent requests fall to
+ * the auth-path route where OAuth2 Proxy initiates a fresh OIDC flow.
+ */
+export function buildClearCookieHeader(config: SessionConfig): string {
+  const parts = [`${config.cookieName}=`, `Path=${config.cookiePath}`, 'Max-Age=0', 'HttpOnly', 'Secure', 'SameSite=Lax'];
+
+  return parts.join('; ');
+}
+
 // --- Key Management ---
 
 /**
