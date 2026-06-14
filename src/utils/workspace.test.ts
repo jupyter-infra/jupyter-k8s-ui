@@ -6,11 +6,10 @@ import {
   parseMemoryGi,
   parseCpuCores,
   isOwner,
-  getWorkspaceState,
+  getWorkspaceStatus,
+  getStatusColor,
   isValidK8sName,
   sanitizeK8sName,
-  getStatusColor,
-  getStatusText,
 } from './workspace';
 
 describe('clamp', () => {
@@ -83,42 +82,57 @@ describe('isOwner', () => {
   });
 });
 
-describe('getWorkspaceState', () => {
-  test('running + Available=True → isAvailable, not pending', () => {
-    const s = getWorkspaceState({
-      spec: { desiredStatus: 'Running' },
-      status: { conditions: [{ type: 'Available', status: 'True' }] },
-    });
-    expect(s).toMatchObject({ isRunning: true, isAvailable: true, isPending: false, isStopped: false });
+describe('getWorkspaceStatus', () => {
+  test('Available=True → Running', () => {
+    expect(getWorkspaceStatus({ spec: { desiredStatus: 'Running' }, status: { conditions: [{ type: 'Available', status: 'True' }] } })).toBe('Running');
   });
 
-  test('running + Progressing=True → pending', () => {
-    const s = getWorkspaceState({
-      spec: { desiredStatus: 'Running' },
-      status: { conditions: [{ type: 'Progressing', status: 'True' }] },
-    });
-    expect(s).toMatchObject({ isPending: true, isProgressing: true, isAvailable: false });
+  test('Progressing=True + desiredStatus Running → Starting', () => {
+    expect(getWorkspaceStatus({ spec: { desiredStatus: 'Running' }, status: { conditions: [{ type: 'Progressing', status: 'True' }] } })).toBe('Starting');
   });
 
-  test('stopped + no Progressing → isStopped', () => {
-    const s = getWorkspaceState({ spec: { desiredStatus: 'Stopped' }, status: { conditions: [] } });
-    expect(s.isStopped).toBe(true);
+  test('Progressing=True + desiredStatus Stopped → Stopping', () => {
+    expect(getWorkspaceStatus({ spec: { desiredStatus: 'Stopped' }, status: { conditions: [{ type: 'Progressing', status: 'True' }] } })).toBe('Stopping');
   });
 
-  // Edge case: "stopping" — desired Stopped but controller still shutting down.
-  // Must NOT report isStopped, or UI would claim work is done prematurely.
-  test('stopped + Progressing=True → NOT yet stopped', () => {
-    const s = getWorkspaceState({
-      spec: { desiredStatus: 'Stopped' },
-      status: { conditions: [{ type: 'Progressing', status: 'True' }] },
-    });
-    expect(s.isStopped).toBe(false);
-    expect(s.isProgressing).toBe(true);
+  test('Stopped=True → Stopped', () => {
+    expect(getWorkspaceStatus({ spec: { desiredStatus: 'Stopped' }, status: { conditions: [{ type: 'Stopped', status: 'True' }] } })).toBe('Stopped');
   });
 
-  test('handles missing status object', () => {
-    const s = getWorkspaceState({ spec: { desiredStatus: 'Running' } });
-    expect(s.isAvailable).toBe(false);
+  test('Degraded=True → Degraded (overrides Available)', () => {
+    expect(
+      getWorkspaceStatus({
+        spec: { desiredStatus: 'Running' },
+        status: {
+          conditions: [
+            { type: 'Available', status: 'True' },
+            { type: 'Degraded', status: 'True' },
+          ],
+        },
+      }),
+    ).toBe('Degraded');
+  });
+
+  test('Deleting=True → Deleting (overrides everything)', () => {
+    expect(
+      getWorkspaceStatus({
+        spec: { desiredStatus: 'Running' },
+        status: {
+          conditions: [
+            { type: 'Available', status: 'True' },
+            { type: 'Deleting', status: 'True' },
+          ],
+        },
+      }),
+    ).toBe('Deleting');
+  });
+
+  test('no conditions + Running → Starting (pre-reconcile)', () => {
+    expect(getWorkspaceStatus({ spec: { desiredStatus: 'Running' } })).toBe('Starting');
+  });
+
+  test('no conditions + Stopped → Stopped (pre-reconcile)', () => {
+    expect(getWorkspaceStatus({ spec: { desiredStatus: 'Stopped' }, status: { conditions: [] } })).toBe('Stopped');
   });
 });
 
@@ -147,14 +161,16 @@ describe('sanitizeK8sName', () => {
   });
 });
 
-describe('getStatusColor / getStatusText', () => {
-  // These are a 3-way branch on (running, available, pending). Exhaustive == 3 cases.
+describe('getStatusColor', () => {
   test.each([
-    [true, true, false, 'success.main', 'Running'],
-    [true, false, true, 'warning.main', 'Starting'],
-    [false, false, false, 'text.disabled', 'Stopped'],
-  ])('running=%s available=%s pending=%s → %s / %s', (run, avail, pending, color, text) => {
-    expect(getStatusColor(run, avail, pending)).toBe(color);
-    expect(getStatusText(run, avail, pending)).toBe(text);
+    ['Running', 'success.main'],
+    ['Starting', 'warning.main'],
+    ['Stopping', 'warning.main'],
+    ['Stopped', 'text.disabled'],
+    ['Degraded', 'error.main'],
+    ['Deleting', 'error.main'],
+    ['Unknown', 'text.disabled'],
+  ] as const)('%s → %s', (status, expected) => {
+    expect(getStatusColor(status)).toBe(expected);
   });
 });

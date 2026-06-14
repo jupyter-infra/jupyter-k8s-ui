@@ -38,6 +38,14 @@ export async function handleRequest(req: Request): Promise<Response> {
  * Attach a Set-Cookie header to a response if needed.
  */
 function withSessionCookie(response: Response, jwt: string, source: import('./auth').TokenSource): Response {
+  // K8s rejected the token — clear the session cookie so Traefik's fast-path
+  // stops matching and the next request goes through OAuth2 Proxy for re-auth.
+  if (response.status === 401) {
+    const newResponse = new Response(response.body, response);
+    newResponse.headers.append('Set-Cookie', buildClearCookieHeader(serverConfig.session));
+    return newResponse;
+  }
+
   const cookieHeader = getSessionCookieHeader(jwt, source);
   if (!cookieHeader) return response;
 

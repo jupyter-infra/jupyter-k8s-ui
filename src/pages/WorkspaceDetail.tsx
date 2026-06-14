@@ -3,7 +3,7 @@ import { Typography, Button, Chip, CircularProgress, Box, Stack, Paper } from '@
 import { ArrowBack, PlayArrow, Stop, OpenInNew, Memory, Storage, CheckCircle, Error as ErrorIcon, Schedule, Info } from '@mui/icons-material';
 import { useWorkspace, useStartWorkspace, useStopWorkspace } from '../api';
 import { useAuth } from '../context';
-import { isOwner as checkIsOwner, getWorkspaceState } from '../utils';
+import { isOwner as checkIsOwner, getWorkspaceStatus } from '../utils';
 import type { WorkspaceCondition } from '../types';
 import { strings } from '../constants';
 import styles from './WorkspaceDetail.module.css';
@@ -79,12 +79,13 @@ export function WorkspaceDetail() {
     );
   }
 
-  const { isRunning, isAvailable, isProgressing } = getWorkspaceState(workspace);
+  const workspaceStatus = getWorkspaceStatus(workspace);
   const accessURL = workspace.status?.accessURL;
+  const isRunning = workspace.spec.desiredStatus === 'Running';
 
   const owner = workspace.metadata.annotations?.['workspace.jupyter.org/created-by'];
   const ownerMatch = checkIsOwner(owner, user?.username);
-  const canOpen = isRunning && isAvailable && accessURL && (ownerMatch || workspace.spec.accessType === 'Public');
+  const canOpen = workspaceStatus === 'Running' && accessURL && (ownerMatch || workspace.spec.accessType === 'Public');
 
   const handleStart = () => startMutation.mutate(workspace.metadata.name);
   const handleStop = () => stopMutation.mutate(workspace.metadata.name);
@@ -151,8 +152,16 @@ export function WorkspaceDetail() {
                 value={
                   <Chip
                     size="small"
-                    label={isProgressing ? 'Starting' : isAvailable ? 'Running' : 'Stopped'}
-                    color={isAvailable ? 'success' : isProgressing ? 'info' : 'default'}
+                    label={workspaceStatus}
+                    color={
+                      workspaceStatus === 'Running'
+                        ? 'success'
+                        : workspaceStatus === 'Starting' || workspaceStatus === 'Stopping'
+                          ? 'info'
+                          : workspaceStatus === 'Degraded' || workspaceStatus === 'Deleting'
+                            ? 'error'
+                            : 'default'
+                    }
                   />
                 }
               />

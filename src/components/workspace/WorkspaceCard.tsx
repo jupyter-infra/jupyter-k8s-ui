@@ -7,7 +7,7 @@ import type { Workspace } from '../../types';
 import { useStartWorkspace, useStopWorkspace, useDeleteWorkspace } from '../../api';
 import { useAuth } from '../../context';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { getStatusText, isOwner as checkIsOwner, getWorkspaceState } from '../../utils';
+import { getWorkspaceStatus, isOwner as checkIsOwner, type WorkspaceStatus } from '../../utils';
 import { strings } from '../../constants';
 import styles from './WorkspaceCard.module.css';
 
@@ -25,15 +25,14 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
   const deleteMutation = useDeleteWorkspace();
 
   const { metadata, spec, status } = workspace;
-  const { isRunning, isAvailable, isPending } = getWorkspaceState(workspace);
+  const workspaceStatus = getWorkspaceStatus(workspace);
   const accessURL = status?.accessURL;
 
   const owner = metadata.annotations?.['workspace.jupyter.org/created-by'];
   const ownerMatch = checkIsOwner(owner, user?.username);
 
-  const canOpen = isRunning && isAvailable && accessURL && (ownerMatch || spec.accessType === 'Public');
-
-  const statusText = getStatusText(isRunning, isAvailable, isPending);
+  const canOpen = workspaceStatus === 'Running' && accessURL && (ownerMatch || spec.accessType === 'Public');
+  const isRunning = spec.desiredStatus === 'Running';
 
   const handleOpen = () => {
     if (accessURL && canOpen) window.open(accessURL, '_blank', 'noopener,noreferrer');
@@ -59,7 +58,7 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
 
   return (
     <>
-      <Card className={styles.card} aria-label={strings.a11y.workspaceCard(spec.displayName ?? metadata.name, statusText)}>
+      <Card className={styles.card} aria-label={strings.a11y.workspaceCard(spec.displayName ?? metadata.name, workspaceStatus)}>
         <CardContent className={styles.cardContent}>
           <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -78,14 +77,23 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
           <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 2.5, flexWrap: 'wrap' }}>
             <Chip
               icon={<Circle sx={{ fontSize: 8 }} />}
-              label={statusText}
+              label={workspaceStatus}
               size="small"
               sx={(theme) => {
-                const color = isRunning && isAvailable ? theme.palette.success.main : isPending ? theme.palette.warning.main : theme.palette.text.disabled;
+                const colorMap: Record<WorkspaceStatus, string> = {
+                  Running: theme.palette.success.main,
+                  Starting: theme.palette.warning.main,
+                  Stopping: theme.palette.warning.main,
+                  Degraded: theme.palette.error.main,
+                  Deleting: theme.palette.error.main,
+                  Stopped: theme.palette.text.disabled,
+                  Unknown: theme.palette.text.disabled,
+                };
+                const color = colorMap[workspaceStatus];
                 return { bgcolor: alpha(color, 0.1), color, border: 'none', '& .MuiChip-icon': { color } };
               }}
             />
-            <Chip label={spec.image} size="small" variant="outlined" className={styles.imageChip} />
+            <Chip label={spec.image?.split('/').pop() ?? spec.image} size="small" variant="outlined" className={styles.imageChip} title={spec.image} />
             {spec.accessType === 'OwnerOnly' && <Chip label={strings.common.private} size="small" className={styles.privateChip} />}
           </Stack>
 

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from './client';
 import type { CreateWorkspaceRequest, Workspace } from '../types';
-import { getWorkspaceState } from '../utils';
+import { getWorkspaceStatus } from '../utils';
 import { isAuthError } from './auth-interceptor';
 
 // Query keys as constants for consistency
@@ -54,15 +54,10 @@ export function useWorkspaces() {
   });
 }
 
-/**
- * A workspace is "settled" when it's in a terminal state and doesn't need polling.
- * Terminal states: Available=True (running & ready), or Stopped with no Progressing.
- */
 function isWorkspaceSettled(workspace: Workspace | undefined): boolean {
   if (!workspace) return false;
-  const { isAvailable, isProgressing, isStopped } = getWorkspaceState(workspace);
-
-  return !isProgressing && (isAvailable || isStopped);
+  const status = getWorkspaceStatus(workspace);
+  return status === 'Running' || status === 'Stopped';
 }
 
 export function useWorkspace(name: string) {

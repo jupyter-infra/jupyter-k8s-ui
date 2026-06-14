@@ -1,15 +1,19 @@
 // Workspace status helpers
 
-export function getStatusColor(isRunning: boolean, isAvailable: boolean, isPending: boolean): string {
-  if (isRunning && isAvailable) return 'success.main';
-  if (isPending) return 'warning.main';
-  return 'text.disabled';
-}
+export type WorkspaceStatus = 'Running' | 'Starting' | 'Stopping' | 'Stopped' | 'Degraded' | 'Deleting' | 'Unknown';
 
-export function getStatusText(isRunning: boolean, isAvailable: boolean, isPending: boolean): string {
-  if (isRunning && isAvailable) return 'Running';
-  if (isPending) return 'Starting';
-  return 'Stopped';
+const STATUS_COLORS: Record<WorkspaceStatus, string> = {
+  Running: 'success.main',
+  Starting: 'warning.main',
+  Stopping: 'warning.main',
+  Stopped: 'text.disabled',
+  Degraded: 'error.main',
+  Deleting: 'error.main',
+  Unknown: 'text.disabled',
+};
+
+export function getStatusColor(status: WorkspaceStatus): string {
+  return STATUS_COLORS[status];
 }
 
 // Math utilities
@@ -110,17 +114,25 @@ export function isOwner(owner: string | undefined, username: string | undefined)
 }
 
 /**
- * Derive common workspace state booleans from a workspace object.
+ * Derive a single display status from workspace conditions.
+ * Priority: Deleting > Degraded > Progressing (Starting/Stopping) > Available > Stopped.
+ * Falls back to desiredStatus when no conditions exist (before first controller reconcile).
  */
-export function getWorkspaceState(workspace: { spec: { desiredStatus?: string }; status?: { conditions?: Array<{ type: string; status: string }> } }) {
+export function getWorkspaceStatus(workspace: {
+  spec: { desiredStatus?: string };
+  status?: { conditions?: Array<{ type: string; status: string }> };
+}): WorkspaceStatus {
   const conditions = workspace.status?.conditions ?? [];
-  const isRunning = workspace.spec.desiredStatus === 'Running';
-  const isAvailable = conditions.some((c) => c.type === 'Available' && c.status === 'True');
-  const isProgressing = conditions.some((c) => c.type === 'Progressing' && c.status === 'True');
-  const isPending = isRunning && !isAvailable;
-  const isStopped = workspace.spec.desiredStatus === 'Stopped' && !isProgressing;
+  const has = (type: string) => conditions.some((c) => c.type === type && c.status === 'True');
 
-  return { isRunning, isAvailable, isProgressing, isPending, isStopped };
+  if (has('Deleting')) return 'Deleting';
+  if (has('Degraded')) return 'Degraded';
+  if (has('Progressing')) return workspace.spec.desiredStatus === 'Stopped' ? 'Stopping' : 'Starting';
+  if (has('Available')) return 'Running';
+  if (has('Stopped')) return 'Stopped';
+
+  if (!conditions.length) return workspace.spec.desiredStatus === 'Running' ? 'Starting' : 'Stopped';
+  return 'Unknown';
 }
 
 // Validation
