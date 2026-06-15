@@ -243,12 +243,16 @@ setup-e2e: ## Create Kind cluster and install cert-manager.
 	else \
 		echo "Kind cluster '$(E2E_KIND_CLUSTER)' already running."; \
 	fi
+	@# startupapicheck disabled: the post-install hook pulls an extra image from
+	@# quay.io and hangs on GitHub Actions runners due to rate limiting. The
+	@# operator helm install (next step) validates cert-manager readiness implicitly.
 	@if ! kubectl --context kind-$(E2E_KIND_CLUSTER) get namespace cert-manager > /dev/null 2>&1; then \
 		echo "Installing cert-manager..."; \
 		helm repo add jetstack https://charts.jetstack.io --force-update; \
 		helm install cert-manager jetstack/cert-manager \
 			--namespace cert-manager --create-namespace \
 			--set crds.enabled=true \
+			--set startupapicheck.enabled=false \
 			--kube-context kind-$(E2E_KIND_CLUSTER) \
 			--wait --timeout 120s; \
 	fi
