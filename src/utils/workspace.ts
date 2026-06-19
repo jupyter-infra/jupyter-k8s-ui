@@ -146,7 +146,7 @@ export function getWorkspaceStatus(workspace: {
   return 'Unknown';
 }
 
-// Validation — K8s label names are max 63 chars; resource names max 253
+// Default 63: workspace names are used in DNS labels. Server allows up to 253 (K8s resource limit).
 const K8S_NAME_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
 export function isValidK8sName(name: string, maxLength = 63): boolean {

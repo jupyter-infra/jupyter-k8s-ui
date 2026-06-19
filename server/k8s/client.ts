@@ -128,23 +128,3 @@ export function loadKubeConfigBestEffort(): KubeConfig | null {
     }
   }
 }
-
-// --- Service Account Client (cached singleton) ---
-
-let serviceAccountClient: CustomObjectsApi | null = null;
-
-export async function createServiceAccountK8sClient(): Promise<CustomObjectsApi> {
-  if (isLocalDevelopment()) {
-    return createMockK8sClient();
-  }
-
-  if (serviceAccountClient) return serviceAccountClient;
-
-  const kc = loadKubeConfigBestEffort();
-  if (!kc) {
-    throw new Error('Unable to load Kubernetes configuration — expected in local dev without kubectl configured');
-  }
-
-  serviceAccountClient = kc.makeApiClient(CustomObjectsApi);
-  return serviceAccountClient;
-}

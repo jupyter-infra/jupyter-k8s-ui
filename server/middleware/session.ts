@@ -1,5 +1,5 @@
 import { deriveKeys, encrypt, decrypt, sign, verify } from '../crypto';
-import { decodeJWTPayload } from './auth';
+import { decodeJWTPayload } from '../jwt';
 import type { SessionConfig } from '../types';
 import { log } from '../logger';
 

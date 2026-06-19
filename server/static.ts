@@ -1,6 +1,6 @@
 import { resolve, join } from 'path';
 import { serverConfig } from './k8s/config';
-import { errorResponse } from './responses';
+import { errorResponse, SECURITY_HEADERS } from './responses';
 import { log } from './logger';
 
 const MIME_TYPES: Record<string, string> = {
@@ -44,7 +44,7 @@ export async function serveStatic(pathname: string): Promise<Response | null> {
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
     return new Response(file, {
-      headers: { 'Content-Type': contentType },
+      headers: { 'Content-Type': contentType, ...SECURITY_HEADERS },
     });
   } catch {
     return null;
