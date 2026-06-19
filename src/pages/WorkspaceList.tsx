@@ -1,6 +1,20 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, Typography, Button, Grid, CircularProgress, ToggleButtonGroup, ToggleButton, InputBase, Stack, Paper, IconButton, Alert } from '@mui/material';
+import {
+  Box,
+  Typography,
+  Button,
+  Grid,
+  CircularProgress,
+  ToggleButtonGroup,
+  ToggleButton,
+  InputBase,
+  Stack,
+  Paper,
+  IconButton,
+  Alert,
+  Pagination,
+} from '@mui/material';
 import { Add, Search, Refresh, Terminal, Close, ArrowForward } from '@mui/icons-material';
 import { useWorkspaces, useClusterAccess } from '../api';
 import { isAuthError } from '../api/auth-interceptor';
@@ -11,6 +25,7 @@ import { strings } from '../constants';
 import styles from './WorkspaceList.module.css';
 
 const KUBECTL_BANNER_DISMISSED_KEY = 'kubectl-banner-dismissed';
+const PAGE_SIZE = 12;
 
 export function WorkspaceList() {
   const navigate = useNavigate();
@@ -18,6 +33,7 @@ export function WorkspaceList() {
   const { data: workspaces, isLoading, error, refetch, isFetching } = useWorkspaces();
   const [filter, setFilter] = useState<'all' | 'mine'>('mine');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [bannerDismissed, setBannerDismissed] = useState(() => localStorage.getItem(KUBECTL_BANNER_DISMISSED_KEY) === 'true');
   const { data: clusterAccess } = useClusterAccess(!bannerDismissed);
 
@@ -49,11 +65,13 @@ export function WorkspaceList() {
   const handleFilterChange = (_: React.MouseEvent<HTMLElement>, value: string | null) => {
     if (value && (value === 'all' || value === 'mine')) {
       setFilter(value);
+      setPage(1);
     }
   };
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(e.target.value);
+    setPage(1);
   };
 
   const handleCreateClick = () => navigate('/create');
@@ -66,6 +84,8 @@ export function WorkspaceList() {
     );
   }
 
+  const totalPages = Math.ceil(filteredWorkspaces.length / PAGE_SIZE);
+  const paginatedWorkspaces = filteredWorkspaces.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const isEmpty = filteredWorkspaces.length === 0;
 
   return (
@@ -165,13 +185,20 @@ export function WorkspaceList() {
           )}
         </Paper>
       ) : (
-        <Grid container spacing={2.5}>
-          {filteredWorkspaces.map((ws) => (
-            <Grid size={{ xs: 12, sm: 6, lg: 4 }} key={ws.metadata.name}>
-              <WorkspaceCard workspace={ws} />
-            </Grid>
-          ))}
-        </Grid>
+        <>
+          <Grid container spacing={2.5}>
+            {paginatedWorkspaces.map((ws) => (
+              <Grid size={{ xs: 12, sm: 6, lg: 4 }} key={ws.metadata.name}>
+                <WorkspaceCard workspace={ws} />
+              </Grid>
+            ))}
+          </Grid>
+          {totalPages > 1 && (
+            <Stack alignItems="center" sx={{ mt: 4 }}>
+              <Pagination count={totalPages} page={page} onChange={(_, p) => setPage(p)} shape="rounded" />
+            </Stack>
+          )}
+        </>
       )}
     </Box>
   );

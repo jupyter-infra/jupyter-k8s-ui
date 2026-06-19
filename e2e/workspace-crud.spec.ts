@@ -113,7 +113,7 @@ test.describe('Workspace CRUD', () => {
     await expect(page.getByText('Information')).toBeVisible();
   });
 
-  test('stops and starts from detail page', async ({ page }) => {
+  test('stops and starts from detail page', { timeout: 120_000 }, async ({ page }) => {
     await page.goto(`/workspace/${WS_NAME}`);
 
     // Wait for page to load
@@ -121,11 +121,11 @@ test.describe('Workspace CRUD', () => {
 
     // Stop from detail page
     await page.getByRole('button', { name: /stop/i }).click();
-    await expect(page.getByText('Stopped', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('Stopped', { exact: true })).toBeVisible({ timeout: 45_000 });
 
-    // Start from detail page
+    // Start from detail page — cold start can take longer in CI
     await page.getByRole('button', { name: /start/i }).click();
-    await expect(page.getByText('Running', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('Running', { exact: true })).toBeVisible({ timeout: 45_000 });
   });
 
   test('deletes a workspace', async ({ page }) => {
