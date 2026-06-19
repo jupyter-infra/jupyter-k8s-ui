@@ -1,5 +1,11 @@
 // Shared server-side types for K8s resources and API responses
 
+// --- Domain Value Types ---
+
+export type DesiredStatus = 'Running' | 'Stopped';
+export type AccessType = 'Public' | 'Private';
+export type OwnershipType = 'OwnerOnly' | 'Public';
+
 // --- K8s Resource Types (what comes from the API server) ---
 
 export interface K8sMetadata {
@@ -29,9 +35,9 @@ export interface K8sWorkspace {
   spec: {
     displayName?: string;
     image?: string;
-    desiredStatus?: string;
-    accessType?: string;
-    ownershipType?: string;
+    desiredStatus?: DesiredStatus;
+    accessType?: AccessType;
+    ownershipType?: OwnershipType;
     resources?: K8sResourceRequirements;
     storage?: Record<string, unknown>;
     templateRef?: { name: string; namespace?: string };
@@ -128,9 +134,9 @@ export interface TemplateResponse {
 export interface CreateWorkspaceBody {
   name: string;
   displayName?: string;
-  desiredStatus?: string;
-  accessType?: string;
-  ownershipType?: string;
+  desiredStatus?: DesiredStatus;
+  accessType?: AccessType;
+  ownershipType?: OwnershipType;
   resources?: K8sResourceRequirements;
   storage?: { size: string };
   idleShutdown?: { enabled: boolean; timeoutInMinutes?: number };
@@ -139,9 +145,9 @@ export interface CreateWorkspaceBody {
 export interface UpdateWorkspaceBody {
   displayName?: string;
   image?: string;
-  desiredStatus?: string;
-  accessType?: string;
-  ownershipType?: string;
+  desiredStatus?: DesiredStatus;
+  accessType?: AccessType;
+  ownershipType?: OwnershipType;
   resources?: K8sResourceRequirements;
   storage?: Record<string, unknown>;
   templateRef?: { name: string; namespace?: string };

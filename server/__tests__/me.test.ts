@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach } from 'bun:test';
 import { handleGetMe } from '../handlers/me';
-import { serverConfig } from '../k8s';
+import { serverConfig } from '../k8s/config';
 import { buildJWT } from './test-helpers';
 
 function makeReqWithBearer(jwt: string): Request {

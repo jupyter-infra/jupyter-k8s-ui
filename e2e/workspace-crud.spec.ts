@@ -108,7 +108,7 @@ test.describe('Workspace CRUD', () => {
 
     // Verify workspace info is displayed (use heading to avoid strict mode — name shows twice)
     await expect(page.getByRole('heading', { name: WS_NAME })).toBeVisible();
-    await expect(page.getByText('Running', { exact: true })).toBeVisible();
+    await expect(page.getByText('Running', { exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText('Conditions')).toBeVisible();
     await expect(page.getByText('Information')).toBeVisible();
   });

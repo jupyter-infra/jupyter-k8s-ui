@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { createSessionCookie, validateSessionCookie, buildSetCookieHeader, parseCookieValue, getSigningKey } from '../session';
-import type { KeyEntry, KeyMap } from '../session';
+import { createSessionCookie, validateSessionCookie, buildSetCookieHeader, parseCookieValue, getSigningKey } from '../middleware/session';
+import type { KeyEntry, KeyMap } from '../middleware/session';
 import type { SessionConfig } from '../types';
 import { randomBytes } from 'crypto';
 import { KEY_LENGTH } from '../crypto';

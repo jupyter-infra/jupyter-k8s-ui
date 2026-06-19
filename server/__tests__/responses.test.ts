@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { handleK8sError, isValidK8sName } from '../responses';
+import { handleK8sError } from '../responses';
+import { isValidK8sName } from '../k8s/constants';
 
 describe('handleK8sError', () => {
   // Each mapped status code is a contract with the frontend — if the map changes,

@@ -5,7 +5,7 @@ import { Add, Search, Refresh, Terminal, Close, ArrowForward } from '@mui/icons-
 import { useWorkspaces, useClusterAccess } from '../api';
 import { isAuthError } from '../api/auth-interceptor';
 import { useAuth } from '../context';
-import { isOwner as checkIsOwner } from '../utils';
+import { isOwner as checkIsOwner, getWorkspaceOwner } from '../utils';
 import { WorkspaceCard } from '../components';
 import { strings } from '../constants';
 import styles from './WorkspaceList.module.css';
@@ -33,8 +33,7 @@ export function WorkspaceList() {
 
     return workspaces.filter((ws) => {
       if (filter === 'mine') {
-        const owner = ws.metadata.annotations?.['workspace.jupyter.org/created-by'];
-        if (!checkIsOwner(owner, user?.username)) return false;
+        if (!checkIsOwner(getWorkspaceOwner(ws), user?.username)) return false;
       }
 
       if (search) {

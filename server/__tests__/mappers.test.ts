@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { workspaceToResponse, templateToResponse } from '../k8s';
+import { workspaceToResponse, templateToResponse } from '../k8s/mappers';
 import type { K8sWorkspace, K8sWorkspaceTemplate } from '../types';
+
+const OWNER_ANNOTATION = 'workspace.jupyter.org/created-by';
 
 describe('workspaceToResponse', () => {
   test('passes through all fields when workspace is fully populated', () => {
@@ -10,7 +12,7 @@ describe('workspaceToResponse', () => {
       metadata: {
         name: 'my-ws',
         namespace: 'default',
-        annotations: { 'workspace.jupyter.org/created-by': 'alice' },
+        annotations: { [OWNER_ANNOTATION]: 'alice' },
         creationTimestamp: '2024-01-01T00:00:00Z',
       },
       spec: { displayName: 'My WS', image: 'jupyter:latest', desiredStatus: 'Running' },
@@ -24,7 +26,7 @@ describe('workspaceToResponse', () => {
       metadata: {
         name: 'my-ws',
         namespace: 'default',
-        annotations: { 'workspace.jupyter.org/created-by': 'alice' },
+        annotations: { [OWNER_ANNOTATION]: 'alice' },
         creationTimestamp: '2024-01-01T00:00:00Z',
       },
       spec: ws.spec,

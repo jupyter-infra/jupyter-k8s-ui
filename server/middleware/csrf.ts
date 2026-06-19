@@ -1,5 +1,5 @@
-import { serverConfig } from './k8s';
-import { log } from './logger';
+import { serverConfig } from '../k8s/config';
+import { log } from '../logger';
 
 const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 

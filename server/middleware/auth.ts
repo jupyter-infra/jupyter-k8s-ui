@@ -1,7 +1,7 @@
-import { serverConfig } from './k8s';
-import { log } from './logger';
+import { serverConfig } from '../k8s/config';
+import { log } from '../logger';
 import { validateSessionCookie, createSessionCookie, parseCookieValue, buildSetCookieHeader } from './session';
-import { getKeyMap } from './secret-watcher';
+import { getKeyMap } from '../secret-watcher';
 
 // --- Token Source ---
 

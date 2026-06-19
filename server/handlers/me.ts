@@ -1,4 +1,4 @@
-import { extractJWT, decodeJWTPayload } from '../auth';
+import { extractJWT, decodeJWTPayload } from '../middleware/auth';
 import { jsonResponse, errorResponse } from '../responses';
 
 export async function handleGetMe(req: Request): Promise<Response> {

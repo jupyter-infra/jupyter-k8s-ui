@@ -7,7 +7,7 @@ import {
   parseCpuCores,
   isOwner,
   getWorkspaceStatus,
-  getStatusColor,
+  getStatusChipColor,
   isValidK8sName,
   sanitizeK8sName,
 } from './workspace';
@@ -161,16 +161,16 @@ describe('sanitizeK8sName', () => {
   });
 });
 
-describe('getStatusColor', () => {
+describe('getStatusChipColor', () => {
   test.each([
-    ['Running', 'success.main'],
-    ['Starting', 'warning.main'],
-    ['Stopping', 'warning.main'],
-    ['Stopped', 'text.disabled'],
-    ['Degraded', 'error.main'],
-    ['Deleting', 'error.main'],
-    ['Unknown', 'text.disabled'],
+    ['Running', 'success'],
+    ['Starting', 'info'],
+    ['Stopping', 'info'],
+    ['Stopped', 'default'],
+    ['Degraded', 'warning'],
+    ['Deleting', 'error'],
+    ['Unknown', 'default'],
   ] as const)('%s → %s', (status, expected) => {
-    expect(getStatusColor(status)).toBe(expected);
+    expect(getStatusChipColor(status)).toBe(expected);
   });
 });

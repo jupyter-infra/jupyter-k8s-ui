@@ -1,7 +1,6 @@
-import { serverConfig } from '../k8s';
+import { serverConfig } from '../k8s/config';
+import { isValidK8sName } from '../k8s/constants';
 import { jsonResponse, errorResponse } from '../responses';
-
-const CLUSTER_NAME_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
 export function handleGetClusterAccess(): Response {
   const { clusterName, apiServer, oidcIssuerUrl, oidcClientId } = serverConfig.clusterAccess;
@@ -10,7 +9,7 @@ export function handleGetClusterAccess(): Response {
     return errorResponse(404, 'Cluster access configuration not available');
   }
 
-  if (!CLUSTER_NAME_RE.test(clusterName)) {
+  if (!isValidK8sName(clusterName)) {
     return errorResponse(500, 'Invalid cluster name configuration');
   }
 
@@ -21,5 +20,14 @@ export function handleGetClusterAccess(): Response {
     return errorResponse(500, 'Invalid cluster access URL configuration');
   }
 
-  return jsonResponse(serverConfig.clusterAccess);
+  const { caCertBase64, oidcClientSecret, oidcCallbackPort } = serverConfig.clusterAccess;
+  return jsonResponse({
+    clusterName,
+    apiServer,
+    caCertBase64,
+    oidcIssuerUrl,
+    oidcClientId,
+    oidcClientSecret,
+    oidcCallbackPort,
+  });
 }

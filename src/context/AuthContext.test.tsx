@@ -1,5 +1,7 @@
 import { describe, test, expect, beforeEach, mock } from 'bun:test';
 import { renderHook, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { type ReactNode } from 'react';
 import { AuthProvider, useAuth } from './AuthContext';
 
 const originalFetch = globalThis.fetch;
@@ -10,6 +12,19 @@ function mockFetchOnce(response: { ok: boolean; json?: () => Promise<unknown> })
   return fetchMock;
 }
 
+function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>{children}</AuthProvider>
+      </QueryClientProvider>
+    );
+  };
+}
+
 describe('AuthContext', () => {
   beforeEach(() => {
     globalThis.fetch = originalFetch;
@@ -17,7 +32,7 @@ describe('AuthContext', () => {
 
   test('starts in loading state', () => {
     mockFetchOnce({ ok: false });
-    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
+    const { result } = renderHook(() => useAuth(), { wrapper: createWrapper() });
     expect(result.current.isLoading).toBe(true);
     expect(result.current.user).toBeNull();
   });
@@ -28,7 +43,7 @@ describe('AuthContext', () => {
       json: async () => ({ authenticated: true, user: { username: 'alice', email: 'a@x.com' } }),
     });
 
-    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
+    const { result } = renderHook(() => useAuth(), { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.user).toEqual({ username: 'alice', email: 'a@x.com' });
@@ -40,7 +55,7 @@ describe('AuthContext', () => {
       json: async () => ({ authenticated: false }),
     });
 
-    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
+    const { result } = renderHook(() => useAuth(), { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.user).toBeNull();
@@ -49,7 +64,7 @@ describe('AuthContext', () => {
   test('sets user to null when /me returns non-ok', async () => {
     mockFetchOnce({ ok: false });
 
-    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
+    const { result } = renderHook(() => useAuth(), { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.user).toBeNull();
@@ -61,7 +76,7 @@ describe('AuthContext', () => {
     });
     globalThis.fetch = errorFetch as unknown as typeof fetch;
 
-    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
+    const { result } = renderHook(() => useAuth(), { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.user).toBeNull();

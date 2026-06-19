@@ -1,5 +1,4 @@
 import { Card, CardContent, Typography, IconButton, Chip, Button, Menu, MenuItem, ListItemIcon, Stack, Box, Divider } from '@mui/material';
-import { alpha } from '@mui/material/styles';
 import { PlayArrow, Stop, OpenInNew, MoreVert, Delete, Circle, Memory, Storage, Info } from '@mui/icons-material';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -7,7 +6,7 @@ import type { Workspace } from '../../types';
 import { useStartWorkspace, useStopWorkspace, useDeleteWorkspace } from '../../api';
 import { useAuth } from '../../context';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { getWorkspaceStatus, isOwner as checkIsOwner, type WorkspaceStatus } from '../../utils';
+import { getWorkspaceStatus, getStatusChipColor, isOwner as checkIsOwner, getWorkspaceOwner } from '../../utils';
 import { strings } from '../../constants';
 import styles from './WorkspaceCard.module.css';
 
@@ -28,7 +27,7 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
   const workspaceStatus = getWorkspaceStatus(workspace);
   const accessURL = status?.accessURL;
 
-  const owner = metadata.annotations?.['workspace.jupyter.org/created-by'];
+  const owner = getWorkspaceOwner(workspace);
   const ownerMatch = checkIsOwner(owner, user?.username);
 
   const canOpen = workspaceStatus === 'Running' && accessURL && (ownerMatch || spec.accessType === 'Public');
@@ -75,26 +74,9 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
           </Stack>
 
           <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 2.5, flexWrap: 'wrap' }}>
-            <Chip
-              icon={<Circle sx={{ fontSize: 8 }} />}
-              label={workspaceStatus}
-              size="small"
-              sx={(theme) => {
-                const colorMap: Record<WorkspaceStatus, string> = {
-                  Running: theme.palette.success.main,
-                  Starting: theme.palette.warning.main,
-                  Stopping: theme.palette.warning.main,
-                  Degraded: theme.palette.error.main,
-                  Deleting: theme.palette.error.main,
-                  Stopped: theme.palette.text.disabled,
-                  Unknown: theme.palette.text.disabled,
-                };
-                const color = colorMap[workspaceStatus];
-                return { bgcolor: alpha(color, 0.1), color, border: 'none', '& .MuiChip-icon': { color } };
-              }}
-            />
+            <Chip icon={<Circle sx={{ fontSize: 8 }} />} label={workspaceStatus} size="small" color={getStatusChipColor(workspaceStatus)} variant="outlined" />
             <Chip label={spec.image?.split('/').pop() ?? spec.image} size="small" variant="outlined" className={styles.imageChip} title={spec.image} />
-            {spec.accessType === 'OwnerOnly' && <Chip label={strings.common.private} size="small" className={styles.privateChip} />}
+            {spec.ownershipType === 'OwnerOnly' && <Chip label={strings.common.private} size="small" className={styles.privateChip} />}
           </Stack>
 
           <Stack direction="row" gap={2} sx={{ color: 'text.secondary' }}>
@@ -105,6 +87,10 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
             <Stack direction="row" alignItems="center" gap={0.5}>
               <Storage sx={{ fontSize: 16 }} />
               <Typography variant="caption">{spec.resources?.limits?.memory ?? '—'}</Typography>
+            </Stack>
+            <Stack direction="row" alignItems="center" gap={0.5}>
+              <Storage sx={{ fontSize: 16 }} />
+              <Typography variant="caption">{spec.storage?.size ?? '—'}</Typography>
             </Stack>
           </Stack>
         </CardContent>

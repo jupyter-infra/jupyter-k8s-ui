@@ -1,5 +1,10 @@
 // Workspace domain types
 
+// --- Domain Value Types ---
+export type DesiredStatus = 'Running' | 'Stopped';
+export type AccessType = 'Public' | 'Private';
+export type OwnershipType = 'OwnerOnly' | 'Public';
+
 export interface WorkspaceMetadata {
   name: string;
   namespace: string;
@@ -12,14 +17,20 @@ export interface ResourceRequirements {
   requests?: Record<string, string>;
 }
 
+export interface StorageSpec {
+  size?: string;
+  mountPath?: string;
+  storageClassName?: string;
+}
+
 export interface WorkspaceSpec {
   displayName?: string;
   image?: string;
-  desiredStatus?: string;
-  accessType?: string;
-  ownershipType?: string;
+  desiredStatus?: DesiredStatus;
+  accessType?: AccessType;
+  ownershipType?: OwnershipType;
   resources?: ResourceRequirements;
-  storage?: Record<string, unknown>;
+  storage?: StorageSpec;
   templateRef?: { name: string; namespace?: string };
   idleShutdown?: { enabled: boolean; idleTimeoutInMinutes?: number };
   podSecurityContext?: Record<string, unknown>;
@@ -89,17 +100,17 @@ export interface CreateWorkspaceRequest {
   displayName: string;
   resources?: ResourceRequirements;
   storage?: { size: string };
-  accessType?: string;
-  ownershipType?: string;
+  accessType?: AccessType;
+  ownershipType?: OwnershipType;
   idleShutdown?: { enabled: boolean; timeoutInMinutes?: number };
 }
 
 export interface UpdateWorkspaceRequest {
   displayName?: string;
   image?: string;
-  desiredStatus?: string;
-  accessType?: string;
-  ownershipType?: string;
+  desiredStatus?: DesiredStatus;
+  accessType?: AccessType;
+  ownershipType?: OwnershipType;
   resources?: ResourceRequirements;
   storage?: Record<string, unknown>;
   templateRef?: { name: string; namespace?: string };

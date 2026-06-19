@@ -20,7 +20,8 @@ import {
 import { Memory, Storage } from '@mui/icons-material';
 import { useCreateWorkspace, useWorkspaces } from '../api';
 import { useAuth } from '../context/AuthContext';
-import type { CreateWorkspaceRequest } from '../types';
+import { ResourceSlider } from '../components';
+import type { CreateWorkspaceRequest, OwnershipType } from '../types';
 import { strings, resourceBounds, RESOURCE_DEFAULTS, IDLE_SHUTDOWN_DEFAULTS } from '../constants';
 import { sanitizeK8sName } from '../utils';
 
@@ -44,7 +45,7 @@ export function WorkspaceCreate() {
   const [cpuLimit, setCpuLimit] = useState(1);
   const [memoryLimit, setMemoryLimit] = useState(2);
   const [storageSize, setStorageSize] = useState(10);
-  const [accessType, setAccessType] = useState<'Public' | 'OwnerOnly'>('Public');
+  const [ownershipType, setOwnershipType] = useState<OwnershipType>('Public');
   const [idleShutdownEnabled, setIdleShutdownEnabled] = useState(false);
   const [idleTimeoutMinutes, setIdleTimeoutMinutes] = useState<number>(IDLE_SHUTDOWN_DEFAULTS.DEFAULT_TIMEOUT);
 
@@ -78,8 +79,8 @@ export function WorkspaceCreate() {
         },
       },
       storage: { size: `${storageSize}Gi` },
-      accessType,
-      ownershipType: accessType,
+      accessType: ownershipType === 'Public' ? 'Public' : 'Private',
+      ownershipType,
     };
 
     if (idleShutdownEnabled) {
@@ -137,95 +138,36 @@ export function WorkspaceCreate() {
           <Stack spacing={2} padding={3}>
             <Typography variant="subtitle2">{ws.sectionResources}</Typography>
 
-            {/* CPU */}
-            <Stack spacing={0.5}>
-              <Stack direction="row" alignItems="center" justifyContent="space-between">
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <Memory color="action" fontSize="small" />
-                  <Typography variant="body2">{ws.resourceCpu}</Typography>
-                </Stack>
-                <Typography variant="body2" fontFamily="monospace" fontWeight={600}>
-                  {cpuLimit} {common.cores}
-                </Typography>
-              </Stack>
-              <Slider
-                value={cpuLimit}
-                onChange={(_, v) => setCpuLimit(v as number)}
-                min={resourceBounds.cpu.min}
-                max={resourceBounds.cpu.max}
-                step={resourceBounds.cpu.step}
-                size="small"
-                aria-label={ws.resourceCpu}
-              />
-              <Stack direction="row" justifyContent="space-between">
-                <Typography variant="caption" color="text.secondary">
-                  {resourceBounds.cpu.min} {common.cores}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {resourceBounds.cpu.max} {common.cores}
-                </Typography>
-              </Stack>
-            </Stack>
-
-            {/* Memory */}
-            <Stack spacing={0.5}>
-              <Stack direction="row" alignItems="center" justifyContent="space-between">
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <Storage color="action" fontSize="small" />
-                  <Typography variant="body2">{ws.resourceMemory}</Typography>
-                </Stack>
-                <Typography variant="body2" fontFamily="monospace" fontWeight={600}>
-                  {memoryLimit} {common.gb}
-                </Typography>
-              </Stack>
-              <Slider
-                value={memoryLimit}
-                onChange={(_, v) => setMemoryLimit(v as number)}
-                min={resourceBounds.memory.min}
-                max={resourceBounds.memory.max}
-                step={resourceBounds.memory.step}
-                size="small"
-                aria-label={ws.resourceMemory}
-              />
-              <Stack direction="row" justifyContent="space-between">
-                <Typography variant="caption" color="text.secondary">
-                  {resourceBounds.memory.min} {common.gb}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {resourceBounds.memory.max} {common.gb}
-                </Typography>
-              </Stack>
-            </Stack>
-
-            {/* Storage */}
-            <Stack spacing={0.5}>
-              <Stack direction="row" alignItems="center" justifyContent="space-between">
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <Storage color="action" fontSize="small" />
-                  <Typography variant="body2">{ws.resourceStorage}</Typography>
-                </Stack>
-                <Typography variant="body2" fontFamily="monospace" fontWeight={600}>
-                  {storageSize} {common.gb}
-                </Typography>
-              </Stack>
-              <Slider
-                value={storageSize}
-                onChange={(_, v) => setStorageSize(v as number)}
-                min={resourceBounds.storage.min}
-                max={resourceBounds.storage.max}
-                step={resourceBounds.storage.step}
-                size="small"
-                aria-label={ws.resourceStorage}
-              />
-              <Stack direction="row" justifyContent="space-between">
-                <Typography variant="caption" color="text.secondary">
-                  {resourceBounds.storage.min} {common.gb}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {resourceBounds.storage.max} {common.gb}
-                </Typography>
-              </Stack>
-            </Stack>
+            <ResourceSlider
+              icon={<Memory color="action" fontSize="small" />}
+              label={ws.resourceCpu}
+              value={cpuLimit}
+              unit={common.cores}
+              min={resourceBounds.cpu.min}
+              max={resourceBounds.cpu.max}
+              step={resourceBounds.cpu.step}
+              onChange={setCpuLimit}
+            />
+            <ResourceSlider
+              icon={<Storage color="action" fontSize="small" />}
+              label={ws.resourceMemory}
+              value={memoryLimit}
+              unit={common.gb}
+              min={resourceBounds.memory.min}
+              max={resourceBounds.memory.max}
+              step={resourceBounds.memory.step}
+              onChange={setMemoryLimit}
+            />
+            <ResourceSlider
+              icon={<Storage color="action" fontSize="small" />}
+              label={ws.resourceStorage}
+              value={storageSize}
+              unit={common.gb}
+              min={resourceBounds.storage.min}
+              max={resourceBounds.storage.max}
+              step={resourceBounds.storage.step}
+              onChange={setStorageSize}
+            />
           </Stack>
         </Paper>
 
@@ -237,10 +179,10 @@ export function WorkspaceCreate() {
             <Stack direction="row" alignItems="center" justifyContent="space-between">
               <Typography variant="body2">{ws.accessQuestion}</Typography>
               <ToggleButtonGroup
-                value={accessType}
+                value={ownershipType}
                 exclusive
                 onChange={(_, v) => {
-                  if (v) setAccessType(v);
+                  if (v) setOwnershipType(v);
                 }}
                 size="small"
               >

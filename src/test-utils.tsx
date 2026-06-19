@@ -3,6 +3,7 @@ import { type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import type { Workspace } from './types';
+import { OWNER_ANNOTATION } from './utils/workspace';
 
 export function makeQueryClient() {
   return new QueryClient({
@@ -30,7 +31,7 @@ export function makeWorkspace(overrides?: Partial<Workspace> & { owner?: string;
   const name = overrides?.name ?? 'test-ws';
   const annotations: Record<string, string> = {};
   if (overrides?.owner) {
-    annotations['workspace.jupyter.org/created-by'] = overrides.owner;
+    annotations[OWNER_ANNOTATION] = overrides.owner;
   }
 
   return {

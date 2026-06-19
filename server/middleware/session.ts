@@ -1,6 +1,7 @@
-import { deriveKeys, encrypt, decrypt, sign, verify } from './crypto';
-import type { SessionConfig } from './types';
-import { log } from './logger';
+import { deriveKeys, encrypt, decrypt, sign, verify } from '../crypto';
+import { decodeJWTPayload } from './auth';
+import type { SessionConfig } from '../types';
+import { log } from '../logger';
 
 // --- Types ---
 
@@ -214,19 +215,9 @@ export function parseCookieValue(cookieHeader: string, cookieName: string): stri
 
 // --- Helpers ---
 
-/**
- * Extract the exp claim from a JWT without verification.
- * Returns null if the token is malformed or has no exp.
- */
 function extractJwtExp(jwt: string): number | null {
-  try {
-    const parts = jwt.split('.');
-    if (parts.length !== 3) return null;
-    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
-    return typeof payload.exp === 'number' ? payload.exp : null;
-  } catch {
-    return null;
-  }
+  const payload = decodeJWTPayload(jwt);
+  return typeof payload?.exp === 'number' ? payload.exp : null;
 }
 
 function base64urlEncode(buf: Buffer): string {

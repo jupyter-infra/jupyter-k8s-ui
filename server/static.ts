@@ -1,5 +1,5 @@
 import { resolve, join } from 'path';
-import { serverConfig } from './k8s';
+import { serverConfig } from './k8s/config';
 import { errorResponse } from './responses';
 import { log } from './logger';
 

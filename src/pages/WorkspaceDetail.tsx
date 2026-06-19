@@ -3,7 +3,7 @@ import { Typography, Button, Chip, CircularProgress, Box, Stack, Paper } from '@
 import { ArrowBack, PlayArrow, Stop, OpenInNew, Memory, Storage, CheckCircle, Error as ErrorIcon, Schedule, Info } from '@mui/icons-material';
 import { useWorkspace, useStartWorkspace, useStopWorkspace } from '../api';
 import { useAuth } from '../context';
-import { isOwner as checkIsOwner, getWorkspaceStatus } from '../utils';
+import { isOwner as checkIsOwner, getWorkspaceStatus, getStatusChipColor, getWorkspaceOwner } from '../utils';
 import type { WorkspaceCondition } from '../types';
 import { strings } from '../constants';
 import styles from './WorkspaceDetail.module.css';
@@ -83,7 +83,7 @@ export function WorkspaceDetail() {
   const accessURL = workspace.status?.accessURL;
   const isRunning = workspace.spec.desiredStatus === 'Running';
 
-  const owner = workspace.metadata.annotations?.['workspace.jupyter.org/created-by'];
+  const owner = getWorkspaceOwner(workspace);
   const ownerMatch = checkIsOwner(owner, user?.username);
   const canOpen = workspaceStatus === 'Running' && accessURL && (ownerMatch || workspace.spec.accessType === 'Public');
 
@@ -147,24 +147,7 @@ export function WorkspaceDetail() {
               {strings.workspace.detailInfo}
             </Typography>
             <Stack gap={1}>
-              <InfoRow
-                label="Status"
-                value={
-                  <Chip
-                    size="small"
-                    label={workspaceStatus}
-                    color={
-                      workspaceStatus === 'Running'
-                        ? 'success'
-                        : workspaceStatus === 'Starting' || workspaceStatus === 'Stopping'
-                          ? 'info'
-                          : workspaceStatus === 'Degraded' || workspaceStatus === 'Deleting'
-                            ? 'error'
-                            : 'default'
-                    }
-                  />
-                }
-              />
+              <InfoRow label="Status" value={<Chip size="small" label={workspaceStatus} color={getStatusChipColor(workspaceStatus)} />} />
               <InfoRow label="Image" value={workspace.spec.image ?? '—'} />
               <InfoRow label="Access" value={<Chip size="small" label={workspace.spec.accessType === 'Public' ? 'Public' : 'Private'} variant="outlined" />} />
               <InfoRow label="Created" value={new Date(workspace.metadata.creationTimestamp ?? '').toLocaleDateString()} />
@@ -191,6 +174,14 @@ export function WorkspaceDetail() {
                   </Stack>
                 }
                 value={workspace.spec.resources?.limits?.memory ?? '—'}
+              />
+              <InfoRow
+                label={
+                  <Stack direction="row" alignItems="center" gap={0.5}>
+                    <Storage sx={{ fontSize: 16 }} /> Storage
+                  </Stack>
+                }
+                value={workspace.spec.storage?.size ?? '—'}
               />
             </Stack>
           </Paper>

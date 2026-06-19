@@ -11,16 +11,14 @@ const mockedK8s = {
   del: mock(async () => ({ body: {} })),
 };
 
-// Only replace what we need: createUserK8sClient (so we can inject a fake
-// client) and serverConfig.namespace (so handlers send to a predictable ns).
-// Keep workspaceToResponse/templateToResponse as the real implementations so
-// tests exercise the full mapping. Importantly, we preserve all other exports
-// from the module — naming only the stubs we override would globally erase
-// everything else for other test files that run in the same process.
-import * as k8sModule from '../k8s';
-mock.module('../k8s', () => ({
-  ...k8sModule,
-  serverConfig: { ...k8sModule.serverConfig, namespace: 'test-ns' },
+// Mock the specific modules that handlers now import from directly.
+import * as configModule from '../k8s/config';
+mock.module('../k8s/config', () => ({
+  ...configModule,
+  serverConfig: { ...configModule.serverConfig, namespace: 'test-ns' },
+}));
+
+mock.module('../k8s/client', () => ({
   createUserK8sClient: async () => ({
     listNamespacedCustomObject: mockedK8s.list,
     getNamespacedCustomObject: mockedK8s.get,

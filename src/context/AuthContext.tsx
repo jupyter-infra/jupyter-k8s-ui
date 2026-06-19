@@ -1,10 +1,16 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 interface User {
   username: string;
   email?: string;
   groups?: string[];
+}
+
+interface MeResponse {
+  authenticated: boolean;
+  user: User | null;
 }
 
 interface AuthContextType {
@@ -22,35 +28,28 @@ export function useAuth() {
   return context;
 }
 
+export const authKeys = {
+  me: ['auth', 'me'] as const,
+};
+
 interface AuthProviderProps {
   children: ReactNode;
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { data, isLoading } = useQuery({
+    queryKey: authKeys.me,
+    queryFn: async (): Promise<User | null> => {
+      const res = await fetch('/api/v1/me', { credentials: 'include' });
+      if (!res.ok) return null;
+      const data: MeResponse = await res.json();
+      return data.authenticated && data.user ? data.user : null;
+    },
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
 
-  useEffect(() => {
-    // In development, backend reads DEV_ACCESS_TOKEN from .env
-    // No need to send Authorization header from frontend
-    fetch('/api/v1/me', {
-      credentials: 'include',
-    })
-      .then((res) => {
-        if (res.ok) return res.json();
-        throw new Error('Not authenticated');
-      })
-      .then((data) => {
-        // Handle the backend response format
-        if (data.authenticated && data.user) {
-          setUser(data.user);
-        } else {
-          setUser(null);
-        }
-      })
-      .catch(() => setUser(null))
-      .finally(() => setIsLoading(false));
-  }, []);
+  const user = data ?? null;
 
   return <AuthContext.Provider value={{ user, isLoading }}>{children}</AuthContext.Provider>;
 }

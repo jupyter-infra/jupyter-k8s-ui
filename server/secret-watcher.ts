@@ -1,9 +1,10 @@
-import { KubeConfig, makeInformer, CoreV1Api, V1Secret } from '@kubernetes/client-node';
+import { makeInformer, CoreV1Api, V1Secret } from '@kubernetes/client-node';
 import { randomBytes } from 'crypto';
-import type { KeyEntry, KeyMap } from './session';
+import type { KeyEntry, KeyMap } from './middleware/session';
 import type { SessionConfig } from './types';
 import { log } from './logger';
 import { KEY_LENGTH } from './crypto';
+import { loadKubeConfigBestEffort } from './k8s/client';
 
 // --- In-memory key store ---
 
@@ -45,18 +46,11 @@ function initDevKeys(): void {
 let informerStop: (() => Promise<void>) | null = null;
 
 async function startInformer(config: SessionConfig): Promise<void> {
-  const kc = new KubeConfig();
-
-  try {
-    kc.loadFromCluster();
-  } catch {
-    try {
-      kc.loadFromDefault();
-    } catch {
-      log('error', 'Cannot load kubeconfig for secret watcher, using dev keys as fallback');
-      initDevKeys();
-      return;
-    }
+  const kc = loadKubeConfigBestEffort();
+  if (!kc) {
+    log('error', 'Cannot load kubeconfig for secret watcher, using dev keys as fallback');
+    initDevKeys();
+    return;
   }
 
   const namespace = config.secretNamespace;

@@ -1,7 +1,7 @@
 import { serve } from 'bun';
-import { initializeConfig, serverConfig } from './k8s';
+import { initializeConfig, serverConfig } from './k8s/config';
 import { log } from './logger';
-import { handleRequest } from './router';
+import { handleRequest } from './middleware/router';
 import { initSecretWatcher, stopSecretWatcher } from './secret-watcher';
 
 // --- Initialize ---

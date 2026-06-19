@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { validateCSRF } from '../csrf';
-import { serverConfig } from '../k8s';
+import { validateCSRF } from '../middleware/csrf';
+import { serverConfig } from '../k8s/config';
 
 describe('validateCSRF', () => {
   const originalDomain = serverConfig.session.expectedDomain;

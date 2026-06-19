@@ -1,19 +1,30 @@
+import type { Workspace } from '../types';
+
 // Workspace status helpers
 
 export type WorkspaceStatus = 'Running' | 'Starting' | 'Stopping' | 'Stopped' | 'Degraded' | 'Deleting' | 'Unknown';
 
-const STATUS_COLORS: Record<WorkspaceStatus, string> = {
-  Running: 'success.main',
-  Starting: 'warning.main',
-  Stopping: 'warning.main',
-  Stopped: 'text.disabled',
-  Degraded: 'error.main',
-  Deleting: 'error.main',
-  Unknown: 'text.disabled',
+// Annotation constants
+export const OWNER_ANNOTATION = 'workspace.jupyter.org/created-by';
+
+export function getWorkspaceOwner(workspace: Workspace): string | undefined {
+  return workspace.metadata.annotations?.[OWNER_ANNOTATION];
+}
+
+export type StatusChipColor = 'success' | 'info' | 'warning' | 'error' | 'default';
+
+const STATUS_CHIP_COLORS: Record<WorkspaceStatus, StatusChipColor> = {
+  Running: 'success',
+  Starting: 'info',
+  Stopping: 'info',
+  Degraded: 'warning',
+  Deleting: 'error',
+  Stopped: 'default',
+  Unknown: 'default',
 };
 
-export function getStatusColor(status: WorkspaceStatus): string {
-  return STATUS_COLORS[status];
+export function getStatusChipColor(status: WorkspaceStatus): StatusChipColor {
+  return STATUS_CHIP_COLORS[status];
 }
 
 // Math utilities
@@ -135,11 +146,11 @@ export function getWorkspaceStatus(workspace: {
   return 'Unknown';
 }
 
-// Validation
-const K8S_NAME_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
+// Validation — K8s label names are max 63 chars; resource names max 253
+const K8S_NAME_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
-export function isValidK8sName(name: string): boolean {
-  return name.length > 0 && name.length <= 63 && K8S_NAME_REGEX.test(name);
+export function isValidK8sName(name: string, maxLength = 63): boolean {
+  return name.length > 0 && name.length <= maxLength && K8S_NAME_PATTERN.test(name);
 }
 
 export function sanitizeK8sName(input: string): string {

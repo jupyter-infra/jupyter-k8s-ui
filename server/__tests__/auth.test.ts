@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { decodeJWTPayload } from '../auth';
+import { decodeJWTPayload } from '../middleware/auth';
 import { buildJWT } from './test-helpers';
 
 describe('decodeJWTPayload', () => {

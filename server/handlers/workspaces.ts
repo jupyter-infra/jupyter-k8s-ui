@@ -1,13 +1,16 @@
-import { createUserK8sClient, workspaceToResponse, serverConfig } from '../k8s';
+import { serverConfig } from '../k8s/config';
+import { createUserK8sClient } from '../k8s/client';
+import { workspaceToResponse } from '../k8s/mappers';
+import { CRD_GROUP, CRD_VERSION, CRD_API_VERSION, WORKSPACE_PLURAL, isValidK8sName } from '../k8s/constants';
 import type { K8sWorkspace, K8sListResponse, CreateWorkspaceBody, UpdateWorkspaceBody } from '../types';
 import { log } from '../logger';
-import { jsonResponse, handleK8sError, isValidK8sName } from '../responses';
+import { jsonResponse, handleK8sError, errorResponse } from '../responses';
 
 export async function handleListWorkspaces(jwt: string): Promise<Response> {
   const startTime = Date.now();
   try {
     const k8sClient = await createUserK8sClient(jwt);
-    const response = await k8sClient.listNamespacedCustomObject('workspace.jupyter.org', 'v1alpha1', serverConfig.namespace, 'workspaces');
+    const response = await k8sClient.listNamespacedCustomObject(CRD_GROUP, CRD_VERSION, serverConfig.namespace, WORKSPACE_PLURAL);
     const body = response.body as K8sListResponse<K8sWorkspace>;
     const workspaces = body.items.map(workspaceToResponse);
     log('info', `Listed ${workspaces.length} workspaces in ${Date.now() - startTime}ms`);
@@ -20,7 +23,7 @@ export async function handleListWorkspaces(jwt: string): Promise<Response> {
 export async function handleGetWorkspace(jwt: string, workspaceName: string): Promise<Response> {
   try {
     const k8sClient = await createUserK8sClient(jwt);
-    const response = await k8sClient.getNamespacedCustomObject('workspace.jupyter.org', 'v1alpha1', serverConfig.namespace, 'workspaces', workspaceName);
+    const response = await k8sClient.getNamespacedCustomObject(CRD_GROUP, CRD_VERSION, serverConfig.namespace, WORKSPACE_PLURAL, workspaceName);
     const workspace = workspaceToResponse(response.body as K8sWorkspace);
     log('info', `Retrieved workspace: ${workspaceName}`);
     return jsonResponse(workspace);
@@ -30,16 +33,18 @@ export async function handleGetWorkspace(jwt: string, workspaceName: string): Pr
 }
 
 export async function handleCreateWorkspace(jwt: string, req: Request): Promise<Response> {
+  let body: CreateWorkspaceBody;
   try {
-    const body = (await req.json()) as CreateWorkspaceBody;
+    body = (await req.json()) as CreateWorkspaceBody;
+  } catch {
+    return errorResponse(400, 'Invalid request body — expected valid JSON');
+  }
 
-    if (!isValidK8sName(body.name)) {
-      return jsonResponse(
-        { error: 'Invalid workspace name — must be a valid Kubernetes resource name (lowercase alphanumeric and hyphens, 1-253 chars)' },
-        400,
-      );
-    }
+  if (!isValidK8sName(body.name)) {
+    return errorResponse(400, 'Invalid workspace name — must be a valid Kubernetes resource name (lowercase alphanumeric and hyphens, 1-253 chars)');
+  }
 
+  try {
     const k8sClient = await createUserK8sClient(jwt);
 
     const spec: Record<string, unknown> = {
@@ -60,13 +65,13 @@ export async function handleCreateWorkspace(jwt: string, req: Request): Promise<
     }
 
     const workspace = {
-      apiVersion: 'workspace.jupyter.org/v1alpha1',
+      apiVersion: CRD_API_VERSION,
       kind: 'Workspace',
       metadata: { name: body.name, namespace: serverConfig.namespace },
       spec,
     };
 
-    const response = await k8sClient.createNamespacedCustomObject('workspace.jupyter.org', 'v1alpha1', serverConfig.namespace, 'workspaces', workspace);
+    const response = await k8sClient.createNamespacedCustomObject(CRD_GROUP, CRD_VERSION, serverConfig.namespace, WORKSPACE_PLURAL, workspace);
 
     const created = workspaceToResponse(response.body as K8sWorkspace);
     log('info', `Created workspace: ${body.name}`);
@@ -77,11 +82,17 @@ export async function handleCreateWorkspace(jwt: string, req: Request): Promise<
 }
 
 export async function handleUpdateWorkspace(jwt: string, workspaceName: string, req: Request): Promise<Response> {
+  let body: UpdateWorkspaceBody;
   try {
-    const body = (await req.json()) as UpdateWorkspaceBody;
+    body = (await req.json()) as UpdateWorkspaceBody;
+  } catch {
+    return errorResponse(400, 'Invalid request body — expected valid JSON');
+  }
+
+  try {
     const k8sClient = await createUserK8sClient(jwt);
 
-    const existing = await k8sClient.getNamespacedCustomObject('workspace.jupyter.org', 'v1alpha1', serverConfig.namespace, 'workspaces', workspaceName);
+    const existing = await k8sClient.getNamespacedCustomObject(CRD_GROUP, CRD_VERSION, serverConfig.namespace, WORKSPACE_PLURAL, workspaceName);
 
     const updated = JSON.parse(JSON.stringify(existing.body)) as K8sWorkspace;
 
@@ -102,14 +113,7 @@ export async function handleUpdateWorkspace(jwt: string, workspaceName: string, 
       };
     }
 
-    const response = await k8sClient.replaceNamespacedCustomObject(
-      'workspace.jupyter.org',
-      'v1alpha1',
-      serverConfig.namespace,
-      'workspaces',
-      workspaceName,
-      updated,
-    );
+    const response = await k8sClient.replaceNamespacedCustomObject(CRD_GROUP, CRD_VERSION, serverConfig.namespace, WORKSPACE_PLURAL, workspaceName, updated);
 
     const workspace = workspaceToResponse(response.body as K8sWorkspace);
     log('info', `Updated workspace: ${workspaceName}`);
@@ -122,7 +126,7 @@ export async function handleUpdateWorkspace(jwt: string, workspaceName: string, 
 export async function handleDeleteWorkspace(jwt: string, workspaceName: string): Promise<Response> {
   try {
     const k8sClient = await createUserK8sClient(jwt);
-    await k8sClient.deleteNamespacedCustomObject('workspace.jupyter.org', 'v1alpha1', serverConfig.namespace, 'workspaces', workspaceName);
+    await k8sClient.deleteNamespacedCustomObject(CRD_GROUP, CRD_VERSION, serverConfig.namespace, WORKSPACE_PLURAL, workspaceName);
     log('info', `Deleted workspace: ${workspaceName}`);
     return jsonResponse({ message: 'Workspace deleted successfully' });
   } catch (error) {

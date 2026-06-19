@@ -1,14 +1,15 @@
-import { log } from './logger';
-import { serverConfig } from './k8s';
+import { log } from '../logger';
+import { serverConfig } from '../k8s/config';
+import { isValidK8sName } from '../k8s/constants';
 import { extractAuth, getSessionCookieHeader } from './auth';
 import { validateCSRF } from './csrf';
-import { jsonResponse, errorResponse } from './responses';
+import { jsonResponse, errorResponse } from '../responses';
 import { buildClearCookieHeader } from './session';
-import { serveStatic } from './static';
-import { handleListWorkspaces, handleGetWorkspace, handleCreateWorkspace, handleUpdateWorkspace, handleDeleteWorkspace } from './handlers/workspaces';
-import { handleListTemplates } from './handlers/templates';
-import { handleGetMe } from './handlers/me';
-import { handleGetClusterAccess } from './handlers/cluster-access';
+import { serveStatic } from '../static';
+import { handleListWorkspaces, handleGetWorkspace, handleCreateWorkspace, handleUpdateWorkspace, handleDeleteWorkspace } from '../handlers/workspaces';
+import { handleListTemplates } from '../handlers/templates';
+import { handleGetMe } from '../handlers/me';
+import { handleGetClusterAccess } from '../handlers/cluster-access';
 
 // --- Route paths ---
 
@@ -55,6 +56,16 @@ function withSessionCookie(response: Response, jwt: string, source: import('./au
   return newResponse;
 }
 
+async function dispatch(
+  method: string,
+  handlers: Record<string, () => Promise<Response>>,
+  jwt: string,
+  source: import('./auth').TokenSource,
+): Promise<Response> {
+  const response = await (handlers[method]?.() ?? Promise.resolve(errorResponse(405, 'Method not allowed')));
+  return withSessionCookie(response, jwt, source);
+}
+
 async function routeRequest(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const { pathname } = url;
@@ -93,41 +104,56 @@ async function routeRequest(req: Request): Promise<Response> {
       return errorResponse(403, 'CSRF validation failed');
     }
 
-    let response: Response;
+    // Content-Type check for mutations
+    const isMutation = method === 'POST' || method === 'PUT' || method === 'PATCH';
+    if (isMutation && !req.headers.get('Content-Type')?.includes('application/json')) {
+      return errorResponse(415, 'Content-Type must be application/json');
+    }
 
     if (pathname === ROUTES.workspaces) {
-      const handlers: Record<string, () => Promise<Response>> = {
-        GET: () => handleListWorkspaces(jwt),
-        POST: () => handleCreateWorkspace(jwt, req),
-      };
-      response = await (handlers[method]?.() ?? Promise.resolve(errorResponse(405, 'Method not allowed')));
-      return withSessionCookie(response, jwt, source);
+      return dispatch(
+        method,
+        {
+          GET: () => handleListWorkspaces(jwt),
+          POST: () => handleCreateWorkspace(jwt, req),
+        },
+        jwt,
+        source,
+      );
     }
 
     const workspaceMatch = pathname.match(ROUTES.workspace);
     if (workspaceMatch) {
       const name = workspaceMatch[1];
-      const handlers: Record<string, () => Promise<Response>> = {
-        GET: () => handleGetWorkspace(jwt, name),
-        PUT: () => handleUpdateWorkspace(jwt, name, req),
-        PATCH: () => handleUpdateWorkspace(jwt, name, req),
-        DELETE: () => handleDeleteWorkspace(jwt, name),
-      };
-      response = await (handlers[method]?.() ?? Promise.resolve(errorResponse(405, 'Method not allowed')));
-      return withSessionCookie(response, jwt, source);
+      if (!isValidK8sName(name)) {
+        return errorResponse(400, 'Invalid workspace name');
+      }
+      return dispatch(
+        method,
+        {
+          GET: () => handleGetWorkspace(jwt, name),
+          PUT: () => handleUpdateWorkspace(jwt, name, req),
+          PATCH: () => handleUpdateWorkspace(jwt, name, req),
+          DELETE: () => handleDeleteWorkspace(jwt, name),
+        },
+        jwt,
+        source,
+      );
     }
 
     if (pathname === ROUTES.templates) {
-      const handlers: Record<string, () => Promise<Response>> = {
-        GET: () => handleListTemplates(jwt),
-      };
-      response = await (handlers[method]?.() ?? Promise.resolve(errorResponse(405, 'Method not allowed')));
-      return withSessionCookie(response, jwt, source);
+      return dispatch(
+        method,
+        {
+          GET: () => handleListTemplates(jwt),
+        },
+        jwt,
+        source,
+      );
     }
 
     if (pathname === ROUTES.clusterAccess && method === 'GET') {
-      response = handleGetClusterAccess();
-      return withSessionCookie(response, jwt, source);
+      return withSessionCookie(handleGetClusterAccess(), jwt, source);
     }
 
     return errorResponse(404, 'API endpoint not found');
