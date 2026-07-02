@@ -210,6 +210,20 @@ deploy-aws-internal: load-image-aws-internal
 	$(KUBECTL) rollout restart deployment/$(DEPLOYMENT) -n $(NAMESPACE)
 	@echo "Web app deployment restarted in AWS cluster"
 
+##@ Unit Testing
+
+.PHONY: test
+test: ## Run all unit tests (server + client).
+	bun run test
+
+.PHONY: test-server
+test-server: ## Run server unit tests.
+	bun run test:server
+
+.PHONY: test-client
+test-client: ## Run client unit tests.
+	bun run test:client
+
 ##@ E2E Testing
 
 # Public GHCR images (no auth required)
@@ -219,7 +233,7 @@ E2E_CONTROLLER_IMAGE := $(E2E_CONTROLLER_REPO):$(E2E_CONTROLLER_TAG)
 E2E_ROTATOR_IMAGE ?= ghcr.io/jupyter-infra/jupyter-k8s-rotator:latest
 E2E_CHART_SOURCE ?= oci://ghcr.io/jupyter-infra/charts/jupyter-k8s
 # Update when CRD contract changes
-E2E_CHART_VERSION ?= 0.1.0-rc.2
+E2E_CHART_VERSION ?= 0.1.2
 # Image for workspace pods is injected by the default WorkspaceTemplate fixture
 # (e2e/fixtures/default-template.yaml). No need to pass it to the test.
 E2E_WORKSPACE_IMAGE ?= nginx:latest
