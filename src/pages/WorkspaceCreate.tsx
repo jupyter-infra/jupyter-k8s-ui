@@ -79,7 +79,7 @@ export function WorkspaceCreate() {
         },
       },
       storage: { size: `${storageSize}Gi` },
-      accessType: ownershipType === 'Public' ? 'Public' : 'Private',
+      accessType: ownershipType === 'Public' ? 'Public' : 'OwnerOnly',
       ownershipType,
     };
 

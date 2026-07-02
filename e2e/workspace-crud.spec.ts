@@ -20,6 +20,23 @@ async function waitForCardStatus(page: Page, card: Locator, text: string) {
     .toBeTruthy();
 }
 
+/**
+ * Click Refresh until the card disappears. The list only auto-polls every 60s, so
+ * after a delete the card can linger until the next poll — clicking Refresh forces
+ * the refetch, mirroring what a user would do.
+ */
+async function waitForCardGone(page: Page, card: Locator) {
+  await expect
+    .poll(
+      async () => {
+        await page.getByRole('button', { name: /refresh/i }).click();
+        return card.isVisible().catch(() => false);
+      },
+      { timeout: 30_000, intervals: [2_000] },
+    )
+    .toBeFalsy();
+}
+
 test.describe('Workspace CRUD', () => {
   test.describe.configure({ mode: 'serial' });
 
@@ -146,7 +163,47 @@ test.describe('Workspace CRUD', () => {
     await page.getByRole('button', { name: /delete/i }).click();
 
     // Workspace should disappear from the list
-    await expect(card).not.toBeVisible({ timeout: 30_000 });
+    await waitForCardGone(page, card);
+  });
+
+  // Regression guard for #39: creating a "Private" (owner-only) workspace once
+  // failed because the UI submitted accessType "Private", which the CRD rejects
+  // with a 422. This exercises the ownership toggle end-to-end against the real
+  // API server — the path the default-create test above never touches.
+  test('creates a Private (owner-only) workspace and reaches Running', async ({ page }) => {
+    // Avoid "private" in the name: the card renders a "Private" chip and getByText
+    // would otherwise match the name too, tripping Playwright's strict mode.
+    const privateName = `${RUN_ID}-owned`;
+
+    await page.goto('/create');
+
+    await page.getByRole('textbox', { name: /^name$/i }).fill(privateName);
+    await page.getByRole('textbox', { name: /display name/i }).fill(privateName);
+
+    // Flip the access toggle from Public to Private (submits accessType "OwnerOnly")
+    await page.getByRole('button', { name: /^private$/i }).click();
+
+    await page.getByRole('button', { name: /create workspace/i }).click();
+
+    // A 422 from the API server would surface as an inline error alert and keep us
+    // on /create. Redirect back to the list is proof the CRD accepted the enum.
+    await expect(page).toHaveURL('/', { timeout: 10_000 });
+
+    await page.getByRole('button', { name: /all/i }).click();
+
+    const card = page.getByLabel(new RegExp(`${privateName}.*workspace`, 'i'));
+    await expect(card).toBeVisible({ timeout: 10_000 });
+    // The Private chip confirms ownershipType round-tripped through K8s
+    await expect(card.getByText('Private', { exact: true })).toBeVisible();
+
+    await waitForCardStatus(page, card, 'Running');
+
+    // Clean up so we don't leak a workspace into later runs
+    await card.getByRole('button', { name: /more options/i }).click();
+    await page.getByRole('menuitem', { name: /delete/i }).click();
+    await expect(page.getByText(/are you sure you want to delete/i)).toBeVisible();
+    await page.getByRole('button', { name: /delete/i }).click();
+    await waitForCardGone(page, card);
   });
 
   test('rejects invalid workspace name in create form', async ({ page }) => {

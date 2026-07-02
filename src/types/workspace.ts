@@ -2,7 +2,7 @@
 
 // --- Domain Value Types ---
 export type DesiredStatus = 'Running' | 'Stopped';
-export type AccessType = 'Public' | 'Private';
+export type AccessType = 'Public' | 'OwnerOnly';
 export type OwnershipType = 'OwnerOnly' | 'Public';
 
 export interface WorkspaceMetadata {

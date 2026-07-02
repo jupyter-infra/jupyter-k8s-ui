@@ -1,7 +1,8 @@
 import { serverConfig } from '../k8s/config';
 import { createUserK8sClient } from '../k8s/client';
 import { workspaceToResponse } from '../k8s/mappers';
-import { CRD_GROUP, CRD_VERSION, CRD_API_VERSION, WORKSPACE_PLURAL, isValidK8sName } from '../k8s/constants';
+import { CRD_GROUP, CRD_VERSION, CRD_API_VERSION, WORKSPACE_PLURAL } from '../k8s/constants';
+import { isValidK8sName, validateWorkspaceEnums } from '../guards';
 import type { K8sWorkspace, K8sListResponse, CreateWorkspaceBody, UpdateWorkspaceBody } from '../types';
 import { log } from '../logger';
 import { jsonResponse, handleK8sError, errorResponse } from '../responses';
@@ -43,6 +44,9 @@ export async function handleCreateWorkspace(jwt: string, req: Request): Promise<
   if (!isValidK8sName(body.name)) {
     return errorResponse(400, 'Invalid workspace name — must be a valid Kubernetes resource name (lowercase alphanumeric and hyphens, 1-253 chars)');
   }
+
+  const enumError = validateWorkspaceEnums(body);
+  if (enumError) return errorResponse(400, enumError);
 
   try {
     const k8sClient = await createUserK8sClient(jwt);
@@ -88,6 +92,9 @@ export async function handleUpdateWorkspace(jwt: string, workspaceName: string, 
   } catch {
     return errorResponse(400, 'Invalid request body — expected valid JSON');
   }
+
+  const enumError = validateWorkspaceEnums(body);
+  if (enumError) return errorResponse(400, enumError);
 
   try {
     const k8sClient = await createUserK8sClient(jwt);

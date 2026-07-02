@@ -127,6 +127,27 @@ describe('handleCreateWorkspace', () => {
     expect(res.status).toBe(201);
   });
 
+  // Regression guard for #39: the UI once sent accessType "Private", a value the
+  // CRD rejects with a 422. We now reject invalid enums with a 400 at our boundary
+  // and never forward them to K8s.
+  test('rejects invalid accessType with 400 before calling K8s', async () => {
+    const res = await handleCreateWorkspace('jwt', jsonRequest({ name: 'ws', accessType: 'Private' }));
+    expect(res.status).toBe(400);
+    expect(mockedK8s.create).not.toHaveBeenCalled();
+  });
+
+  test('rejects invalid ownershipType with 400 before calling K8s', async () => {
+    const res = await handleCreateWorkspace('jwt', jsonRequest({ name: 'ws', ownershipType: 'Everyone' }));
+    expect(res.status).toBe(400);
+    expect(mockedK8s.create).not.toHaveBeenCalled();
+  });
+
+  test('accepts the valid OwnerOnly accessType', async () => {
+    const res = await handleCreateWorkspace('jwt', jsonRequest({ name: 'ws', accessType: 'OwnerOnly' }));
+    expect(res.status).toBe(201);
+    expect(lastCreated().spec.accessType).toBe('OwnerOnly');
+  });
+
   test('maps K8s errors to the correct HTTP status', async () => {
     mockedK8s.create.mockImplementationOnce(async () => {
       throw Object.assign(new Error('conflict'), { statusCode: 409 });
@@ -162,6 +183,13 @@ describe('handleUpdateWorkspace', () => {
 
     const updated = lastReplaced();
     expect(updated.spec.idleShutdown).toEqual({ enabled: true, idleTimeoutInMinutes: 45 });
+  });
+
+  test('rejects invalid accessType with 400 before touching K8s', async () => {
+    const res = await handleUpdateWorkspace('jwt', 'ws', jsonRequest({ accessType: 'Private' }, 'PATCH'));
+    expect(res.status).toBe(400);
+    expect(mockedK8s.get).not.toHaveBeenCalled();
+    expect(mockedK8s.replace).not.toHaveBeenCalled();
   });
 
   test('returns 404 when workspace does not exist', async () => {

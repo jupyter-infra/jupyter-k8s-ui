@@ -1,6 +1,6 @@
 import { log } from '../logger';
 import { serverConfig } from '../k8s/config';
-import { isValidK8sName } from '../k8s/constants';
+import { isValidK8sName } from '../guards';
 import { extractAuth, getSessionCookieHeader } from './auth';
 import { validateCSRF } from './csrf';
 import { jsonResponse, errorResponse } from '../responses';

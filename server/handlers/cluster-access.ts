@@ -1,5 +1,5 @@
 import { serverConfig } from '../k8s/config';
-import { isValidK8sName } from '../k8s/constants';
+import { isValidK8sName } from '../guards';
 import { jsonResponse, errorResponse } from '../responses';
 
 export function handleGetClusterAccess(): Response {

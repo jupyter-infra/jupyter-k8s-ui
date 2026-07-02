@@ -3,7 +3,7 @@
 // --- Domain Value Types ---
 
 export type DesiredStatus = 'Running' | 'Stopped';
-export type AccessType = 'Public' | 'Private';
+export type AccessType = 'Public' | 'OwnerOnly';
 export type OwnershipType = 'OwnerOnly' | 'Public';
 
 // --- K8s Resource Types (what comes from the API server) ---

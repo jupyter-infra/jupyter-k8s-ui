@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
 import { handleK8sError } from '../responses';
-import { isValidK8sName } from '../k8s/constants';
 
 describe('handleK8sError', () => {
   // Each mapped status code is a contract with the frontend — if the map changes,
@@ -31,28 +30,5 @@ describe('handleK8sError', () => {
   test('returns 500 for non-K8s error values', async () => {
     const res = handleK8sError('string error', 'fallback');
     expect(res.status).toBe(500);
-  });
-});
-
-describe('isValidK8sName', () => {
-  test.each(['my-workspace', 'a', 'abc-123-def', '0-abc', 'a'.repeat(253)])('accepts valid name: %s', (name) => {
-    expect(isValidK8sName(name)).toBe(true);
-  });
-
-  test.each([
-    ['', 'empty'],
-    ['My-Workspace', 'uppercase'],
-    ['-start', 'leading hyphen'],
-    ['end-', 'trailing hyphen'],
-    ['has space', 'whitespace'],
-    ['under_score', 'underscore'],
-    ['dot.separated', 'dot'],
-    ['a'.repeat(254), 'over 253 chars'],
-  ])('rejects %s (%s)', (name) => {
-    expect(isValidK8sName(name)).toBe(false);
-  });
-
-  test('rejects null', () => {
-    expect(isValidK8sName(null)).toBe(false);
   });
 });
