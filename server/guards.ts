@@ -4,13 +4,7 @@
 // runtime check, so these guards re-validate the values the CRD actually accepts
 // at our boundary — turning a cryptic K8s 422 into a clear 400 (see #39).
 
-import type { AccessType, OwnershipType, DesiredStatus, CreateWorkspaceBody } from './types';
-
-// CRD enum values — must mirror the `workspace.jupyter.org/v1alpha1` CRD.
-// Typed against the domain unions so an invalid literal here is a compile error.
-export const ACCESS_TYPES: readonly AccessType[] = ['Public', 'OwnerOnly'];
-export const OWNERSHIP_TYPES: readonly OwnershipType[] = ['OwnerOnly', 'Public'];
-export const DESIRED_STATUSES: readonly DesiredStatus[] = ['Running', 'Stopped'];
+import { ACCESS_TYPES, OWNERSHIP_TYPES, DESIRED_STATUSES, type AccessType, type OwnershipType, type DesiredStatus, type CreateWorkspaceBody } from './types';
 
 function isOneOf<T extends string>(allowed: readonly T[], value: unknown): value is T {
   return typeof value === 'string' && (allowed as readonly string[]).includes(value);

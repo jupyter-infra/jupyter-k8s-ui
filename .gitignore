@@ -13,10 +13,6 @@ dist-ssr
 *.local
 .env
 
-# Local machine-specific mise tool pins
-mise.local.toml
-.mise.local.toml
-
 # Playwright
 playwright-report/
 test-results/

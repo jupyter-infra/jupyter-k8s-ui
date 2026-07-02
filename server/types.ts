@@ -2,9 +2,17 @@
 
 // --- Domain Value Types ---
 
-export type DesiredStatus = 'Running' | 'Stopped';
-export type AccessType = 'Public' | 'OwnerOnly';
-export type OwnershipType = 'OwnerOnly' | 'Public';
+// CRD enum values — must mirror the `workspace.jupyter.org/v1alpha1` CRD. The
+// unions are derived from these arrays so the runtime allow-list (used by the
+// request guards) and the compile-time type can never drift apart: add a member
+// here and both update together.
+export const DESIRED_STATUSES = ['Running', 'Stopped'] as const;
+export const ACCESS_TYPES = ['Public', 'OwnerOnly'] as const;
+export const OWNERSHIP_TYPES = ['OwnerOnly', 'Public'] as const;
+
+export type DesiredStatus = (typeof DESIRED_STATUSES)[number];
+export type AccessType = (typeof ACCESS_TYPES)[number];
+export type OwnershipType = (typeof OWNERSHIP_TYPES)[number];
 
 // --- K8s Resource Types (what comes from the API server) ---
 
