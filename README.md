@@ -108,7 +108,7 @@ jupyter-k8s-ui/
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines. Pull requests get an automated AI code review, and you can run the same review locally before pushing with `make review`.
 
 ## License
 

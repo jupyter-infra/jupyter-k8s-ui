@@ -180,6 +180,28 @@ Before submitting a PR:
 - [ ] No console errors or warnings
 - [ ] No secrets or tokens committed
 
+## Code review
+
+Pull requests are reviewed automatically by [roborev](https://roborev.io), which posts a review comment on each revision. You can run the same review locally before pushing to catch issues early.
+
+Install roborev from [roborev.io](https://roborev.io), then:
+
+```bash
+make review
+```
+
+This reviews your current branch against `main` using whatever AI coding agent you have installed (claude-code, codex, gemini, and others), with no daemon or background process. It shares the policy file (`.roborev.toml`) with CI. CI runs the full matrix defined there (the `default` and `security` review types); a local run does a single review, so push to get the complete CI review.
+
+To review every commit automatically instead of on demand (opt-in):
+
+```bash
+make review-setup   # one-time: installs the roborev post-commit hook
+roborev show HEAD   # view the latest review
+roborev refine      # iterate: review, fix, repeat
+```
+
+Local review is optional; CI reviews every PR regardless.
+
 ## Security
 
 - Never commit tokens or secrets
