@@ -12,6 +12,7 @@ function parseIntSafe(value: string | undefined, fallback: number): number {
 // This ensures all importers share the same config instance.
 export const serverConfig: ServerConfig = {
   namespace: 'default',
+  sharedNamespace: 'jupyter-k8s-shared',
   staticDir: './dist',
   devUser: '',
   devAccessToken: '',
@@ -47,6 +48,7 @@ export function initializeConfig(): void {
   const isDev = process.env.NODE_ENV === 'development';
 
   serverConfig.namespace = process.env.NAMESPACE || 'default';
+  serverConfig.sharedNamespace = process.env.SHARED_TEMPLATE_NAMESPACE || 'jupyter-k8s-shared';
   serverConfig.staticDir = process.env.STATIC_DIR || './dist';
   serverConfig.devUser = process.env.DEV_USER || '';
   serverConfig.devAccessToken = isDev ? process.env.DEV_ACCESS_TOKEN || '' : '';
