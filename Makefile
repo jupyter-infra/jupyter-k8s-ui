@@ -29,6 +29,7 @@ endif
 NAMESPACE ?= jupyter-k8s-router
 DEPLOYMENT ?= web-app
 DEV_KIND_CLUSTER ?= jupyter-k8s-dev
+SERVE_HOST_PORT ?= 8090
 
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
@@ -142,6 +143,16 @@ dev-full: ## Run both frontend and backend dev servers concurrently.
 .PHONY: start
 start: build ## Build and start the production server.
 	bun run start
+
+.PHONY: serve-host
+serve-host: build ## Build + serve the whole app (UI + API) on all interfaces
+	@if [ ! -f .env ] || ! grep -q '^DEV_ACCESS_TOKEN=..' .env; then \
+		echo "ERROR: no DEV_ACCESS_TOKEN in .env — run 'make refresh-token' first."; exit 1; \
+	fi
+	@echo "Serving at http://$$(hostname):$(SERVE_HOST_PORT)"
+	@echo "Note: dev mode — requests use YOUR token from .env; anyone who can reach this URL acts as you."
+	@set -a; . ./.env; set +a; \
+		NODE_ENV=development SESSION_ENABLED=false PORT=$(SERVE_HOST_PORT) bun run server/index.ts
 
 ##@ Kind Deployment
 

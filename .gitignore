@@ -23,6 +23,9 @@ test-results/
 # Workspace files
 *.code-workspace
 
+# Local cluster credential bootstrap scripts (contain OIDC client config)
+set-kubeconfig*.sh
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

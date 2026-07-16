@@ -26,6 +26,7 @@ bun run dev:full         # Start both frontend (:5173) and backend (:8090)
 bun run dev              # Frontend only (Vite)
 bun run dev:server       # Backend only (Bun --watch)
 bun run build:full       # Full build (tsc + vite)
+bun run gen:crd          # Regenerate vendored CRDs as installed in a cluster (via kubeconfig)
 bun run lint             # ESLint
 bun run format           # Prettier (write)
 bun run format:check     # Prettier (check only)
@@ -50,6 +51,7 @@ make deploy-aws          # Build + push to ECR + restart deployment
 make load-image-aws      # Build + push to ECR (no restart)
 make kubectl-aws         # Switch kubectl to EKS context
 make refresh-token       # Fetch fresh OIDC token for local dev
+make serve-host          # Build + serve UI+API on all interfaces
 make test-e2e            # Run Playwright E2E tests (sets up cluster + server automatically)
 make cleanup-e2e         # Delete the E2E Kind cluster
 make clean               # Remove build artifacts
@@ -85,16 +87,25 @@ src/                       # Frontend (React + Vite)
 
 ## API Endpoints
 
-| Method    | Path                     | Auth | Description                |
-| --------- | ------------------------ | ---- | -------------------------- |
-| GET       | /api/v1/health           | No   | Health check               |
-| GET       | /api/v1/me               | No   | Current user info from JWT |
-| GET       | /api/v1/workspaces       | Yes  | List user's workspaces     |
-| POST      | /api/v1/workspaces       | Yes  | Create workspace           |
-| GET       | /api/v1/workspaces/:name | Yes  | Get workspace details      |
-| PUT/PATCH | /api/v1/workspaces/:name | Yes  | Update workspace           |
-| DELETE    | /api/v1/workspaces/:name | Yes  | Delete workspace           |
-| GET       | /api/v1/templates        | Yes  | List available templates   |
+| Method    | Path                      | Auth | Description                                |
+| --------- | ------------------------- | ---- | ------------------------------------------ |
+| GET       | /api/v1/health            | No   | Health check                               |
+| GET       | /api/v1/me                | No   | Current user info from JWT                 |
+| GET       | /api/v1/workspaces        | Yes  | List user's workspaces                     |
+| POST      | /api/v1/workspaces        | Yes  | Create workspace (`?dryRun=All` validates) |
+| GET       | /api/v1/workspaces/:name  | Yes  | Get workspace details                      |
+| PUT/PATCH | /api/v1/workspaces/:name  | Yes  | Update workspace (`?dryRun=All` validates) |
+| DELETE    | /api/v1/workspaces/:name  | Yes  | Delete workspace                           |
+| GET       | /api/v1/templates         | Yes  | List templates (user ∪ shared ns)          |
+| GET       | /api/v1/access-strategies | Yes  | List access strategies (user ∪ shared ns)  |
+| GET       | /api/v1/crd-schema/:crd   | Yes  | CRD spec JSON Schema for the YAML editor   |
+
+The workspace create/update endpoints accept **two body shapes**: the simple form's
+field body, and the advanced editor's `{ name, templateRef?, spec }` raw-spec body
+(detected by presence of `spec`). Advanced update does a **full spec replace**; the
+form/PATCH path does selective field merge. `?dryRun=All` runs the operator's
+admission webhooks without persisting — the advanced editor's authoritative
+validation layer.
 
 ## Key Conventions
 
@@ -119,6 +130,22 @@ src/                       # Frontend (React + Vite)
 - React Query polls workspace list every 60s; detail polls every 3s while transitioning
 - Workspace ownership tracked via `workspace.jupyter.org/created-by` annotation
 - Vite proxies `/api` to `http://localhost:8090` in dev mode
+- **Advanced YAML editor** (`/create-advanced`, `/workspace/:name/edit-advanced`):
+  a Monaco + monaco-yaml editor over the `Workspace` CR `spec`. Four validation
+  layers — YAML syntax, CRD schema (from `GET /crd-schema/workspaces`), advisory
+  template bounds/allowed-images, and authoritative `?dryRun=All`.
+- CRD spec schemas are read **once at startup** into an in-memory singleton
+  (`server/schema/store.ts`): live cluster read via the service account, falling back
+  to vendored `server/schema/vendored/*.json` (regenerate with `bun run gen:crd`).
+
+### Callouts
+
+- **The advanced editor requires a real cluster** (Validate/Save call the operator's
+  webhooks). Develop/demo it against Kind (`make deploy-kind` + `make refresh-token`),
+  not the no-cluster mock — the mock can't run dry-run and we don't fake it.
+- `monaco-editor` is pinned to `~0.54.x`: 0.55 changed the worker protocol and breaks
+  monaco-yaml's language worker ("Missing method: doValidation"). Don't bump to 0.55+
+  until monaco-yaml supports it.
 
 ## Testing
 
