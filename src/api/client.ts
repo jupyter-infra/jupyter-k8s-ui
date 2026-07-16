@@ -8,7 +8,7 @@ import type {
   DiscoveredTemplate,
   DiscoveredAccessStrategy,
 } from '../types';
-import { handleUnauthorized, clearAuthReloadFlag, AuthError } from './auth-interceptor';
+import { handleUnauthorized, clearAuthReloadFlag, AuthError, ApiError } from './auth-interceptor';
 
 const API_BASE = '/api/v1';
 
@@ -38,8 +38,20 @@ class ApiClient {
         const error = await response.text();
         throw new AuthError(error || 'Unauthorized');
       }
-      const error = await response.text();
-      throw new Error(error || `Request failed: ${response.status}`);
+      // The server sends a structured `{ error, details }` body (see server/responses.ts).
+      // Parse it so callers get a friendly message plus the per-field webhook `details`,
+      // rather than a raw JSON blob as the error message.
+      const raw = await response.text();
+      let message = raw;
+      let details: string | undefined;
+      try {
+        const body = JSON.parse(raw) as { error?: string; details?: string };
+        message = body.error ?? raw;
+        details = body.details;
+      } catch {
+        // Non-JSON body — fall back to the raw text as the message.
+      }
+      throw new ApiError(message || `Request failed: ${response.status}`, response.status, details);
     }
 
     clearAuthReloadFlag();
