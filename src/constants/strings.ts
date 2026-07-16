@@ -45,6 +45,7 @@ export const strings = {
     details: 'Details',
     start: 'Start',
     stop: 'Stop',
+    edit: 'Edit',
     viewOnly: 'View only',
     viewDetails: 'View details',
 
@@ -100,16 +101,57 @@ export const strings = {
     accessPrivateTitle: 'Private',
     accessPrivateDescription: 'Only you can connect',
 
-    // Create page hints
-    advancedHint: 'Need more options (custom images, GPU, pod security)?',
-    advancedHintKubectl: 'Use kubectl',
-    advancedHintOr: 'or see the',
-    advancedHintDocs: 'full CRD reference',
+    // CRD reference docs (used by the advanced box + the editor's doc link)
     advancedHintDocsUrl: 'https://jupyter-k8s.readthedocs.io/en/latest/reference/custom-resources/workspace.html',
+
+    // Advanced create box (create page). The description is assembled with inline
+    // links in the component: "{intro} {kubectl link} or read the {CRD reference link}."
+    advancedBoxTitle: 'Advanced',
+    advancedBoxIntro: 'Need more knobs? Edit the workspace spec in a YAML editor,',
+    advancedBoxKubectl: 'use kubectl',
+    advancedBoxDocsMid: 'or read the',
+    advancedBoxDocsLink: 'CRD reference',
+    advancedBoxButton: 'YAML editor',
 
     // Delete dialog
     deleteTitle: 'Delete Workspace',
     deleteMessage: (name: string) => `Are you sure you want to delete "${name}"? This action cannot be undone.`,
+
+    // Advanced YAML editor
+    advancedCreateTitle: 'Create Workspace (Advanced)',
+    advancedEditTitle: 'Edit Workspace (Advanced)',
+    advancedEditLink: 'Advanced YAML editor',
+    advancedSpecLabel: 'Workspace spec',
+    advancedSpecDocsPrefix: 'Refer to the',
+    advancedSpecDocsLink: 'documentation',
+    advancedSpecDocsSuffix: 'for details about field shapes.',
+    advancedTemplateLabel: 'Template',
+    advancedTemplateNone: '(none — use namespace default)',
+    advancedTemplateFreeText: 'Enter template name manually',
+    advancedResolvedBanner: 'This shows the current resolved configuration, including values applied by the template.',
+    advancedTemplatesUnavailable: "Couldn't load available templates — you can still enter a template reference manually; validation will confirm it on save.",
+    advancedValidate: 'Validate',
+    advancedValidating: 'Validating…',
+    advancedValidationPassed: 'Validation passed — the cluster accepts this manifest.',
+    advancedSyntaxOk: 'YAML syntax',
+    advancedSchemaOk: 'Schema',
+    advancedImageNotAllowed: (tmpl: string) => `Current image isn't in template "${tmpl}"'s allowed list — pick from the list or validation may reject it.`,
+    advancedSaveCreate: 'Create Workspace',
+    advancedSaveEdit: 'Save Changes',
+
+    // Advanced editor — template guidance panel
+    guidanceBoundsHeader: 'Bounds',
+    guidanceImages: 'Images',
+    guidanceAnyImage: 'Any image allowed',
+    guidanceDefaultImageOnly: 'Default image only',
+    guidanceResources: 'Resources',
+    guidanceCpu: 'CPU',
+    guidanceMemory: 'Memory',
+    guidanceGpu: 'GPU',
+    guidanceStorage: 'Storage',
+    guidanceStorageSize: 'Size',
+    guidanceIdleShutdown: 'Idle shutdown',
+    guidanceIdleTimeout: 'Timeout (min)',
   },
 
   kubectl: {

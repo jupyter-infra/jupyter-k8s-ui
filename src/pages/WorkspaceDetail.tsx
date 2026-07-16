@@ -1,6 +1,19 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import { Typography, Button, Chip, CircularProgress, Box, Stack, Paper } from '@mui/material';
-import { ArrowBack, PlayArrow, Stop, OpenInNew, Memory, Storage, CheckCircle, Error as ErrorIcon, Schedule, Info } from '@mui/icons-material';
+import {
+  ArrowBack,
+  PlayArrow,
+  Stop,
+  OpenInNew,
+  Edit,
+  Memory,
+  DeveloperBoard,
+  Storage,
+  CheckCircle,
+  Error as ErrorIcon,
+  Schedule,
+  Info,
+} from '@mui/icons-material';
 import { useWorkspace, useStartWorkspace, useStopWorkspace } from '../api';
 import { useAuth } from '../context';
 import { isOwner as checkIsOwner, getWorkspaceStatus, getStatusChipColor, getWorkspaceOwner } from '../utils';
@@ -107,6 +120,13 @@ export function WorkspaceDetail() {
           </Typography>
         </Box>
         <Stack direction="row" gap={1}>
+          {/* Advanced edit is offered only to the owner and only while Stopped, to
+              avoid mutating a live workspace's spec (for now). */}
+          {ownerMatch && workspaceStatus === 'Stopped' && (
+            <Button variant="outlined" startIcon={<Edit />} component={RouterLink} to={`/workspace/${workspace.metadata.name}/edit-advanced`}>
+              {strings.workspace.edit}
+            </Button>
+          )}
           {ownerMatch &&
             (isRunning ? (
               <Button variant="outlined" startIcon={<Stop />} onClick={handleStop} disabled={stopMutation.isPending}>
@@ -170,7 +190,7 @@ export function WorkspaceDetail() {
               <InfoRow
                 label={
                   <Stack direction="row" alignItems="center" gap={0.5}>
-                    <Storage sx={{ fontSize: 16 }} /> Memory
+                    <DeveloperBoard sx={{ fontSize: 16 }} /> Memory
                   </Stack>
                 }
                 value={workspace.spec.resources?.limits?.memory ?? '—'}

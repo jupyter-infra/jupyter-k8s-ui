@@ -1,5 +1,5 @@
 import { Card, CardContent, Typography, IconButton, Chip, Button, Menu, MenuItem, ListItemIcon, Stack, Box, Divider } from '@mui/material';
-import { PlayArrow, Stop, OpenInNew, MoreVert, Delete, Circle, Memory, Storage, Info } from '@mui/icons-material';
+import { PlayArrow, Stop, OpenInNew, MoreVert, Delete, Circle, Memory, DeveloperBoard, Storage, Info, Edit } from '@mui/icons-material';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Workspace } from '../../types';
@@ -46,6 +46,11 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
   };
 
   const handleViewDetails = () => navigate(`/workspace/${metadata.name}`);
+  const handleEdit = () => navigate(`/workspace/${metadata.name}/edit-advanced`);
+
+  // Advanced edit is offered only to the owner and only while Stopped, to avoid
+  // mutating a live workspace's spec (for now).
+  const canEdit = ownerMatch && workspaceStatus === 'Stopped';
 
   const handleDeleteConfirm = () => {
     deleteMutation.mutate(metadata.name, { onSettled: () => setDeleteDialogOpen(false) });
@@ -85,7 +90,7 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
               <Typography variant="caption">{spec.resources?.limits?.cpu ?? '—'} CPU</Typography>
             </Stack>
             <Stack direction="row" alignItems="center" gap={0.5}>
-              <Storage sx={{ fontSize: 16 }} />
+              <DeveloperBoard sx={{ fontSize: 16 }} />
               <Typography variant="caption">{spec.resources?.limits?.memory ?? '—'}</Typography>
             </Stack>
             <Stack direction="row" alignItems="center" gap={0.5}>
@@ -102,6 +107,11 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
           {canOpen && (
             <Button size="small" startIcon={<OpenInNew fontSize="small" />} onClick={handleOpen} color="primary">
               {strings.workspace.open}
+            </Button>
+          )}
+          {canEdit && (
+            <Button size="small" startIcon={<Edit fontSize="small" />} onClick={handleEdit} color="secondary">
+              {strings.workspace.edit}
             </Button>
           )}
           {ownerMatch &&
@@ -123,6 +133,19 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
             </ListItemIcon>
             <Typography variant="body2">{strings.workspace.viewDetails}</Typography>
           </MenuItem>
+          {canEdit && (
+            <MenuItem
+              onClick={() => {
+                handleMenuClose();
+                handleEdit();
+              }}
+            >
+              <ListItemIcon>
+                <Edit fontSize="small" />
+              </ListItemIcon>
+              <Typography variant="body2">{strings.workspace.edit}</Typography>
+            </MenuItem>
+          )}
           {ownerMatch && <Divider />}
           {ownerMatch && (
             <MenuItem onClick={handleDeleteClick}>

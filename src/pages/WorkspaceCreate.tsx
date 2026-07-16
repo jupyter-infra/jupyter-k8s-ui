@@ -234,18 +234,28 @@ export function WorkspaceCreate() {
           </Stack>
         </Paper>
 
-        {/* Advanced hint */}
-        <Typography variant="caption" color="text.secondary" textAlign="center">
-          {ws.advancedHint}{' '}
-          <Link component={RouterLink} to="/kubectl" underline="hover">
-            {ws.advancedHintKubectl}
-          </Link>{' '}
-          {ws.advancedHintOr}{' '}
-          <Link href={ws.advancedHintDocsUrl} target="_blank" rel="noopener" underline="hover">
-            {ws.advancedHintDocs}
-          </Link>
-          .
-        </Typography>
+        {/* Advanced box */}
+        <Paper variant="outlined">
+          <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between" padding={3}>
+            <Stack>
+              <Typography variant="subtitle2">{ws.advancedBoxTitle}</Typography>
+              <Typography variant="caption" color="text.secondary">
+                {ws.advancedBoxIntro}{' '}
+                <Link component={RouterLink} to="/kubectl" underline="hover">
+                  {ws.advancedBoxKubectl}
+                </Link>{' '}
+                {ws.advancedBoxDocsMid}{' '}
+                <Link href={ws.advancedHintDocsUrl} target="_blank" rel="noopener" underline="hover">
+                  {ws.advancedBoxDocsLink}
+                </Link>
+                .
+              </Typography>
+            </Stack>
+            <Button component={RouterLink} to="/create-advanced" variant="outlined" sx={{ flexShrink: 0 }}>
+              {ws.advancedBoxButton}
+            </Button>
+          </Stack>
+        </Paper>
 
         {/* Actions */}
         <Stack direction="row" spacing={2} justifyContent="flex-end">
