@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from './client';
-import type { CreateWorkspaceRequest, Workspace } from '../types';
+import type { CreateWorkspaceRequest, Workspace, AdvancedWorkspacePayload } from '../types';
 import { getWorkspaceStatus } from '../utils';
 import { isAuthError } from './auth-interceptor';
 
@@ -12,6 +12,10 @@ export const workspaceKeys = {
 
 export const templateKeys = {
   all: ['templates'] as const,
+};
+
+export const accessStrategyKeys = {
+  all: ['access-strategies'] as const,
 };
 
 export const clusterAccessKeys = {
@@ -28,6 +32,16 @@ export function useTemplates() {
     queryFn: () => apiClient.listTemplates(),
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
+  });
+}
+
+export function useAccessStrategies() {
+  return useQuery({
+    queryKey: accessStrategyKeys.all,
+    queryFn: () => apiClient.listAccessStrategies(),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    retry: false,
   });
 }
 
@@ -82,6 +96,45 @@ export function useCreateWorkspace() {
     mutationFn: (data: CreateWorkspaceRequest) => apiClient.createWorkspace(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: workspaceKeys.all });
+    },
+  });
+}
+
+export const crdSchemaKeys = {
+  detail: (crd: string) => ['crd-schema', crd] as const,
+};
+
+// The CRD schema is immutable for the pod's lifetime (served from a startup
+// singleton), so cache it aggressively and never refetch on its own.
+export function useCrdSchema(crd: string) {
+  return useQuery({
+    queryKey: crdSchemaKeys.detail(crd),
+    queryFn: () => apiClient.getCrdSchema(crd),
+    staleTime: Infinity,
+    gcTime: Infinity,
+    retry: false,
+  });
+}
+
+// Advanced editor: raw full-spec create/replace (the editor owns the whole spec).
+// Navigation is left to the caller; we keep the existing invalidation behavior.
+export function useCreateWorkspaceAdvanced() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: AdvancedWorkspacePayload) => apiClient.createWorkspaceAdvanced(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: workspaceKeys.all });
+    },
+  });
+}
+
+export function useReplaceWorkspaceAdvanced() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, data }: { name: string; data: AdvancedWorkspacePayload }) => apiClient.replaceWorkspaceAdvanced(name, data),
+    onSuccess: (_res, { name }) => {
+      queryClient.invalidateQueries({ queryKey: workspaceKeys.all });
+      queryClient.invalidateQueries({ queryKey: workspaceKeys.detail(name) });
     },
   });
 }

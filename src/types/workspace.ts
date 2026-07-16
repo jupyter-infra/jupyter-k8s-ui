@@ -63,6 +63,7 @@ export interface WorkspaceTemplateSpec {
   allowCustomImages?: boolean;
   defaultAccessType?: string;
   defaultOwnershipType?: string;
+  baseEnv?: Array<{ name: string; value?: string }>;
   resourceBounds?: {
     resources?: {
       cpu?: { min?: string; max?: string };
@@ -72,6 +73,7 @@ export interface WorkspaceTemplateSpec {
   };
   defaultResources?: {
     requests?: { cpu?: string; memory?: string };
+    limits?: { cpu?: string; memory?: string };
   };
   primaryStorage?: {
     defaultSize?: string;
@@ -117,6 +119,41 @@ export interface UpdateWorkspaceRequest {
   idleShutdown?: { enabled: boolean; timeoutInMinutes?: number };
   podSecurityContext?: Record<string, unknown>;
   accessStrategy?: { name: string; namespace?: string };
+}
+
+// --- Advanced YAML editor ---
+
+// The advanced editor submits a raw spec object (a full-spec replace on update) plus a
+// name and optional templateRef — the latter two are edited via structured controls
+// above the editor, not in the YAML buffer.
+export interface AdvancedWorkspacePayload {
+  name: string;
+  templateRef?: { name: string; namespace?: string };
+  spec: WorkspaceSpec;
+}
+
+// Discovery (templates / access strategies) fans out to the user's namespace and the
+// shared namespace. `access` reports which sources the user's RBAC could list, so the
+// UI can show a graceful-degradation notice without treating denial as an error.
+export interface DiscoveryAccess {
+  user: 'ok' | 'denied';
+  shared: 'ok' | 'denied';
+}
+
+export interface DiscoveredTemplate extends WorkspaceTemplate {
+  sourceNamespace: string;
+}
+
+export interface DiscoveredAccessStrategy {
+  name: string;
+  sourceNamespace: string;
+  displayName?: string;
+  description?: string;
+}
+
+export interface DiscoveryResponse<T> {
+  items: T[];
+  access: DiscoveryAccess;
 }
 
 export interface ClusterAccessInfo {
