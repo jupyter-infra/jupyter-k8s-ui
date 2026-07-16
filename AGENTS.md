@@ -130,10 +130,11 @@ validation layer.
 - React Query polls workspace list every 60s; detail polls every 3s while transitioning
 - Workspace ownership tracked via `workspace.jupyter.org/created-by` annotation
 - Vite proxies `/api` to `http://localhost:8090` in dev mode
-- **Advanced YAML editor** (`/create-advanced`, `/workspace/:name/edit-advanced`):
-  a Monaco + monaco-yaml editor over the `Workspace` CR `spec`. Four validation
-  layers — YAML syntax, CRD schema (from `GET /crd-schema/workspaces`), advisory
-  template bounds/allowed-images, and authoritative `?dryRun=All`.
+- **Advanced YAML editor** — a Monaco + monaco-yaml editor over the `Workspace` CR
+  `spec` (shared `WorkspaceSpecEditor` component). `name`, `displayName`,
+  and `templateRef` are structured controls above the buffer, not in the YAML. Four
+  validation layers — YAML syntax, CRD schema (from `GET /crd-schema/workspaces`),
+  advisory template bounds/allowed-images, and authoritative `?dryRun=All`.
 - CRD spec schemas are read **once at startup** into an in-memory singleton
   (`server/schema/store.ts`): live cluster read via the service account, falling back
   to vendored `server/schema/vendored/*.json` (regenerate with `bun run gen:crd`).
