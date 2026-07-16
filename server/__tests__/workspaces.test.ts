@@ -228,3 +228,79 @@ describe('handleListWorkspaces / handleGetWorkspace / handleDeleteWorkspace', ()
     expect(mockedK8s.del).toHaveBeenCalled();
   });
 });
+
+// --- Advanced editor: raw-spec payload + dry-run ---
+
+function advancedRequest(body: unknown, method = 'POST', dryRun = false) {
+  const url = dryRun ? 'http://x/api/v1/workspaces?dryRun=All' : 'http://x/api/v1/workspaces';
+  return new Request(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+}
+
+// dryRun is the 7th positional arg (index 6) on both create and replace.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const lastCreateDryRun = (): unknown => (mockedK8s.create.mock.calls.at(-1) as any)[6];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const lastReplaceDryRun = (): unknown => (mockedK8s.replace.mock.calls.at(-1) as any)[6];
+
+describe('advanced create (raw spec)', () => {
+  test('uses the raw spec verbatim instead of building from form fields', async () => {
+    await handleCreateWorkspace('jwt', advancedRequest({ name: 'adv-ws', spec: { displayName: 'Adv', image: 'custom:1', env: [{ name: 'X', value: 'y' }] } }));
+    const obj = lastCreated();
+    expect(obj.spec.image).toBe('custom:1');
+    expect(obj.spec.env).toEqual([{ name: 'X', value: 'y' }]);
+    // No form defaults injected — the advanced spec is authoritative.
+    expect(obj.spec).not.toHaveProperty('ownershipType');
+  });
+
+  test('merges the hoisted templateRef into the spec', async () => {
+    await handleCreateWorkspace('jwt', advancedRequest({ name: 'adv-ws', templateRef: { name: 'gpu-small' }, spec: { displayName: 'Adv' } }));
+    const obj = lastCreated();
+    expect(obj.spec.templateRef).toEqual({ name: 'gpu-small' });
+  });
+
+  test('still validates the workspace name', async () => {
+    const res = await handleCreateWorkspace('jwt', advancedRequest({ name: 'Bad_Name', spec: { displayName: 'x' } }));
+    expect(res.status).toBe(400);
+    expect(mockedK8s.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('dry-run threading', () => {
+  test('create passes dryRun=All to the client and returns {valid:true} without a resource', async () => {
+    const res = await handleCreateWorkspace('jwt', advancedRequest({ name: 'adv-ws', spec: { displayName: 'x' } }, 'POST', true));
+    expect(lastCreateDryRun()).toBe('All');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ valid: true });
+  });
+
+  test('create without dryRun passes undefined and returns the created resource (201)', async () => {
+    const res = await handleCreateWorkspace('jwt', advancedRequest({ name: 'adv-ws', spec: { displayName: 'x' } }));
+    expect(lastCreateDryRun()).toBeUndefined();
+    expect(res.status).toBe(201);
+  });
+
+  test('update passes dryRun=All and returns {valid:true}', async () => {
+    const res = await handleUpdateWorkspace('jwt', 'ws-1', advancedRequest({ name: 'ws-1', spec: { displayName: 'x' } }, 'PUT', true));
+    expect(lastReplaceDryRun()).toBe('All');
+    expect(await res.json()).toEqual({ valid: true });
+  });
+});
+
+describe('advanced update does a full spec replace', () => {
+  test('replaces the whole spec so removed fields disappear', async () => {
+    // Existing ws-1 has { displayName, desiredStatus }. Advanced update sends only
+    // displayName — desiredStatus must NOT survive (WYSIWYG replace, not merge).
+    await handleUpdateWorkspace('jwt', 'ws-1', advancedRequest({ name: 'ws-1', spec: { displayName: 'only-this' } }, 'PUT'));
+    const obj = lastReplaced();
+    expect(obj.spec).toEqual({ displayName: 'only-this' });
+    expect(obj.spec).not.toHaveProperty('desiredStatus');
+  });
+
+  test('simple-form update still merges (desiredStatus preserved)', async () => {
+    // Contrast: the field-shaped body overlays onto the existing spec.
+    await handleUpdateWorkspace('jwt', 'ws-1', jsonRequest({ displayName: 'merged' }, 'PUT'));
+    const obj = lastReplaced();
+    expect(obj.spec.displayName).toBe('merged');
+    expect(obj.spec.desiredStatus).toBe('Running'); // preserved from existing
+  });
+});

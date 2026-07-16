@@ -9,6 +9,11 @@ export const SECURITY_HEADERS: Record<string, string> = {
   'Cache-Control': 'no-store',
   'Content-Security-Policy': [
     "default-src 'self'",
+    // Monaco's language services (incl. monaco-yaml's YAML worker) instantiate web
+    // workers from blob: URLs — that's baked into Monaco's worker loader, not a Vite
+    // choice. `worker-src` scopes this to workers only; the blob content is still our
+    // own bundled, same-origin script, so script-src stays 'self' with no blob:.
+    "worker-src 'self' blob:",
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
@@ -47,15 +52,61 @@ interface K8sError {
   message?: string;
 }
 
+// The K8s API server returns a metav1.Status body on errors. For validation (422)
+// and admission-webhook rejections, `message` carries the human-readable reason
+// (e.g. "image X not permitted by template gpu-small") and `details.causes[]` the
+// per-field breakdown. The advanced editor's dry-run validation depends on surfacing
+// this verbatim — the generic mapped status string alone is useless there.
+interface K8sStatusBody {
+  message?: string;
+  reason?: string;
+  details?: {
+    causes?: Array<{ field?: string; message?: string; reason?: string }>;
+  };
+}
+
+function extractK8sStatusBody(error: unknown): K8sStatusBody | undefined {
+  const raw = (error as { body?: unknown })?.body;
+  if (!raw) return undefined;
+  if (typeof raw === 'string') {
+    try {
+      return JSON.parse(raw) as K8sStatusBody;
+    } catch {
+      return { message: raw };
+    }
+  }
+  if (typeof raw === 'object') return raw as K8sStatusBody;
+  return undefined;
+}
+
+/**
+ * Format the K8s Status body into a readable `details` string: the top-level message,
+ * plus any per-field causes. Returns undefined when there's nothing useful to add.
+ */
+function formatK8sDetails(body: K8sStatusBody | undefined): string | undefined {
+  if (!body) return undefined;
+  const parts: string[] = [];
+  if (body.message) parts.push(body.message);
+  for (const cause of body.details?.causes ?? []) {
+    const field = cause.field ? `${cause.field}: ` : '';
+    if (cause.message) parts.push(`${field}${cause.message}`);
+  }
+  return parts.length > 0 ? parts.join('\n') : undefined;
+}
+
 export function handleK8sError(error: unknown, fallbackMessage: string): Response {
   const err = error as K8sError;
-  const body = (error as { body?: unknown })?.body;
-  log('error', fallbackMessage, err.message || error, ...(body ? [JSON.stringify(body)] : []));
+  const statusBody = extractK8sStatusBody(error);
+  log('error', fallbackMessage, err.message || error, ...(statusBody ? [JSON.stringify(statusBody)] : []));
 
+  const details = formatK8sDetails(statusBody);
   const mapped = err.statusCode ? K8S_STATUS_MAP.get(err.statusCode) : undefined;
   if (mapped) {
-    return errorResponse(mapped.status, mapped.message);
+    // Surface the webhook/API-server message as `details` alongside the mapped
+    // human-friendly `error`. Existing consumers ignore `details`; the advanced
+    // editor renders it.
+    return errorResponse(mapped.status, mapped.message, details);
   }
 
-  return errorResponse(500, fallbackMessage, err.message);
+  return errorResponse(500, fallbackMessage, details ?? err.message);
 }

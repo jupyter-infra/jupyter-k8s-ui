@@ -31,4 +31,40 @@ describe('handleK8sError', () => {
     const res = handleK8sError('string error', 'fallback');
     expect(res.status).toBe(500);
   });
+
+  // The advanced editor's dry-run validation needs the webhook's actual message, not
+  // the generic mapped status string — so it must survive in `details`.
+  test('surfaces the K8s Status body message as details on a 422', async () => {
+    const err = Object.assign(new Error('422'), {
+      statusCode: 422,
+      body: { message: 'image "evil:latest" not permitted by template gpu-small' },
+    });
+    const res = handleK8sError(err, 'Failed to create workspace');
+    const body = (await res.json()) as { error: string; details: string };
+    expect(res.status).toBe(422);
+    expect(body.details).toContain('not permitted by template gpu-small');
+  });
+
+  test('includes per-field causes from the Status body details', async () => {
+    const err = Object.assign(new Error('422'), {
+      statusCode: 422,
+      body: {
+        message: 'admission webhook denied the request',
+        details: { causes: [{ field: 'spec.resources.limits.cpu', message: 'exceeds maximum 8' }] },
+      },
+    });
+    const res = handleK8sError(err, 'fallback');
+    const body = (await res.json()) as { details: string };
+    expect(body.details).toContain('spec.resources.limits.cpu: exceeds maximum 8');
+  });
+
+  test('parses a stringified JSON body (client-node sometimes returns a string)', async () => {
+    const err = Object.assign(new Error('422'), {
+      statusCode: 422,
+      body: JSON.stringify({ message: 'bad thing happened' }),
+    });
+    const res = handleK8sError(err, 'fallback');
+    const body = (await res.json()) as { details: string };
+    expect(body.details).toContain('bad thing happened');
+  });
 });

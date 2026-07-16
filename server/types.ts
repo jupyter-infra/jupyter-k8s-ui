@@ -164,6 +164,16 @@ export interface UpdateWorkspaceBody {
   accessStrategy?: { name: string; namespace?: string };
 }
 
+// Advanced YAML editor payload: a raw spec plus name + optional templateRef (the
+// latter edited via a control above the editor, not in the buffer). Distinguished
+// from the form bodies by the presence of `spec`. The editor owns the whole spec, so
+// an update is a full-spec replace rather than a field merge.
+export interface AdvancedWorkspaceBody {
+  name: string;
+  templateRef?: { name: string; namespace?: string };
+  spec: Record<string, unknown>;
+}
+
 // --- Log Level ---
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -205,6 +215,9 @@ export interface ClusterAccessConfig {
 
 export interface ServerConfig {
   namespace: string;
+  // Shared namespace where admins publish cluster-wide templates / access
+  // strategies (operator's --default-template-namespace, default jupyter-k8s-shared).
+  sharedNamespace: string;
   staticDir: string;
   devUser: string;
   devAccessToken: string;

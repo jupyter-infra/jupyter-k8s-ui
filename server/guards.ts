@@ -4,7 +4,16 @@
 // runtime check, so these guards re-validate the values the CRD actually accepts
 // at our boundary — turning a cryptic K8s 422 into a clear 400 (see #39).
 
-import { ACCESS_TYPES, OWNERSHIP_TYPES, DESIRED_STATUSES, type AccessType, type OwnershipType, type DesiredStatus, type CreateWorkspaceBody } from './types';
+import {
+  ACCESS_TYPES,
+  OWNERSHIP_TYPES,
+  DESIRED_STATUSES,
+  type AccessType,
+  type OwnershipType,
+  type DesiredStatus,
+  type CreateWorkspaceBody,
+  type AdvancedWorkspaceBody,
+} from './types';
 
 function isOneOf<T extends string>(allowed: readonly T[], value: unknown): value is T {
   return typeof value === 'string' && (allowed as readonly string[]).includes(value);
@@ -47,4 +56,10 @@ const K8S_NAME_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 // Default 253: K8s resource name limit. Frontend uses 63 (DNS label / label-value safe).
 export function isValidK8sName(name: unknown, maxLength = 253): name is string {
   return typeof name === 'string' && name.length > 0 && name.length <= maxLength && K8S_NAME_PATTERN.test(name);
+}
+
+// The advanced editor sends { name, templateRef?, spec }; the simple form sends a flat
+// field body. Presence of an object `spec` distinguishes the raw-spec shape.
+export function isAdvancedCreateOrEditWorkspaceBody(body: unknown): body is AdvancedWorkspaceBody {
+  return typeof body === 'object' && body !== null && 'spec' in body && typeof (body as { spec?: unknown }).spec === 'object';
 }

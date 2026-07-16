@@ -3,6 +3,7 @@ import { initializeConfig, serverConfig } from './k8s/config';
 import { log } from './logger';
 import { handleRequest } from './middleware/router';
 import { initSecretWatcher, stopSecretWatcher } from './secret-watcher';
+import { initSchemaStore } from './schema/store';
 
 // --- Initialize ---
 
@@ -26,6 +27,12 @@ if (serverConfig.session.enabled) {
     log('error', `Failed to initialize secret watcher: ${err instanceof Error ? err.message : String(err)}`);
   });
 }
+
+// Load CRD spec schemas once (live read + vendored fallback). Non-fatal: the store
+// degrades to vendored schemas, and the editor falls back further to plain YAML.
+initSchemaStore().catch((err) => {
+  log('error', `Failed to initialize CRD schema store: ${err instanceof Error ? err.message : String(err)}`);
+});
 
 const server = serve({
   port: serverConfig.port,

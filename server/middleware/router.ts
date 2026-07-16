@@ -8,8 +8,10 @@ import { buildClearCookieHeader } from './session';
 import { serveStatic } from '../static';
 import { handleListWorkspaces, handleGetWorkspace, handleCreateWorkspace, handleUpdateWorkspace, handleDeleteWorkspace } from '../handlers/workspaces';
 import { handleListTemplates } from '../handlers/templates';
+import { handleListAccessStrategies } from '../handlers/access-strategies';
 import { handleGetMe } from '../handlers/me';
 import { handleGetClusterAccess } from '../handlers/cluster-access';
+import { handleGetCrdSchema } from '../handlers/crd-schema';
 
 // --- Route paths ---
 
@@ -21,7 +23,9 @@ const ROUTES = {
   workspaces: `${API_PREFIX}/workspaces`,
   workspace: new RegExp(`^${API_PREFIX}/workspaces/([^/]+)$`),
   templates: `${API_PREFIX}/templates`,
+  accessStrategies: `${API_PREFIX}/access-strategies`,
   clusterAccess: `${API_PREFIX}/cluster-access`,
+  crdSchema: new RegExp(`^${API_PREFIX}/crd-schema/([^/]+)$`),
 } as const;
 
 // --- Request Handler ---
@@ -152,8 +156,25 @@ async function routeRequest(req: Request): Promise<Response> {
       );
     }
 
+    if (pathname === ROUTES.accessStrategies) {
+      return dispatch(
+        method,
+        {
+          GET: () => handleListAccessStrategies(jwt),
+        },
+        jwt,
+        source,
+      );
+    }
+
     if (pathname === ROUTES.clusterAccess && method === 'GET') {
       return withSessionCookie(handleGetClusterAccess(), jwt, source);
+    }
+
+    const crdSchemaMatch = pathname.match(ROUTES.crdSchema);
+    if (crdSchemaMatch && method === 'GET') {
+      // Served from the in-memory singleton (SA-loaded at startup); no per-user data.
+      return withSessionCookie(handleGetCrdSchema(crdSchemaMatch[1]), jwt, source);
     }
 
     return errorResponse(404, 'API endpoint not found');
