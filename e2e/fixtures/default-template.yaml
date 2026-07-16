@@ -9,6 +9,12 @@ spec:
   displayName: Default
   description: Default workspace template for E2E tests
   defaultImage: nginx:latest
+  # allowedImages + resourceBounds exercise the advanced editor's template guidance
+  # and the dry-run rejection path. nginx:latest stays in the list so the
+  # default-create flow (which relies on the template default image) still admits.
+  allowedImages:
+    - nginx:latest
+    - nginx:1.27
   defaultResources:
     requests:
       cpu: '100m'
@@ -16,6 +22,14 @@ spec:
     limits:
       cpu: '500m'
       memory: '512Mi'
+  resourceBounds:
+    resources:
+      cpu:
+        min: '100m'
+        max: '2'
+      memory:
+        min: '128Mi'
+        max: '2Gi'
   primaryStorage:
     defaultSize: '1Gi'
     minSize: '1Gi'

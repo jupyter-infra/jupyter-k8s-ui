@@ -16,6 +16,11 @@ rules:
   - apiGroups: ['workspace.jupyter.org']
     resources: ['workspacetemplates']
     verbs: ['get', 'list']
+  # Access-strategy discovery for the advanced editor. get/list only —
+  # discovery is read-only.
+  - apiGroups: ['workspace.jupyter.org']
+    resources: ['workspaceaccessstrategies']
+    verbs: ['get', 'list']
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
