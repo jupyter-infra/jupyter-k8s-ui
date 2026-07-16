@@ -5,7 +5,8 @@
 //
 // When a template is selected, its defaults are folded into the commented values
 // (image, env, resources, accessType, ownershipType); otherwise sensible fallbacks are
-// used. templateRef is deliberately absent — it's owned by the dropdown control.
+// used. templateRef and displayName are deliberately absent — they're owned by the
+// dedicated controls above the editor (dropdown / text field), not the YAML buffer.
 
 import type { DiscoveredTemplate } from '../types';
 
@@ -34,11 +35,10 @@ export function buildCreateScaffold(template: DiscoveredTemplate | null, docsUrl
   const ownershipType = spec?.defaultOwnershipType ?? 'Public';
 
   return [
-    'displayName: My Workspace',
     'desiredStatus: Running',
     '',
     '# --- Common overrides ---',
-    '# templateRef is set via the "Template" dropdown above — do not add it here.',
+    '# name / displayName / templateRef are set via the controls above — not here.',
     `# image: ${image}`,
     `# accessType: ${accessType}`,
     `# ownershipType: ${ownershipType}`,

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Autocomplete, TextField, FormControl } from '@mui/material';
 import { useTemplates } from '../../../api';
 import type { DiscoveredTemplate } from '../../../types';
@@ -32,10 +32,28 @@ export function TemplateSelect({ value, onChange, onTemplateResolved }: Template
   // errored outright, or when neither namespace was listable.
   const discoveryUnavailable = isError || (data?.access.user === 'denied' && data?.access.shared === 'denied');
 
+  // Resolve `value` → the full template object and report it to the parent. This is an
+  // effect (not just done in the change handler) so it also fires when `value` is set
+  // PROGRAMMATICALLY — e.g. the edit page lifting `templateRef` out of the fetched spec
+  // — and re-runs once the templates list finishes loading (async), which is when a
+  // seeded value can finally resolve to its object. Without this, opening the edit page
+  // left the guidance panel blank because onTemplateResolved never fired.
+  const lastReportedRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    // Only report once the list has loaded (or errored), so we don't prematurely
+    // resolve a seeded name to null while templates are still in flight.
+    if (data === undefined) return;
+    if (lastReportedRef.current === value) return;
+    lastReportedRef.current = value;
+    onTemplateResolved?.(value ? (templates.find((t) => t.metadata.name === value) ?? null) : null);
+  }, [value, data, templates, onTemplateResolved]);
+
   const handleChange = (next: string | null) => {
     const name = next && next.length > 0 ? next : null;
     onChange(name);
-    onTemplateResolved?.(name ? (templates.find((t) => t.metadata.name === name) ?? null) : null);
+    // onTemplateResolved is driven by the effect above (keyed on `value`); the parent's
+    // onChange updates `value`, which re-runs it. No direct call here to avoid a
+    // double-fire.
   };
 
   return (

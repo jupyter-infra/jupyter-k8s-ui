@@ -46,7 +46,7 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
   };
 
   const handleViewDetails = () => navigate(`/workspace/${metadata.name}`);
-  const handleEdit = () => navigate(`/workspace/${metadata.name}/edit-advanced`);
+  const handleEdit = () => navigate(`/workspace/${metadata.name}/edit`);
 
   // Advanced edit is offered only to the owner and only while Stopped, to avoid
   // mutating a live workspace's spec (for now).

@@ -44,9 +44,8 @@ function AppContent() {
             <Route path="/" element={<Layout />}>
               <Route index element={<WorkspaceList />} />
               <Route path="create" element={<WorkspaceCreate />} />
-              <Route path="create-advanced" element={<WorkspaceAdvancedEditor mode="create" />} />
               <Route path="workspace/:name" element={<WorkspaceDetail />} />
-              <Route path="workspace/:name/edit-advanced" element={<WorkspaceAdvancedEditor mode="edit" />} />
+              <Route path="workspace/:name/edit" element={<WorkspaceAdvancedEditor />} />
               <Route path="kubectl" element={<KubectlAccess />} />
             </Route>
           </Routes>

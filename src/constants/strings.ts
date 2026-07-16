@@ -112,6 +112,12 @@ export const strings = {
     advancedBoxDocsMid: 'or read the',
     advancedBoxDocsLink: 'CRD reference',
     advancedBoxButton: 'YAML editor',
+    // Inline form <-> YAML toggle on the create page.
+    advancedSwitchToYaml: 'YAML editor',
+    advancedSwitchToForm: 'Simple form',
+    advancedDiscardTitle: 'Discard YAML edits?',
+    advancedDiscardMessage: 'Switching back to the simple form will discard your YAML changes. Continue?',
+    advancedDiscardConfirm: 'Discard & switch',
 
     // Delete dialog
     deleteTitle: 'Delete Workspace',
@@ -129,6 +135,11 @@ export const strings = {
     advancedTemplateNone: '(none — use namespace default)',
     advancedTemplateFreeText: 'Enter template name manually',
     advancedResolvedBanner: 'This shows the current resolved configuration, including values applied by the template.',
+    advancedTemplateSwitchTitle: 'Regenerate scaffold?',
+    advancedTemplateSwitchMessage: (tmpl: string) =>
+      `Apply "${tmpl}"'s defaults to the editor? This regenerates the scaffold and discards your current YAML edits.`,
+    advancedTemplateSwitchConfirm: 'Regenerate',
+    advancedTemplateSwitchKeep: 'Keep my edits',
     advancedTemplatesUnavailable: "Couldn't load available templates — you can still enter a template reference manually; validation will confirm it on save.",
     advancedValidate: 'Validate',
     advancedValidating: 'Validating…',

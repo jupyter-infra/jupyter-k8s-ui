@@ -11,9 +11,10 @@ function template(spec: Partial<DiscoveredTemplate['spec']>): DiscoveredTemplate
 
 const DOCS = 'https://example.test/crd';
 
-// templateRef is intentionally excluded from the scaffold — it's edited via the
-// "Template" dropdown control, not typed into the YAML buffer.
-const SCAFFOLD_EXCLUDES = new Set(['templateRef']);
+// templateRef and displayName are intentionally excluded from the scaffold — they're
+// edited via dedicated controls above the editor (dropdown / text field), not typed
+// into the YAML buffer.
+const SCAFFOLD_EXCLUDES = new Set(['templateRef', 'displayName']);
 
 // The generated Workspace CRD spec schema (source of truth). We compare the scaffold's
 // top-level fields against this so the two can't silently drift apart when the CRD
@@ -41,7 +42,7 @@ describe('buildCreateScaffold', () => {
   test('active lines parse to exactly the required fields (everything else commented)', () => {
     const result = yamlToSpec(buildCreateScaffold(null, DOCS));
     expect(result.error).toBeNull();
-    expect(result.spec).toEqual({ displayName: 'My Workspace', desiredStatus: 'Running' });
+    expect(result.spec).toEqual({ desiredStatus: 'Running' });
   });
 
   test('uses fallbacks when no template is selected', () => {
@@ -71,11 +72,12 @@ describe('buildCreateScaffold', () => {
     expect(scaffold).toContain('# env: [{"name":"TEAM","value":"ml"}]');
   });
 
-  test('never scaffolds templateRef into the buffer (it is owned by the dropdown)', () => {
+  test('never scaffolds templateRef or displayName into the buffer (they are owned by the controls above)', () => {
     const scaffold = buildCreateScaffold(template({ defaultImage: 'x:1' }), DOCS);
-    // No active or commented templateRef key — only the explanatory note.
+    // No active or commented templateRef / displayName key — only the explanatory note.
     expect(scaffold).not.toMatch(/^#?\s*templateRef:/m);
-    expect(scaffold).toContain('Template" dropdown above');
+    expect(scaffold).not.toMatch(/^#?\s*displayName:/m);
+    expect(scaffold).toContain('controls above');
   });
 
   test('points advanced fields at the docs URL instead of inline help', () => {
@@ -108,9 +110,11 @@ describe('buildCreateScaffold', () => {
       expect(missing).toEqual([]);
     });
 
-    test('templateRef is the only intentional exclusion, and it is genuinely absent', () => {
+    test('templateRef and displayName are the intentional exclusions, and are genuinely absent', () => {
       expect(crdFields).toContain('templateRef');
+      expect(crdFields).toContain('displayName');
       expect(scaffoldFields.has('templateRef')).toBe(false);
+      expect(scaffoldFields.has('displayName')).toBe(false);
     });
   });
 });
