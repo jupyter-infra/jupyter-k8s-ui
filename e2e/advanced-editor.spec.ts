@@ -69,6 +69,26 @@ async function waitForCardStatus(page: Page, name: string, statusText: string) {
     .toBeTruthy();
 }
 
+/**
+ * Open the advanced create editor. There is no `/create-advanced` route anymore — the
+ * YAML editor is an inline toggle on the `/create` page (the simple form and the editor
+ * share the Name/Display name fields above them). Navigate to /create and flip the toggle.
+ */
+async function openAdvancedCreate(page: Page) {
+  await page.goto('/create');
+  await page.getByRole('button', { name: /^yaml editor$/i }).click();
+  await waitForEditor(page);
+}
+
+/** Set the run-unique name via the Name field, mirroring displayName so cards are findable. */
+async function fillIdentity(page: Page, name: string) {
+  // Type the Name first, then overwrite Display name so the card aria-label
+  // ("{displayName} workspace, …") matches the run-unique name (the two fields are
+  // linked: Display name -> Name derivation, but here we set both explicitly).
+  await page.getByRole('textbox', { name: /^name$/i }).fill(name);
+  await page.getByRole('textbox', { name: /display name/i }).fill(name);
+}
+
 async function deleteWorkspace(page: Page, name: string) {
   await page.goto('/');
   await page.getByRole('button', { name: /all/i }).click();
@@ -87,13 +107,12 @@ test.describe('Advanced YAML editor', () => {
 
   test('create via advanced editor reaches Running', async ({ page }) => {
     const name = `${RUN_ID}-create`;
-    await page.goto('/create-advanced');
-    await waitForEditor(page);
+    await openAdvancedCreate(page);
 
-    await page.getByRole('textbox', { name: /^name$/i }).fill(name);
-    // displayName === name so the card's aria-label ("{displayName} workspace, …") is
-    // findable by the run-unique name.
-    await setEditorYaml(page, `displayName: ${name}\ndesiredStatus: Running\n`);
+    // displayName === name (set via the Display name field, no longer in the buffer) so
+    // the card's aria-label ("{displayName} workspace, …") is findable by the run name.
+    await fillIdentity(page, name);
+    await setEditorYaml(page, 'desiredStatus: Running\n');
 
     await page.getByRole('button', { name: /create workspace/i }).click();
     await expect(page).toHaveURL('/', { timeout: 10_000 });
@@ -103,9 +122,9 @@ test.describe('Advanced YAML editor', () => {
     await waitForCardStatus(page, name, 'Running');
   });
 
-  test('edit route pre-populates YAML and freezes the name', async ({ page }) => {
+  test('edit route pre-populates the fields and freezes the name', async ({ page }) => {
     const name = `${RUN_ID}-create`;
-    await page.goto(`/workspace/${name}/edit-advanced`);
+    await page.goto(`/workspace/${name}/edit`);
     await waitForEditor(page);
 
     // Name control is present but disabled (K8s names are immutable).
@@ -113,16 +132,19 @@ test.describe('Advanced YAML editor', () => {
     await expect(nameField).toHaveValue(name);
     await expect(nameField).toBeDisabled();
 
-    // The resolved spec is seeded into the buffer (read via the model API).
-    await expect.poll(async () => getEditorYaml(page), { timeout: 10_000 }).toContain('displayName');
+    // displayName is lifted OUT of the buffer into its own field (no longer in the YAML).
+    await expect(page.getByRole('textbox', { name: /display name/i })).toHaveValue(name);
+    // The rest of the resolved spec is seeded into the buffer (read via the model API).
+    await expect.poll(async () => getEditorYaml(page), { timeout: 10_000 }).toContain('desiredStatus');
   });
 
   test('edit changes displayName and persists', async ({ page }) => {
     const name = `${RUN_ID}-create`;
-    await page.goto(`/workspace/${name}/edit-advanced`);
+    await page.goto(`/workspace/${name}/edit`);
     await waitForEditor(page);
 
-    await setEditorYaml(page, 'displayName: Renamed Adv\ndesiredStatus: Running\n');
+    // displayName is edited via its field now, not the YAML buffer.
+    await page.getByRole('textbox', { name: /display name/i }).fill('Renamed Adv');
     await page.getByRole('button', { name: /save changes/i }).click();
     await expect(page).toHaveURL('/', { timeout: 10_000 });
 
@@ -132,22 +154,20 @@ test.describe('Advanced YAML editor', () => {
   });
 
   test('YAML syntax error blocks save', async ({ page }) => {
-    await page.goto('/create-advanced');
-    await waitForEditor(page);
-    await page.getByRole('textbox', { name: /^name$/i }).fill(`${RUN_ID}-syntax`);
+    await openAdvancedCreate(page);
+    await fillIdentity(page, `${RUN_ID}-syntax`);
 
     // Broken YAML (bad indentation / stray colons).
-    await setEditorYaml(page, 'displayName: test\n  bad: : :\n');
+    await setEditorYaml(page, 'desiredStatus: Running\n  bad: : :\n');
     await expect(page.getByRole('button', { name: /create workspace/i })).toBeDisabled();
   });
 
   test('CRD schema error on a bad enum blocks save', async ({ page }) => {
-    await page.goto('/create-advanced');
-    await waitForEditor(page);
-    await page.getByRole('textbox', { name: /^name$/i }).fill(`${RUN_ID}-schema`);
+    await openAdvancedCreate(page);
+    await fillIdentity(page, `${RUN_ID}-schema`);
 
     // desiredStatus only accepts Running/Stopped — Frozen is a schema violation.
-    await setEditorYaml(page, 'displayName: test\ndesiredStatus: Frozen\n');
+    await setEditorYaml(page, 'desiredStatus: Frozen\n');
     // Wait for the language worker to flag it, then Save must be disabled.
     await expect(page.getByRole('button', { name: /create workspace/i })).toBeDisabled({ timeout: 10_000 });
   });
@@ -155,29 +175,27 @@ test.describe('Advanced YAML editor', () => {
   // --- Server dry-run validation (authoritative) ---
 
   test('dry-run rejects an invalid manifest with the operator message, then fixes', async ({ page }) => {
-    await page.goto('/create-advanced');
-    await waitForEditor(page);
-    await page.getByRole('textbox', { name: /^name$/i }).fill(`${RUN_ID}-dryrun`);
+    await openAdvancedCreate(page);
+    await fillIdentity(page, `${RUN_ID}-dryrun`);
 
     // Image not in the template's allowedImages -> validating webhook rejects.
-    await setEditorYaml(page, 'displayName: test\nimage: evil/not-allowed:latest\n');
+    await setEditorYaml(page, 'image: evil/not-allowed:latest\n');
     await page.getByRole('button', { name: /^validate$/i }).click();
 
     // The webhook's own message is surfaced (not just a generic status).
     await expect(page.getByText(/not permitted|not allowed|validation/i)).toBeVisible({ timeout: 15_000 });
 
     // Fix to an allowed image -> validation passes.
-    await setEditorYaml(page, 'displayName: test\nimage: nginx:latest\n');
+    await setEditorYaml(page, 'image: nginx:latest\n');
     await page.getByRole('button', { name: /^validate$/i }).click();
     await expect(page.getByText(/validation passed/i)).toBeVisible({ timeout: 15_000 });
   });
 
   test('Validate does not create a resource', async ({ page }) => {
     const name = `${RUN_ID}-novalidate`;
-    await page.goto('/create-advanced');
-    await waitForEditor(page);
-    await page.getByRole('textbox', { name: /^name$/i }).fill(name);
-    await setEditorYaml(page, 'displayName: test\ndesiredStatus: Running\n');
+    await openAdvancedCreate(page);
+    await fillIdentity(page, name);
+    await setEditorYaml(page, 'desiredStatus: Running\n');
 
     await page.getByRole('button', { name: /^validate$/i }).click();
     await expect(page.getByText(/validation passed/i)).toBeVisible({ timeout: 15_000 });
@@ -192,8 +210,7 @@ test.describe('Advanced YAML editor', () => {
   // --- Template discovery + guidance ---
 
   test('template guidance panel lists the default template bounds', async ({ page }) => {
-    await page.goto('/create-advanced');
-    await waitForEditor(page);
+    await openAdvancedCreate(page);
 
     // Select the seeded default template from the dropdown.
     await page.getByRole('combobox', { name: /template/i }).fill('default');
@@ -212,17 +229,66 @@ test.describe('Advanced YAML editor', () => {
   });
 
   test('image-not-allowed shows an advisory warning but does not block save', async ({ page }) => {
-    await page.goto('/create-advanced');
-    await waitForEditor(page);
-    await page.getByRole('textbox', { name: /^name$/i }).fill(`${RUN_ID}-warn`);
+    await openAdvancedCreate(page);
+    await fillIdentity(page, `${RUN_ID}-warn`);
 
     await page.getByRole('combobox', { name: /template/i }).fill('default');
     await page.getByRole('option', { name: 'default' }).click();
 
     // An image outside the template allowlist -> advisory warning, Save still enabled.
-    await setEditorYaml(page, 'displayName: test\nimage: some/other:tag\n');
+    // (The template switch after edits may prompt to regenerate — keep our edits.)
+    await setEditorYaml(page, 'image: some/other:tag\n');
     await expect(page.getByText(/allowed list|isn't in template/i)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('button', { name: /create workspace/i })).toBeEnabled();
+  });
+
+  // --- Inline form <-> YAML toggle (create page) ---
+
+  test('toggling to the YAML editor preserves the name/display name already entered', async ({ page }) => {
+    const name = `${RUN_ID}-toggle`;
+    await page.goto('/create');
+    // Fill identity on the simple form, then switch to YAML — the fields carry over.
+    await page.getByRole('textbox', { name: /^name$/i }).fill(name);
+    await page.getByRole('textbox', { name: /display name/i }).fill('Toggle Kept');
+
+    await page.getByRole('button', { name: /^yaml editor$/i }).click();
+    await waitForEditor(page);
+
+    await expect(page.getByRole('textbox', { name: /^name$/i })).toHaveValue(name);
+    await expect(page.getByRole('textbox', { name: /display name/i })).toHaveValue('Toggle Kept');
+  });
+
+  test('switching back to the simple form is immediate while the buffer is pristine', async ({ page }) => {
+    await page.goto('/create');
+    await page.getByRole('button', { name: /^yaml editor$/i }).click();
+    await waitForEditor(page);
+
+    // No hand-edits yet -> switching back goes straight to the form, no discard prompt.
+    await page.getByRole('button', { name: /^simple form$/i }).click();
+    await expect(page.getByText('Resources', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /create workspace/i })).toBeVisible();
+  });
+
+  test('switching back to the simple form with a dirty buffer prompts before discarding', async ({ page }) => {
+    await page.goto('/create');
+    await page.getByRole('button', { name: /^yaml editor$/i }).click();
+    await waitForEditor(page);
+
+    // A genuine keystroke (not the model-API setValue, which fires isFlush=true and is
+    // treated as programmatic) marks the buffer dirty. Focus the editor and type a char.
+    await page.locator('.monaco-editor textarea').first().focus();
+    await page.keyboard.type('# edit');
+
+    // A discard confirmation appears; cancelling keeps us in the editor.
+    await page.getByRole('button', { name: /^simple form$/i }).click();
+    await expect(page.getByText(/discard yaml edits|discard your yaml changes/i)).toBeVisible({ timeout: 5_000 });
+    await page.getByRole('button', { name: /^cancel$/i }).click();
+    await waitForEditor(page);
+
+    // Confirming the discard returns to the simple form (Resources section visible).
+    await page.getByRole('button', { name: /^simple form$/i }).click();
+    await page.getByRole('button', { name: /discard & switch/i }).click();
+    await expect(page.getByText('Resources', { exact: true })).toBeVisible();
   });
 
   // Clean up any workspaces this spec created.
@@ -245,11 +311,10 @@ test.describe('Advanced editor — entry points', () => {
   // Create a workspace that settles to Stopped so the Edit buttons appear.
   test.beforeAll(async ({ browser }) => {
     const page = await browser.newPage();
-    await page.goto('/create-advanced');
-    await waitForEditor(page);
-    await page.getByRole('textbox', { name: /^name$/i }).fill(STOPPED_WS);
+    await openAdvancedCreate(page);
     // displayName === name so the card is findable by name (aria-label uses displayName).
-    await setEditorYaml(page, `displayName: ${STOPPED_WS}\ndesiredStatus: Stopped\n`);
+    await fillIdentity(page, STOPPED_WS);
+    await setEditorYaml(page, 'desiredStatus: Stopped\n');
     const createBtn = page.getByRole('button', { name: /create workspace/i });
     await expect(createBtn).toBeEnabled();
     await createBtn.click();
@@ -259,17 +324,17 @@ test.describe('Advanced editor — entry points', () => {
     await page.close();
   });
 
-  // 1/ Detail page Edit button (Stopped WS) -> edit-advanced page
+  // 1/ Detail page Edit button (Stopped WS) -> edit page
   test('detail-page Edit button navigates to the edit editor', async ({ page }) => {
     await page.goto(`/workspace/${STOPPED_WS}`);
     await expect(page.getByRole('heading', { name: STOPPED_WS })).toBeVisible({ timeout: 10_000 });
 
     await page.getByRole('link', { name: /^edit$/i }).click();
-    await expect(page).toHaveURL(new RegExp(`/workspace/${STOPPED_WS}/edit-advanced`));
+    await expect(page).toHaveURL(new RegExp(`/workspace/${STOPPED_WS}/edit`));
     await waitForEditor(page);
   });
 
-  // 2/ Card 3-dot menu Edit item -> edit-advanced page
+  // 2/ Card 3-dot menu Edit item -> edit page
   test('card overflow-menu Edit item navigates to the edit editor', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /all/i }).click();
@@ -278,11 +343,11 @@ test.describe('Advanced editor — entry points', () => {
 
     await card.getByRole('button', { name: /more options/i }).click();
     await page.getByRole('menuitem', { name: /^edit$/i }).click();
-    await expect(page).toHaveURL(new RegExp(`/workspace/${STOPPED_WS}/edit-advanced`));
+    await expect(page).toHaveURL(new RegExp(`/workspace/${STOPPED_WS}/edit`));
     await waitForEditor(page);
   });
 
-  // 3/ Card footer Edit button -> edit-advanced page
+  // 3/ Card footer Edit button -> edit page
   test('card footer Edit button navigates to the edit editor', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /all/i }).click();
@@ -291,15 +356,16 @@ test.describe('Advanced editor — entry points', () => {
 
     // The footer Edit is a button directly on the card (not inside the menu).
     await card.getByRole('button', { name: /^edit$/i }).click();
-    await expect(page).toHaveURL(new RegExp(`/workspace/${STOPPED_WS}/edit-advanced`));
+    await expect(page).toHaveURL(new RegExp(`/workspace/${STOPPED_WS}/edit`));
     await waitForEditor(page);
   });
 
-  // 4/ Create page "YAML editor" button -> create-advanced page
-  test('create-page YAML editor button navigates to the advanced create editor', async ({ page }) => {
+  // 4/ Create page "YAML editor" button -> reveals the inline editor (stays on /create)
+  test('create-page YAML editor button reveals the advanced create editor inline', async ({ page }) => {
     await page.goto('/create');
-    await page.getByRole('link', { name: /yaml editor/i }).click();
-    await expect(page).toHaveURL(/\/create-advanced$/);
+    await page.getByRole('button', { name: /^yaml editor$/i }).click();
+    // No route change — the editor replaces the sliders in place.
+    await expect(page).toHaveURL(/\/create$/);
     await waitForEditor(page);
   });
 
