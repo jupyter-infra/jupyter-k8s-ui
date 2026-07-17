@@ -2,9 +2,12 @@ import { useEffect, useRef } from 'react';
 // Set MonacoEnvironment.getWorker as a module-load side effect BEFORE importing the
 // monaco API below — import order matters (see monacoSetup.ts).
 import './monacoSetup';
-// `monaco-editor` is aliased in vite.config.ts to the editor API-only entry
-// (editor.api), so this does NOT pull in every bundled language (clojure, sql, …).
-// monaco-yaml supplies the YAML language itself.
+// We import the FULL `monaco-editor` module here (not the `editor.api` entry). Trimming
+// to `editor.api` via a vite alias would give monaco-yaml's worker a different monaco
+// module instance and break validation ("Missing method: doValidation") — see the note
+// in vite.config.ts. The full monaco chunk is route-lazy (this editor is only loaded on
+// the advanced-editor route), so it never lands in the main bundle. monaco-yaml supplies
+// the YAML language itself.
 import * as monaco from 'monaco-editor';
 import { configureMonacoYaml, type MonacoYaml } from 'monaco-yaml';
 import { useTheme } from '@mui/material';

@@ -8,6 +8,9 @@ import type { AdvancedWorkspacePayload } from '../types';
 
 // Capture what the advanced create path actually sends to the API.
 const createSpy = mock(async (): Promise<unknown> => ({}));
+// validateWorkspace normally turns HTTP errors into a result; here we make the request
+// itself throw (server unreachable) to exercise handleValidate's catch.
+const validateSpy = mock(async (): Promise<unknown> => ({ valid: true }));
 
 mock.module('../api/client', () => ({
   apiClient: {
@@ -15,6 +18,7 @@ mock.module('../api/client', () => ({
     listTemplates: mock(async () => ({ items: [], access: { user: 'ok', shared: 'ok' } })),
     getCrdSchema: mock(async () => ({ type: 'object', required: ['displayName'], properties: {} })),
     createWorkspaceAdvanced: createSpy,
+    validateWorkspace: validateSpy,
   },
 }));
 
@@ -48,6 +52,8 @@ describe('create via inline YAML toggle', () => {
   beforeEach(() => {
     cleanup();
     createSpy.mockClear();
+    validateSpy.mockClear();
+    validateSpy.mockResolvedValue({ valid: true });
     globalThis.fetch = mock(async () => new Response(JSON.stringify({ authenticated: true, username: 'alice' }), { status: 200 })) as typeof fetch;
   });
   afterEach(() => {
@@ -70,5 +76,18 @@ describe('create via inline YAML toggle', () => {
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
     const payload = createSpy.mock.calls[0][0] as unknown as AdvancedWorkspacePayload;
     expect(payload.spec.displayName).toBe('Alice Dev Box');
+  });
+
+  test('Validate surfaces a message when the request itself throws (server unreachable)', async () => {
+    validateSpy.mockRejectedValue(new Error('Failed to fetch'));
+    renderCreate();
+
+    fireEvent.click(screen.getByRole('button', { name: /^yaml editor$/i }));
+    await screen.findByTestId('yaml-editor');
+
+    fireEvent.click(screen.getByRole('button', { name: /^validate$/i }));
+
+    // The thrown error is caught and rendered in the status panel, not swallowed.
+    expect(await screen.findByText(/failed to fetch/i)).toBeDefined();
   });
 });

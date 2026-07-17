@@ -5,13 +5,14 @@ import type { editor } from 'monaco-editor';
 import { useWorkspace, useCrdSchema, useCreateWorkspaceAdvanced, useReplaceWorkspaceAdvanced } from '../../../api';
 import { apiClient, type ValidationResult } from '../../../api/client';
 import { ApiError } from '../../../api/auth-interceptor';
+import { useAuth } from '../../../context';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import { TemplateSelect } from './TemplateSelect';
 import { TemplateGuidancePanel } from './TemplateGuidancePanel';
 import { ValidationStatus } from './ValidationStatus';
 import type { AdvancedWorkspacePayload, WorkspaceSpec, DiscoveredTemplate } from '../../../types';
 import { strings } from '../../../constants';
-import { sanitizeK8sName, specToYaml, yamlToSpec, buildCreateScaffold } from '../../../utils';
+import { sanitizeK8sName, specToYaml, yamlToSpec, buildCreateScaffold, getWorkspaceOwner, getWorkspaceStatus, isOwner } from '../../../utils';
 
 // Lazy-load the Monaco editor: it (plus its language workers) is a large dependency
 // only needed here, so keep it out of the main bundle.
@@ -41,6 +42,28 @@ function schemaWithoutControlRequired(schema: Record<string, unknown> | undefine
 interface SaveError {
   message: string;
   details?: string;
+}
+
+// A full-page notice shown in place of the editor when the workspace can't be edited —
+// load failed, not the owner, or not Stopped. Keeps those exit paths consistent.
+function EditNotice({ title, message, onBack, backLabel }: { title?: string; message: string; onBack: () => void; backLabel: string }) {
+  return (
+    <Stack spacing={2} paddingBottom={8}>
+      <Alert severity={title ? 'warning' : 'error'}>
+        {title && (
+          <Typography variant="body2" fontWeight={600}>
+            {title}
+          </Typography>
+        )}
+        <Typography variant="body2">{message}</Typography>
+      </Alert>
+      <Box>
+        <Button variant="outlined" onClick={onBack}>
+          {backLabel}
+        </Button>
+      </Box>
+    </Stack>
+  );
 }
 
 export interface WorkspaceSpecEditorProps {
@@ -92,7 +115,8 @@ export function WorkspaceSpecEditor({
   // Drop control-owned fields (displayName/templateRef) from the schema's `required`
   // so the buffer isn't flagged for a field the editor no longer holds.
   const schema = useMemo(() => schemaWithoutControlRequired(rawSchema), [rawSchema]);
-  const { data: existing, isLoading: loadingExisting } = useWorkspace(isEdit ? (routeName ?? '') : '');
+  const { data: existing, isLoading: loadingExisting, error: loadError } = useWorkspace(isEdit ? (routeName ?? '') : '');
+  const { user } = useAuth();
   const createMutation = useCreateWorkspaceAdvanced();
   const replaceMutation = useReplaceWorkspaceAdvanced();
 
@@ -241,10 +265,15 @@ export function WorkspaceSpecEditor({
     try {
       const result = await apiClient.validateWorkspace(payload, mode);
       setDryRun(result);
+    } catch (err) {
+      // validateWorkspace turns HTTP error *responses* into a result, but a failed
+      // request (server unreachable, network error) makes fetch throw. Surface it in the
+      // same status panel rather than leaving an unhandled rejection with no feedback.
+      setDryRun({ valid: false, message: err instanceof Error ? err.message : ws.advancedValidateRequestFailed });
     } finally {
       setValidating(false);
     }
-  }, [buildPayload, mode]);
+  }, [buildPayload, mode, ws.advancedValidateRequestFailed]);
 
   // Save is the real create/replace. On edit it's a full-spec REPLACE (buffer is the
   // desired spec, so removed fields are actually removed). A server validation failure
@@ -293,6 +322,37 @@ export function WorkspaceSpecEditor({
         <CircularProgress />
       </Box>
     );
+  }
+
+  // On edit, the fetch can fail (deleted/renamed workspace, RBAC, unreachable). Without
+  // this guard the page would fall through to an empty editor that flags a bogus missing
+  // displayName, and useWorkspace would poll the failing fetch forever (it only stops
+  // polling once the workspace settles to Running/Stopped). Show an error card instead.
+  if (isEdit && (loadError || !existing)) {
+    return (
+      <EditNotice message={loadError instanceof Error ? loadError.message : ws.advancedLoadError} onBack={() => navigate('/')} backLabel={ws.advancedBack} />
+    );
+  }
+
+  // Guard the edit page itself against editing a running workspace. The Edit affordances
+  // are already hidden unless owner + Stopped, but the route is reachable directly (saved
+  // link, history), and the operator accepts spec updates while Running — which restarts
+  // the pod and drops the user's session. Enforce the same check on the page.
+  if (isEdit && existing) {
+    const owner = getWorkspaceOwner(existing);
+    if (!isOwner(owner, user?.username)) {
+      return <EditNotice title={ws.advancedEditNotAllowedTitle} message={ws.advancedEditNotOwner} onBack={() => navigate('/')} backLabel={ws.advancedBack} />;
+    }
+    if (getWorkspaceStatus(existing) !== 'Stopped') {
+      return (
+        <EditNotice
+          title={ws.advancedEditNotAllowedTitle}
+          message={ws.advancedEditNotStopped}
+          onBack={() => navigate(`/workspace/${existing.metadata.name}`)}
+          backLabel={ws.advancedBack}
+        />
+      );
+    }
   }
 
   return (

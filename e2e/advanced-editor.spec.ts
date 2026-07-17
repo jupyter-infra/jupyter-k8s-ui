@@ -122,6 +122,29 @@ test.describe('Advanced YAML editor', () => {
     await waitForCardStatus(page, name, 'Running');
   });
 
+  test('editing a Running workspace is blocked (direct URL does not restart it)', async ({ page }) => {
+    // The Edit affordances are hidden while Running, but the route is reachable directly
+    // (saved link / history). The page must refuse to edit a running workspace — saving
+    // a spec change would restart the pod and drop the user's session.
+    const name = `${RUN_ID}-create`;
+    await page.goto(`/workspace/${name}/edit`);
+
+    await expect(page.getByText(/stop the workspace before editing/i)).toBeVisible({ timeout: 10_000 });
+    // The editor must not render, so there's nothing to save.
+    await expect(page.getByRole('textbox', { name: /display name/i })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /save changes/i })).toHaveCount(0);
+  });
+
+  test('stop the workspace so the remaining edit tests can run', async ({ page }) => {
+    const name = `${RUN_ID}-create`;
+    await page.goto('/');
+    await page.getByRole('button', { name: /all/i }).click();
+    const card = page.getByLabel(new RegExp(`${name}.*workspace`, 'i'));
+    await expect(card).toBeVisible({ timeout: 10_000 });
+    await card.getByRole('button', { name: /stop/i }).click();
+    await waitForCardStatus(page, name, 'Stopped');
+  });
+
   test('edit route pre-populates the fields and freezes the name', async ({ page }) => {
     const name = `${RUN_ID}-create`;
     await page.goto(`/workspace/${name}/edit`);
@@ -274,14 +297,18 @@ test.describe('Advanced YAML editor', () => {
     await page.getByRole('button', { name: /^yaml editor$/i }).click();
     await waitForEditor(page);
 
-    // A genuine keystroke (not the model-API setValue, which fires isFlush=true and is
-    // treated as programmatic) marks the buffer dirty. Focus the editor and type a char.
-    await page.locator('.monaco-editor textarea').first().focus();
+    // A genuine keystroke marks the buffer dirty. The model-API setValue fires
+    // isFlush=true (treated as programmatic), and merely focusing Monaco's hidden
+    // <textarea> does NOT place a cursor — the keystrokes go nowhere. Click into the
+    // visible content area (.view-lines) so Monaco positions the caret, then type.
+    await page.locator('.monaco-editor .view-lines').first().click();
     await page.keyboard.type('# edit');
 
-    // A discard confirmation appears; cancelling keeps us in the editor.
+    // A discard confirmation appears; cancelling keeps us in the editor. Assert on the
+    // dialog's title heading specifically — the body text also contains "discard", so an
+    // unscoped getByText would match two elements (strict-mode violation).
     await page.getByRole('button', { name: /^simple form$/i }).click();
-    await expect(page.getByText(/discard yaml edits|discard your yaml changes/i)).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole('heading', { name: /discard yaml edits/i })).toBeVisible({ timeout: 5_000 });
     await page.getByRole('button', { name: /^cancel$/i }).click();
     await waitForEditor(page);
 

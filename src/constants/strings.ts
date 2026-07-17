@@ -144,11 +144,17 @@ export const strings = {
     advancedValidate: 'Validate',
     advancedValidating: 'Validating…',
     advancedValidationPassed: 'Validation passed — the cluster accepts this manifest.',
+    advancedValidateRequestFailed: 'Validation request failed — the server may be unreachable.',
     advancedSyntaxOk: 'YAML syntax',
     advancedSchemaOk: 'Schema',
     advancedImageNotAllowed: (tmpl: string) => `Current image isn't in template "${tmpl}"'s allowed list — pick from the list or validation may reject it.`,
     advancedSaveCreate: 'Create Workspace',
     advancedSaveEdit: 'Save Changes',
+    advancedLoadError: 'Could not load this workspace.',
+    advancedEditNotAllowedTitle: 'This workspace cannot be edited right now',
+    advancedEditNotOwner: 'Only the workspace owner can edit it.',
+    advancedEditNotStopped: 'Stop the workspace before editing — editing a running workspace would restart it and interrupt any active session.',
+    advancedBack: 'Back to workspaces',
 
     // Advanced editor — template guidance panel
     guidanceBoundsHeader: 'Bounds',
