@@ -130,11 +130,17 @@ validation layer.
 - React Query polls workspace list every 60s; detail polls every 3s while transitioning
 - Workspace ownership tracked via `workspace.jupyter.org/created-by` annotation
 - Vite proxies `/api` to `http://localhost:8090` in dev mode
+- **Template-aware simple form** — turns a template (or null = no-template) into concrete
+  slider bounds/defaults, image mode, idle state, access seed, and a per-resource requests policy.
+  - if there is only one template, flagged as default, auto select it
+  - if there are several templates available, expose them as cards for the user to select.
+  - if there exists a default template, pre-select it and hide the no-template card (respecting the ws namespace default template, shared-namespace precedence)
 - **Advanced YAML editor** — a Monaco + monaco-yaml editor over the `Workspace` CR
   `spec` (shared `WorkspaceSpecEditor` component). `name`, `displayName`,
   and `templateRef` are structured controls above the buffer, not in the YAML. Four
   validation layers — YAML syntax, CRD schema (from `GET /crd-schema/workspaces`),
   advisory template bounds/allowed-images, and authoritative `?dryRun=All`.
+- The **edit route** (`/workspace/:name/edit`) defaults to simple editor, with a button to access the YAML editor. If the workspace references a template, the simple editor locks it.
 - CRD spec schemas are read **once at startup** into an in-memory singleton
   (`server/schema/store.ts`): live cluster read via the service account, falling back
   to vendored `server/schema/vendored/*.json` (regenerate with `bun run gen:crd`).
