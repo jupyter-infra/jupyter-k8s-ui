@@ -9,4 +9,5 @@ export { ThemeSwitcher } from './ui/ThemeSwitcher';
 
 // Workspace
 export { WorkspaceCard } from './workspace/WorkspaceCard';
-export { TemplateCard } from './workspace/TemplateCard';
+export { TemplateCard, NoTemplateCard } from './workspace/TemplateCard';
+export { TemplatePicker } from './workspace/TemplatePicker';

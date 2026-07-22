@@ -1,28 +1,31 @@
-import { Box, Paper, Stack, Typography } from '@mui/material';
-import { Check, Code, Memory, School, Science } from '@mui/icons-material';
-import type { ReactNode, KeyboardEvent } from 'react';
+import { Box, Paper, Stack, Tooltip, Typography } from '@mui/material';
+import { Check, BuildCircle } from '@mui/icons-material';
+import type { KeyboardEvent, ReactNode } from 'react';
 import type { WorkspaceTemplate } from '../../types';
 import { strings } from '../../constants';
+import { getAppTypeLogo } from '../icons/appTypeLogo';
 import styles from './TemplateCard.module.css';
 
-const TEMPLATE_CONFIG: Record<string, { icon: ReactNode; tag: string }> = {
-  starter: { icon: <School />, tag: 'Quick start' },
-  'data-science': { icon: <Science />, tag: 'Full stack' },
-  'ml-training': { icon: <Memory />, tag: 'High performance' },
-  'code-editor': { icon: <Code />, tag: 'VS Code style' },
-};
-
-const DEFAULT_CONFIG = { icon: <Science />, tag: 'Custom' };
-
-interface TemplateCardProps {
-  template: WorkspaceTemplate;
+interface TemplateCardBaseProps {
   selected: boolean;
   onClick: () => void;
 }
 
-export function TemplateCard({ template, selected, onClick }: TemplateCardProps) {
-  const config = TEMPLATE_CONFIG[template.metadata.name] || DEFAULT_CONFIG;
+interface TemplateCardProps extends TemplateCardBaseProps {
+  template: WorkspaceTemplate;
+}
 
+// Card content is just: displayName (title), then name + namespace (both dimmed). The
+// description, when present, is surfaced on hover via a tooltip rather than inline.
+function CardShell({
+  selected,
+  onClick,
+  icon,
+  title,
+  subtitle,
+  tooltip,
+  ariaLabel,
+}: TemplateCardBaseProps & { icon: ReactNode; title: string; subtitle?: ReactNode; tooltip?: string; ariaLabel: string }) {
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
@@ -30,7 +33,7 @@ export function TemplateCard({ template, selected, onClick }: TemplateCardProps)
     }
   };
 
-  return (
+  const card = (
     <Paper
       className={`${styles.card} ${selected ? styles.selected : ''}`}
       onClick={onClick}
@@ -39,17 +42,60 @@ export function TemplateCard({ template, selected, onClick }: TemplateCardProps)
       tabIndex={0}
       role="button"
       aria-pressed={selected}
-      aria-label={strings.a11y.templateCard(template.spec.displayName ?? template.metadata.name)}
+      aria-label={ariaLabel}
     >
       {selected && <Check className={styles.checkIcon} />}
-      <Stack direction="row" alignItems="center" gap={2}>
-        <Box className={styles.icon}>{config.icon}</Box>
+      <Stack spacing={1.5} alignItems="flex-start" height="100%">
+        <Box className={styles.icon}>{icon}</Box>
         <Box>
-          <Typography className={styles.name}>{template.spec.displayName ?? template.metadata.name}</Typography>
-          <Typography className={styles.description}>{template.spec.description ?? ''}</Typography>
-          <Typography className={styles.tag}>{config.tag}</Typography>
+          <Typography className={styles.name}>{title}</Typography>
+          {subtitle}
         </Box>
       </Stack>
     </Paper>
+  );
+
+  // Only wrap in a Tooltip when there's description text to show.
+  return tooltip ? (
+    <Tooltip title={tooltip} placement="top">
+      {card}
+    </Tooltip>
+  ) : (
+    card
+  );
+}
+
+export function TemplateCard({ template, selected, onClick }: TemplateCardProps) {
+  const title = template.spec.displayName ?? template.metadata.name;
+  return (
+    <CardShell
+      selected={selected}
+      onClick={onClick}
+      icon={getAppTypeLogo(template.spec.appType)}
+      title={title}
+      subtitle={
+        <>
+          <Typography className={styles.meta}>{template.metadata.name}</Typography>
+          <Typography className={styles.meta}>{template.metadata.namespace}</Typography>
+        </>
+      }
+      tooltip={template.spec.description || undefined}
+      ariaLabel={strings.a11y.templateCard(title)}
+    />
+  );
+}
+
+// The explicit "no template" card — a bare workspace with static bounds and no templateRef.
+export function NoTemplateCard({ selected, onClick }: TemplateCardBaseProps) {
+  const { workspace: ws } = strings;
+  return (
+    <CardShell
+      selected={selected}
+      onClick={onClick}
+      icon={<BuildCircle sx={{ fontSize: 28 }} aria-hidden="true" />}
+      title={ws.templateNoTemplateName}
+      tooltip={ws.templateNoTemplateDescription}
+      ariaLabel={strings.a11y.templateCard(ws.templateNoTemplateName)}
+    />
   );
 }

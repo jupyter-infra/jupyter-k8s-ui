@@ -62,11 +62,25 @@ export const strings = {
     createTitle: 'Create Workspace',
     createDescription: 'Configure your new development environment',
 
+    // Template picker
+    templatePickerTitle: 'Template',
+    templateNoTemplateName: 'No template',
+    templateNoTemplateDescription: 'Bare workspace: choose the image and resources within static bounds.',
+    templateSharedDenied: "Some shared templates couldn't be loaded. You may be missing access to the shared namespace.",
+    templateLoadError: "Couldn't load templates; continuing with static bounds.",
+    templateLockedTooltipEdit: 'This workspace references a template. Use YAML editor to change this setting.',
+    templateLockedTooltipCreate: 'Your environment enforces a template.',
+    imageLockedTooltip: 'The template locks the application image. Use the YAML editor to change this setting.',
+    nameLockedTooltip: 'The workspace name is its primary identifier and cannot be changed after creation.',
+    storageLockedTooltip: 'Storage size can only be set at the time of creation.',
+    templateCustomUnresolved: (name: string) => `Custom: ${name}`,
+    templateNotAccessible: "This workspace references a template you can't access. The server enforces its bounds and may reject changes.",
+
     // Form sections
     sectionWorkspace: 'Workspace',
     sectionTemplate: 'Template',
     sectionBasicInfo: 'Basic Information',
-    sectionEnvironment: 'Environment',
+    sectionEnvironment: 'Application',
     sectionResources: 'Resources',
     sectionAccess: 'Access',
     sectionIdleShutdown: 'Idle Shutdown',
@@ -123,6 +137,17 @@ export const strings = {
     deleteTitle: 'Delete Workspace',
     deleteMessage: (name: string) => `Are you sure you want to delete "${name}"? This action cannot be undone.`,
 
+    // Simple edit page
+    editTitle: 'Edit Workspace',
+    editSave: 'Save Changes',
+    editConformTitle: 'This workspace was adjusted to fit its template:',
+    editConformDismiss: 'Dismiss',
+    editConformCpu: (from: string, to: string) => `CPU reduced from ${from} to ${to} (template limit).`,
+    editConformMemory: (from: string, to: string) => `Memory reduced from ${from} to ${to} (template limit).`,
+    editConformStorage: (from: string, to: string) => `Storage adjusted from ${from} to ${to} (template limit).`,
+    editConformImage: (from: string, to: string) => `Image changed from "${from}" to "${to}" (not allowed by template).`,
+    editConformIdleTimeout: (from: string, to: string) => `Idle timeout adjusted from ${from} to ${to} (template bounds).`,
+
     // Advanced YAML editor
     advancedCreateTitle: 'Create Workspace (Advanced)',
     advancedEditTitle: 'Edit Workspace (Advanced)',
@@ -160,6 +185,7 @@ export const strings = {
     guidanceBoundsHeader: 'Bounds',
     guidanceImages: 'Images',
     guidanceAnyImage: 'Any image allowed',
+    guidanceAnyImagePlus: 'Suggested (custom images also allowed):',
     guidanceDefaultImageOnly: 'Default image only',
     guidanceResources: 'Resources',
     guidanceCpu: 'CPU',
@@ -168,7 +194,9 @@ export const strings = {
     guidanceStorage: 'Storage',
     guidanceStorageSize: 'Size',
     guidanceIdleShutdown: 'Idle shutdown',
-    guidanceIdleTimeout: 'Timeout (min)',
+    guidanceIdleRequired: 'Required',
+    guidanceIdleOptional: 'Optional',
+    guidanceIdleTimeout: 'Timeout (minutes)',
   },
 
   kubectl: {
