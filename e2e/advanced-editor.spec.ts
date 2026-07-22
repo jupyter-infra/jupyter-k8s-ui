@@ -45,7 +45,27 @@ async function getEditorYaml(page: Page): Promise<string> {
  * flakes). The textarea is the real input target the other helpers focus.
  */
 async function waitForEditor(page: Page) {
-  await page.locator('.monaco-editor textarea').first().waitFor({ state: 'attached', timeout: 20_000 });
+  // The edit route (`/workspace/:name/edit`) now DEFAULTS to the simple slider editor;
+  // the Monaco editor is reached via the Advanced box's "YAML editor" button. If Monaco
+  // isn't already mounted (create path, where openAdvancedCreate flipped the toggle), wait
+  // for that button to appear and click it. Racing the button against the textarea handles
+  // both entry points without a fixed sleep.
+  const textarea = page.locator('.monaco-editor textarea').first();
+  const yamlBtn = page.getByRole('button', { name: /^yaml editor$/i });
+  const appeared = await Promise.race([
+    textarea
+      .waitFor({ state: 'attached', timeout: 20_000 })
+      .then(() => 'editor')
+      .catch(() => null),
+    yamlBtn
+      .waitFor({ state: 'visible', timeout: 20_000 })
+      .then(() => 'button')
+      .catch(() => null),
+  ]);
+  if (appeared === 'button') {
+    await yamlBtn.click();
+  }
+  await textarea.waitFor({ state: 'attached', timeout: 20_000 });
 }
 
 /** Click Refresh on the list until the named card shows the expected status. */
@@ -78,6 +98,19 @@ async function openAdvancedCreate(page: Page) {
   await page.goto('/create');
   await page.getByRole('button', { name: /^yaml editor$/i }).click();
   await waitForEditor(page);
+}
+
+/**
+ * Ensure the template dropdown holds `name`. On `/create` the flagged-default template is
+ * auto-selected in the simple form and carries into the YAML editor, so the
+ * combobox may already hold it — selecting from the option list would then find nothing.
+ * Only pick from the list when the value isn't already set.
+ */
+async function ensureTemplateSelected(page: Page, name: string) {
+  const combobox = page.getByRole('combobox', { name: /template/i });
+  if ((await combobox.inputValue()) === name) return;
+  await combobox.fill(name);
+  await page.getByRole('option', { name }).click();
 }
 
 /** Set the run-unique name via the Name field, mirroring displayName so cards are findable. */
@@ -205,8 +238,11 @@ test.describe('Advanced YAML editor', () => {
     await setEditorYaml(page, 'image: evil/not-allowed:latest\n');
     await page.getByRole('button', { name: /^validate$/i }).click();
 
-    // The webhook's own message is surfaced (not just a generic status).
-    await expect(page.getByText(/not permitted|not allowed|validation/i)).toBeVisible({ timeout: 15_000 });
+    // The webhook's own message is surfaced (not just a generic status). Match the
+    // operator/webhook rejection specifically — NOT the advisory "…validation may reject
+    // it" image hint, which the carried-over default template now also renders (a broad
+    // /validation/ match would hit both and trip strict mode).
+    await expect(page.getByText(/not permitted|admission webhook|denied/i)).toBeVisible({ timeout: 15_000 });
 
     // Fix to an allowed image -> validation passes.
     await setEditorYaml(page, 'image: nginx:latest\n');
@@ -236,8 +272,7 @@ test.describe('Advanced YAML editor', () => {
     await openAdvancedCreate(page);
 
     // Select the seeded default template from the dropdown.
-    await page.getByRole('combobox', { name: /template/i }).fill('default');
-    await page.getByRole('option', { name: 'default' }).click();
+    await ensureTemplateSelected(page, 'default');
 
     // The guidance panel shows the "Bounds" section with Images + a Resources range.
     // (Scope text assertions to unique panel labels — the image also appears in the
@@ -255,8 +290,7 @@ test.describe('Advanced YAML editor', () => {
     await openAdvancedCreate(page);
     await fillIdentity(page, `${RUN_ID}-warn`);
 
-    await page.getByRole('combobox', { name: /template/i }).fill('default');
-    await page.getByRole('option', { name: 'default' }).click();
+    await ensureTemplateSelected(page, 'default');
 
     // An image outside the template allowlist -> advisory warning, Save still enabled.
     // (The template switch after edits may prompt to regenerate — keep our edits.)

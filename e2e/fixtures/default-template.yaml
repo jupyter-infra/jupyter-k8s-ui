@@ -8,6 +8,7 @@ metadata:
 spec:
   displayName: Default
   description: Default workspace template for E2E tests
+  appType: jupyterlab
   defaultImage: nginx:latest
   # allowedImages + resourceBounds exercise the advanced editor's template guidance
   # and the dry-run rejection path. nginx:latest stays in the list so the

@@ -1,0 +1,51 @@
+# A non-default template that LOCKS idle shutdown: idleShutdownOverrides.allow=false means
+# the on/off toggle is frozen (users can't disable idle) while the timeout stays adjustable
+# within the template's 30–120 min bounds. Exercises the resolver's "structure-locked" idle
+# state (toggleFrozen) in the simple form. Idle is enabled by default so the timeout slider
+# is visible.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: locked-idle-template
+  namespace: default
+  labels:
+    workspace.jupyter.org/default-template: 'false'
+spec:
+  displayName: Locked Idle Template
+  description: Idle shutdown is enforced; only the timeout is adjustable
+  appType: jupyterlab
+  defaultImage: nginx:latest
+  allowedImages:
+    - nginx:latest
+    - nginx:1.27
+  defaultResources:
+    requests:
+      cpu: '100m'
+      memory: '128Mi'
+    limits:
+      cpu: '500m'
+      memory: '512Mi'
+  resourceBounds:
+    resources:
+      cpu:
+        min: '100m'
+        max: '2'
+      memory:
+        min: '128Mi'
+        max: '2Gi'
+  primaryStorage:
+    defaultSize: '1Gi'
+    minSize: '1Gi'
+    maxSize: '10Gi'
+    defaultMountPath: '/data'
+  defaultIdleShutdown:
+    enabled: true
+    idleTimeoutInMinutes: 60
+    detection:
+      httpGet:
+        path: /
+        port: 80
+  idleShutdownOverrides:
+    allow: false
+    minIdleTimeoutInMinutes: 30
+    maxIdleTimeoutInMinutes: 120
