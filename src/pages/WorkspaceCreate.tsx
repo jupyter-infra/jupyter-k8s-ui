@@ -1,30 +1,16 @@
-import { useState, useMemo, useCallback } from 'react';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
-import {
-  Typography,
-  TextField,
-  Button,
-  Slider,
-  Switch,
-  Stack,
-  Container,
-  Paper,
-  Alert,
-  Collapse,
-  CircularProgress,
-  ToggleButtonGroup,
-  ToggleButton,
-  Divider,
-  Link,
-} from '@mui/material';
-import { Memory, Storage } from '@mui/icons-material';
-import { useCreateWorkspace, useWorkspaces } from '../api';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Typography, TextField, Button, Stack, Container, Paper, Alert, CircularProgress } from '@mui/material';
+import { useCreateWorkspace, useWorkspaces, useTemplates } from '../api';
 import { useAuth } from '../context/AuthContext';
-import { ResourceSlider } from '../components';
+import { TemplatePicker } from '../components';
+import { AdvancedBox } from '../components/workspace/AdvancedBox';
+import { LockedTemplateField } from '../components/workspace/LockedTemplateField';
+import { WorkspaceResourceForm, type WorkspaceFormValues } from '../components/workspace/WorkspaceResourceForm';
 import { WorkspaceSpecEditor } from '../components/workspace/yaml-editor/WorkspaceSpecEditor';
-import type { CreateWorkspaceRequest, OwnershipType } from '../types';
-import { strings, resourceBounds, RESOURCE_DEFAULTS, IDLE_SHUTDOWN_DEFAULTS } from '../constants';
-import { sanitizeK8sName } from '../utils';
+import type { CreateWorkspaceRequest, DiscoveredTemplate } from '../types';
+import { strings } from '../constants';
+import { sanitizeK8sName, resolveTemplateControls, buildResourcesBlock, clamp } from '../utils';
 
 function generateDefaults(username: string, existingCount: number) {
   const n = existingCount + 1;
@@ -33,80 +19,152 @@ function generateDefaults(username: string, existingCount: number) {
   return { displayName, name };
 }
 
+// Which sliders the user has touched — untouched sliders reset to a new template's default
+// on template switch; touched ones clamp into the new bounds (preserving intent).
+interface Touched {
+  cpu: boolean;
+  memory: boolean;
+  storage: boolean;
+  image: boolean;
+}
+
 export function WorkspaceCreate() {
   const navigate = useNavigate();
   const createMutation = useCreateWorkspace();
   const { user } = useAuth();
   const { data: workspaces } = useWorkspaces();
+  const templatesQuery = useTemplates();
 
   const defaults = useMemo(() => generateDefaults(user?.username ?? 'user', workspaces?.length ?? 0), [user?.username, workspaces?.length]);
 
-  // Name/displayName are lifted here so they persist across the form <-> YAML toggle:
-  // switching to the YAML editor keeps whatever the user already typed (Gaurav's review).
+  // Name/displayName are lifted here so they persist across the form <-> YAML toggle.
   const [nameOverride, setNameOverride] = useState<string | null>(null);
   const [displayNameOverride, setDisplayNameOverride] = useState<string | null>(null);
-  const [cpuLimit, setCpuLimit] = useState(1);
-  const [memoryLimit, setMemoryLimit] = useState(2);
-  const [storageSize, setStorageSize] = useState(10);
-  const [ownershipType, setOwnershipType] = useState<OwnershipType>('Public');
-  const [idleShutdownEnabled, setIdleShutdownEnabled] = useState(false);
-  const [idleTimeoutMinutes, setIdleTimeoutMinutes] = useState<number>(IDLE_SHUTDOWN_DEFAULTS.DEFAULT_TIMEOUT);
 
-  // Inline advanced toggle: false = slider form (default), true = Monaco spec editor.
-  // Both share the Name/DisplayName fields rendered above, so the user keeps their
-  // context across the switch instead of navigating to a separate page.
+  // Shared template selection — carried bidirectionally across the form ↔ YAML toggle.
+  // `selectedTemplate === null` == the no-template card == the YAML editor's
+  // "no template selected" (same null state).
+  const [selectedTemplate, setSelectedTemplate] = useState<DiscoveredTemplate | null>(null);
+  // Template name for the YAML editor's free-solo control. Kept in sync with
+  // selectedTemplate but can also hold a typed name not in the discovered list.
+  const [templateName, setTemplateName] = useState<string | null>(null);
+
+  // Resolver-driven form values + touched tracking.
+  const controls = useMemo(() => resolveTemplateControls(selectedTemplate), [selectedTemplate]);
+  const [values, setValues] = useState<WorkspaceFormValues>(() => initialValues(resolveTemplateControls(null)));
+  const touched = useRef<Touched>({ cpu: false, memory: false, storage: false, image: false });
+
   const [advanced, setAdvanced] = useState(false);
 
   const name = nameOverride ?? defaults.name;
   const displayName = displayNameOverride ?? defaults.displayName;
 
+  // On template switch, reshape the slider values: touched sliders clamp into the new
+  // bounds (keep intent); untouched reset to the new default. Image always resets to the
+  // new template's default (a carried-over image is unlikely valid elsewhere).
+  const prevControlsKey = useRef<string>('');
+  useEffect(() => {
+    const key = selectedTemplate ? `${selectedTemplate.metadata.namespace}/${selectedTemplate.metadata.name}` : '<none>';
+    if (key === prevControlsKey.current) return;
+    prevControlsKey.current = key;
+    setValues((prev) => ({
+      cpu: touched.current.cpu ? clamp(prev.cpu, controls.cpu.min, controls.cpu.max) : controls.cpu.default,
+      memory: touched.current.memory ? clamp(prev.memory, controls.memory.min, controls.memory.max) : controls.memory.default,
+      storage: touched.current.storage ? clamp(prev.storage, controls.storage.min, controls.storage.max) : controls.storage.default,
+      image: controls.image.value,
+      accessType: controls.accessType,
+      idleEnabled: controls.idle.available ? controls.idle.enabledDefault : false,
+      idleTimeout: controls.idle.available ? controls.idle.timeout.default : prev.idleTimeout,
+    }));
+  }, [selectedTemplate, controls]);
+
+  const handleFieldChange = useCallback(<K extends keyof WorkspaceFormValues>(key: K, value: WorkspaceFormValues[K]) => {
+    if (key === 'cpu' || key === 'memory' || key === 'storage' || key === 'image') {
+      const touchedKey: keyof Touched = key;
+      touched.current[touchedKey] = true;
+    }
+    setValues((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
   const handleDisplayNameChange = useCallback(
     (value: string) => {
       setDisplayNameOverride(value);
-      if (nameOverride === null) {
-        setNameOverride(sanitizeK8sName(value.replace(/'/g, '')));
-      }
+      if (nameOverride === null) setNameOverride(sanitizeK8sName(value.replace(/'/g, '')));
     },
     [nameOverride],
   );
 
-  const handleNameChange = useCallback((value: string) => {
-    setNameOverride(sanitizeK8sName(value));
+  const handleNameChange = useCallback((value: string) => setNameOverride(sanitizeK8sName(value)), []);
+
+  // Picker → shared state. Also keep the YAML editor's templateName in sync.
+  const handleSelectTemplate = useCallback((template: DiscoveredTemplate | null) => {
+    setSelectedTemplate(template);
+    setTemplateName(template?.metadata.name ?? null);
+  }, []);
+
+  // The picker's initial (auto-)selection — including the hidden-picker cases (0 templates,
+  // or a single flagged default that's auto-used). Adopt it as the shared selection so the
+  // resolver/submit see the injected default even when no card is shown.
+  const initialAdopted = useRef(false);
+  // When the picker is hidden because a single template is enforced (a flagged default),
+  // show a read-only locked Template section in its place. Distinct from the 0-templates
+  // hidden case, where there's genuinely no template to display.
+  const [enforcedTemplate, setEnforcedTemplate] = useState<DiscoveredTemplate | null>(null);
+  const handleInitialResolved = useCallback(({ selection, hidden }: { selection: DiscoveredTemplate | null; hidden: boolean }) => {
+    if (initialAdopted.current) return;
+    initialAdopted.current = true;
+    setSelectedTemplate(selection);
+    setTemplateName(selection?.metadata.name ?? null);
+    if (hidden && selection) setEnforcedTemplate(selection);
+  }, []);
+
+  // YAML editor resolved a template (possibly a free-typed name) — mirror into shared state.
+  const handleResolvedTemplateChange = useCallback((template: DiscoveredTemplate | null) => {
+    setSelectedTemplate(template);
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // WYSIWYG: send exactly what the form displays. Complete resources block so the
+    // wholesale overlay doesn't wipe requests.
     const request: CreateWorkspaceRequest = {
       name,
       displayName: displayName || name,
-      resources: {
-        limits: { cpu: `${cpuLimit}`, memory: `${memoryLimit}Gi` },
-        requests: {
-          cpu: `${Math.max(RESOURCE_DEFAULTS.MIN_CPU_REQUEST, cpuLimit * RESOURCE_DEFAULTS.CPU_REQUEST_RATIO)}`,
-          memory: `${Math.max(RESOURCE_DEFAULTS.MIN_MEMORY_REQUEST, memoryLimit * RESOURCE_DEFAULTS.MEMORY_REQUEST_RATIO)}Gi`,
-        },
-      },
-      storage: { size: `${storageSize}Gi` },
-      accessType: ownershipType === 'Public' ? 'Public' : 'OwnerOnly',
-      ownershipType,
+      resources: buildResourcesBlock(controls, values.cpu, values.memory),
+      storage: { size: `${values.storage}Gi` },
+      accessType: values.accessType,
+      ownershipType: controls.ownershipType, // not derived from accessType
     };
 
-    if (idleShutdownEnabled) {
-      request.idleShutdown = { enabled: true, timeoutInMinutes: idleTimeoutMinutes };
+    // templateRef rides on the body (from selection, or a preserved unresolvable ref).
+    if (controls.templateRef) request.templateRef = controls.templateRef;
+    else if (selectedTemplate) request.templateRef = { name: selectedTemplate.metadata.name, namespace: selectedTemplate.metadata.namespace };
+
+    // Image: only send when the form models it (free/select). Fixed/no-image → let the
+    // template/operator supply it. Empty free-text (no-template) → omit.
+    if (controls.image.mode !== 'fixed' && values.image) request.image = values.image;
+    else if (controls.image.mode === 'fixed' && controls.image.value) request.image = controls.image.value;
+
+    // Idle: send a COMPLETE block echoing the template's detection verbatim, only when idle
+    // is available AND enabled. No template / unavailable → omit entirely.
+    if (controls.idle.available && values.idleEnabled) {
+      request.idleShutdown = {
+        enabled: true,
+        timeoutInMinutes: values.idleTimeout,
+        ...(controls.idle.detection !== undefined && { detection: controls.idle.detection }),
+      };
     }
 
     try {
       await createMutation.mutateAsync(request);
       navigate('/');
     } catch {
-      // Error is captured by createMutation.error
+      // Error surfaced via createMutation.error
     }
   };
 
   const { workspace: ws } = strings;
 
-  // Name + DisplayName: shared across both views (form and YAML), so the user keeps
-  // what they typed when toggling. DisplayName -> Name linkage mirrors the simple form.
   const identitySection = (
     <Paper variant="outlined">
       <Stack spacing={2} padding={3}>
@@ -136,7 +194,7 @@ export function WorkspaceCreate() {
   );
 
   return (
-    <Container maxWidth={advanced ? 'md' : 'sm'}>
+    <Container maxWidth="md">
       <Stack spacing={3} paddingBottom={8}>
         <Typography variant="h4" fontWeight={600}>
           {advanced ? ws.advancedCreateTitle : ws.createTitle}
@@ -154,211 +212,48 @@ export function WorkspaceCreate() {
             displayName={displayName}
             onDisplayNameChange={handleDisplayNameChange}
             onSwitchToForm={() => setAdvanced(false)}
+            templateName={templateName}
+            onTemplateNameChange={setTemplateName}
+            onResolvedTemplateChange={handleResolvedTemplateChange}
           />
         ) : (
-          <FormView
-            cpuLimit={cpuLimit}
-            memoryLimit={memoryLimit}
-            storageSize={storageSize}
-            ownershipType={ownershipType}
-            idleShutdownEnabled={idleShutdownEnabled}
-            idleTimeoutMinutes={idleTimeoutMinutes}
-            setCpuLimit={setCpuLimit}
-            setMemoryLimit={setMemoryLimit}
-            setStorageSize={setStorageSize}
-            setOwnershipType={setOwnershipType}
-            setIdleShutdownEnabled={setIdleShutdownEnabled}
-            setIdleTimeoutMinutes={setIdleTimeoutMinutes}
-            name={name}
-            onSwitchToYaml={() => setAdvanced(true)}
-            onSubmit={handleSubmit}
-            submitting={createMutation.isPending}
-            onCancel={() => navigate('/')}
-          />
+          <Stack spacing={3} component="form" onSubmit={handleSubmit}>
+            {/* Picker renders nothing when a single template is enforced; show a locked
+                read-only Template section in its place. */}
+            {enforcedTemplate ? (
+              <LockedTemplateField label={enforcedTemplate.spec.displayName ?? enforcedTemplate.metadata.name} tooltip={ws.templateLockedTooltipCreate} />
+            ) : (
+              <TemplatePicker query={templatesQuery} selected={selectedTemplate} onSelect={handleSelectTemplate} onInitialResolved={handleInitialResolved} />
+            )}
+
+            <WorkspaceResourceForm controls={controls} values={values} onChange={handleFieldChange} />
+
+            {/* Advanced box — toggle the YAML editor inline (keeps name/displayName above) */}
+            <AdvancedBox onSwitchToYaml={() => setAdvanced(true)} />
+
+            <Stack direction="row" spacing={2} justifyContent="flex-end">
+              <Button variant="text" onClick={() => navigate('/')}>
+                {strings.common.cancel}
+              </Button>
+              <Button type="submit" variant="contained" disabled={!name || createMutation.isPending}>
+                {createMutation.isPending ? <CircularProgress size={20} color="inherit" /> : ws.createWorkspace}
+              </Button>
+            </Stack>
+          </Stack>
         )}
       </Stack>
     </Container>
   );
 }
 
-interface FormViewProps {
-  cpuLimit: number;
-  memoryLimit: number;
-  storageSize: number;
-  ownershipType: OwnershipType;
-  idleShutdownEnabled: boolean;
-  idleTimeoutMinutes: number;
-  setCpuLimit: (v: number) => void;
-  setMemoryLimit: (v: number) => void;
-  setStorageSize: (v: number) => void;
-  setOwnershipType: (v: OwnershipType) => void;
-  setIdleShutdownEnabled: (v: boolean) => void;
-  setIdleTimeoutMinutes: (v: number) => void;
-  name: string;
-  onSwitchToYaml: () => void;
-  onSubmit: (e: React.FormEvent) => void;
-  submitting: boolean;
-  onCancel: () => void;
-}
-
-// The slider-based simple form (Resources / Settings / Advanced-toggle box + actions).
-// Split out so the create page reads as a clean form-vs-YAML switch.
-function FormView({
-  cpuLimit,
-  memoryLimit,
-  storageSize,
-  ownershipType,
-  idleShutdownEnabled,
-  idleTimeoutMinutes,
-  setCpuLimit,
-  setMemoryLimit,
-  setStorageSize,
-  setOwnershipType,
-  setIdleShutdownEnabled,
-  setIdleTimeoutMinutes,
-  name,
-  onSwitchToYaml,
-  onSubmit,
-  submitting,
-  onCancel,
-}: FormViewProps) {
-  const { workspace: ws, common } = strings;
-
-  return (
-    <Stack spacing={3} component="form" onSubmit={onSubmit}>
-      {/* Resources Section */}
-      <Paper variant="outlined">
-        <Stack spacing={2} padding={3}>
-          <Typography variant="subtitle2">{ws.sectionResources}</Typography>
-
-          <ResourceSlider
-            icon={<Memory color="action" fontSize="small" />}
-            label={ws.resourceCpu}
-            value={cpuLimit}
-            unit={common.cores}
-            min={resourceBounds.cpu.min}
-            max={resourceBounds.cpu.max}
-            step={resourceBounds.cpu.step}
-            onChange={setCpuLimit}
-          />
-          <ResourceSlider
-            icon={<Storage color="action" fontSize="small" />}
-            label={ws.resourceMemory}
-            value={memoryLimit}
-            unit={common.gb}
-            min={resourceBounds.memory.min}
-            max={resourceBounds.memory.max}
-            step={resourceBounds.memory.step}
-            onChange={setMemoryLimit}
-          />
-          <ResourceSlider
-            icon={<Storage color="action" fontSize="small" />}
-            label={ws.resourceStorage}
-            value={storageSize}
-            unit={common.gb}
-            min={resourceBounds.storage.min}
-            max={resourceBounds.storage.max}
-            step={resourceBounds.storage.step}
-            onChange={setStorageSize}
-          />
-        </Stack>
-      </Paper>
-
-      {/* Settings Section */}
-      <Paper variant="outlined">
-        <Stack spacing={1} padding={3}>
-          <Typography variant="subtitle2">{ws.sectionSettings}</Typography>
-
-          <Stack direction="row" alignItems="center" justifyContent="space-between">
-            <Typography variant="body2">{ws.accessQuestion}</Typography>
-            <ToggleButtonGroup
-              value={ownershipType}
-              exclusive
-              onChange={(_, v) => {
-                if (v) setOwnershipType(v);
-              }}
-              size="small"
-            >
-              <ToggleButton value="Public">{common.public}</ToggleButton>
-              <ToggleButton value="OwnerOnly">{common.private}</ToggleButton>
-            </ToggleButtonGroup>
-          </Stack>
-
-          <Divider />
-
-          <Stack direction="row" alignItems="center" justifyContent="space-between">
-            <Stack>
-              <Typography variant="body2">{ws.idleShutdownEnable}</Typography>
-              {idleShutdownEnabled && (
-                <Typography variant="caption" color="text.secondary">
-                  Shutdown after {idleTimeoutMinutes} {common.min} of inactivity
-                </Typography>
-              )}
-            </Stack>
-            <Switch
-              size="small"
-              checked={idleShutdownEnabled}
-              onChange={(e) => setIdleShutdownEnabled(e.target.checked)}
-              slotProps={{ input: { 'aria-label': ws.idleShutdownEnable } }}
-            />
-          </Stack>
-
-          <Collapse in={idleShutdownEnabled}>
-            <Stack spacing={0.5} paddingTop={1}>
-              <Slider
-                value={idleTimeoutMinutes}
-                onChange={(_, v) => setIdleTimeoutMinutes(v as number)}
-                min={IDLE_SHUTDOWN_DEFAULTS.MIN_TIMEOUT}
-                max={IDLE_SHUTDOWN_DEFAULTS.MAX_TIMEOUT}
-                step={IDLE_SHUTDOWN_DEFAULTS.STEP}
-                size="small"
-                aria-label={ws.idleShutdownTimeout}
-              />
-              <Stack direction="row" justifyContent="space-between">
-                <Typography variant="caption" color="text.secondary">
-                  {IDLE_SHUTDOWN_DEFAULTS.MIN_TIMEOUT} {common.min}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {IDLE_SHUTDOWN_DEFAULTS.MAX_TIMEOUT} {common.min}
-                </Typography>
-              </Stack>
-            </Stack>
-          </Collapse>
-        </Stack>
-      </Paper>
-
-      {/* Advanced box — toggles the YAML editor inline (keeps name/displayName above) */}
-      <Paper variant="outlined">
-        <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between" padding={3}>
-          <Stack>
-            <Typography variant="subtitle2">{ws.advancedBoxTitle}</Typography>
-            <Typography variant="caption" color="text.secondary">
-              {ws.advancedBoxIntro}{' '}
-              <Link component={RouterLink} to="/kubectl" underline="hover">
-                {ws.advancedBoxKubectl}
-              </Link>{' '}
-              {ws.advancedBoxDocsMid}{' '}
-              <Link href={ws.advancedHintDocsUrl} target="_blank" rel="noopener" underline="hover">
-                {ws.advancedBoxDocsLink}
-              </Link>
-              .
-            </Typography>
-          </Stack>
-          <Button onClick={onSwitchToYaml} variant="outlined" sx={{ flexShrink: 0 }}>
-            {ws.advancedSwitchToYaml}
-          </Button>
-        </Stack>
-      </Paper>
-
-      {/* Actions */}
-      <Stack direction="row" spacing={2} justifyContent="flex-end">
-        <Button variant="text" onClick={onCancel}>
-          {common.cancel}
-        </Button>
-        <Button type="submit" variant="contained" disabled={!name || submitting}>
-          {submitting ? <CircularProgress size={20} color="inherit" /> : ws.createWorkspace}
-        </Button>
-      </Stack>
-    </Stack>
-  );
+function initialValues(controls: ReturnType<typeof resolveTemplateControls>): WorkspaceFormValues {
+  return {
+    cpu: controls.cpu.default,
+    memory: controls.memory.default,
+    storage: controls.storage.default,
+    image: controls.image.value,
+    accessType: controls.accessType,
+    idleEnabled: controls.idle.available ? controls.idle.enabledDefault : false,
+    idleTimeout: controls.idle.available ? controls.idle.timeout.default : 30,
+  };
 }

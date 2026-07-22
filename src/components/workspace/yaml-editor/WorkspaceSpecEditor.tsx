@@ -91,6 +91,15 @@ export interface WorkspaceSpecEditorProps {
    * dirty, so unsaved YAML isn't silently lost.
    */
   onSwitchToForm?: () => void;
+  /**
+   * Inline create only: controlled template selection, lifted to the create page so the
+   * choice carries bidirectionally across the form ↔ YAML toggle. When
+   * provided, the editor uses these instead of its own internal template state. The
+   * `<no-template>` card and "no template selected" here are the SAME null state.
+   */
+  templateName?: string | null;
+  onTemplateNameChange?: (value: string | null) => void;
+  onResolvedTemplateChange?: (template: DiscoveredTemplate | null) => void;
 }
 
 // The YAML-editing surface shared by the inline create toggle and the edit page. The
@@ -105,10 +114,16 @@ export function WorkspaceSpecEditor({
   routeName,
   renderIdentityFields = false,
   onSwitchToForm,
+  templateName,
+  onTemplateNameChange,
+  onResolvedTemplateChange,
 }: WorkspaceSpecEditorProps) {
   const navigate = useNavigate();
   const isEdit = mode === 'edit';
   const { workspace: ws, common } = strings;
+  // When the parent lifts template state (inline create), use the controlled values;
+  // otherwise fall back to the editor's own internal state (edit page / standalone).
+  const templateControlled = onTemplateNameChange !== undefined;
 
   // --- Data ---
   const { data: rawSchema } = useCrdSchema('workspaces');
@@ -124,8 +139,17 @@ export function WorkspaceSpecEditor({
   // lets a template change be a discrete event we react to (guidance panel + scaffold
   // regeneration) without re-parsing YAML on every keystroke. `resolvedTemplate` is the
   // full template the dropdown resolved to (null = none / not discoverable).
-  const [templateRef, setTemplateRef] = useState<string | null>(null);
+  const [internalTemplateRef, setInternalTemplateRef] = useState<string | null>(null);
   const [resolvedTemplate, setResolvedTemplate] = useState<DiscoveredTemplate | null>(null);
+  // The active templateRef name: controlled by the parent when lifted, else internal.
+  const templateRef = templateControlled ? (templateName ?? null) : internalTemplateRef;
+  const setTemplateRef = useCallback(
+    (value: string | null) => {
+      if (templateControlled) onTemplateNameChange!(value);
+      else setInternalTemplateRef(value);
+    },
+    [templateControlled, onTemplateNameChange],
+  );
 
   // The editor buffer. Create starts from a self-documenting scaffold (required fields
   // active, others commented); edit seeds from the fetched spec (below).
@@ -180,7 +204,7 @@ export function WorkspaceSpecEditor({
       setYamlText(specToYaml(spec as Record<string, unknown>));
       setSeeded(true);
     }
-  }, [isEdit, existing, seeded, onDisplayNameChange, onNameChange]);
+  }, [isEdit, existing, seeded, onDisplayNameChange, onNameChange, setTemplateRef]);
 
   // When a template resolves in the dropdown, the guidance panel always updates. The
   // buffer only regenerates from its defaults while pristine; if the user has edited,
@@ -188,6 +212,7 @@ export function WorkspaceSpecEditor({
   const handleTemplateResolved = useCallback(
     (tmpl: DiscoveredTemplate | null) => {
       setResolvedTemplate(tmpl);
+      onResolvedTemplateChange?.(tmpl);
       if (isEdit) return;
       if (!dirty) {
         setYamlText(buildCreateScaffold(tmpl, ws.advancedHintDocsUrl));
@@ -196,7 +221,7 @@ export function WorkspaceSpecEditor({
         setRegenDialogOpen(true);
       }
     },
-    [isEdit, dirty, ws.advancedHintDocsUrl],
+    [isEdit, dirty, ws.advancedHintDocsUrl, onResolvedTemplateChange],
   );
 
   const confirmRegen = useCallback(() => {
