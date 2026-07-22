@@ -1,5 +1,5 @@
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
-import { Typography, Button, Chip, CircularProgress, Box, Stack, Paper } from '@mui/material';
+import { Typography, Button, Chip, CircularProgress, Box, Stack, Paper, Tooltip } from '@mui/material';
 import {
   ArrowBack,
   PlayArrow,
@@ -168,8 +168,30 @@ export function WorkspaceDetail() {
             </Typography>
             <Stack gap={1}>
               <InfoRow label="Status" value={<Chip size="small" label={workspaceStatus} color={getStatusChipColor(workspaceStatus)} />} />
-              <InfoRow label="Image" value={workspace.spec.image ?? '—'} />
+              <InfoRow
+                label="Image"
+                value={
+                  workspace.spec.image ? (
+                    <Tooltip title={workspace.spec.image}>
+                      <Chip size="small" label={workspace.spec.image.split('/').pop()} variant="outlined" />
+                    </Tooltip>
+                  ) : (
+                    '—'
+                  )
+                }
+              />
+              <InfoRow label="Template" value={<Chip size="small" label={workspace.spec.templateRef?.name ?? 'none'} variant="outlined" />} />
               <InfoRow label="Access" value={<Chip size="small" label={workspace.spec.accessType === 'Public' ? 'Public' : 'Private'} variant="outlined" />} />
+              <InfoRow
+                label="Idle shutdown"
+                value={
+                  workspace.spec.idleShutdown?.enabled ? (
+                    `${workspace.spec.idleShutdown.idleTimeoutInMinutes} minutes`
+                  ) : (
+                    <Chip size="small" label="Disabled" variant="outlined" />
+                  )
+                }
+              />
               <InfoRow label="Created" value={new Date(workspace.metadata.creationTimestamp ?? '').toLocaleDateString()} />
             </Stack>
           </Paper>

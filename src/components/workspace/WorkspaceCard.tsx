@@ -7,6 +7,7 @@ import { useStartWorkspace, useStopWorkspace, useDeleteWorkspace } from '../../a
 import { useAuth } from '../../context';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { getWorkspaceStatus, getStatusChipColor, isOwner as checkIsOwner, getWorkspaceOwner } from '../../utils';
+import { getAppTypeLogo } from '../icons/appTypeLogo';
 import { strings } from '../../constants';
 import styles from './WorkspaceCard.module.css';
 
@@ -24,6 +25,10 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
   const deleteMutation = useDeleteWorkspace();
 
   const { metadata, spec, status } = workspace;
+
+  // Template pill: the workspace's templateRef name (if any). No-template workspaces show
+  // no pill.
+  const templateLabel = spec.templateRef?.name ?? null;
   const workspaceStatus = getWorkspaceStatus(workspace);
   const accessURL = status?.accessURL;
 
@@ -65,14 +70,21 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
       <Card className={styles.card} aria-label={strings.a11y.workspaceCard(spec.displayName ?? metadata.name, workspaceStatus)}>
         <CardContent className={styles.cardContent}>
           <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="h6" component="h3" noWrap sx={{ mb: 0.5 }}>
-                {spec.displayName ?? metadata.name}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {metadata.name}
-              </Typography>
-            </Box>
+            <Stack direction="row" gap={1.5} sx={{ flex: 1, minWidth: 0 }}>
+              {/* App logo (from appType), scaled to the height of the title+name block.
+                  aria-hidden (decorative) so it carries a data-testid for e2e instead. */}
+              <Box className={styles.appLogo} aria-hidden="true" data-testid="workspace-app-logo">
+                {getAppTypeLogo(spec.appType, 36)}
+              </Box>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="h6" component="h3" noWrap sx={{ mb: 0.5 }}>
+                  {spec.displayName ?? metadata.name}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" noWrap>
+                  {metadata.name}
+                </Typography>
+              </Box>
+            </Stack>
             <IconButton size="small" onClick={handleMenuOpen} aria-label={strings.workspace.moreOptions}>
               <MoreVert />
             </IconButton>
@@ -81,7 +93,11 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
           <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 2.5, flexWrap: 'wrap' }}>
             <Chip icon={<Circle sx={{ fontSize: 8 }} />} label={workspaceStatus} size="small" color={getStatusChipColor(workspaceStatus)} variant="outlined" />
             <Chip label={spec.image?.split('/').pop() ?? spec.image} size="small" variant="outlined" className={styles.imageChip} title={spec.image} />
-            {spec.ownershipType === 'OwnerOnly' && <Chip label={strings.common.private} size="small" className={styles.privateChip} />}
+            {templateLabel && <Chip label={templateLabel} size="small" variant="outlined" className={styles.imageChip} title={templateLabel} />}
+            {/* "Private" reflects accessType (who can connect) — matching the create/edit
+                Private toggle, which drives accessType only. ownershipType (edit/delete
+                rights) is decoupled and not surfaced here. */}
+            {spec.accessType === 'OwnerOnly' && <Chip label={strings.common.private} size="small" className={styles.privateChip} />}
           </Stack>
 
           <Stack direction="row" gap={2} sx={{ color: 'text.secondary' }}>

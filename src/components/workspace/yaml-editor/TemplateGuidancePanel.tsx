@@ -62,12 +62,31 @@ export function TemplateGuidancePanel({ template }: TemplateGuidancePanelProps) 
     idle && (idle.minIdleTimeoutInMinutes != null || idle.maxIdleTimeoutInMinutes != null)
       ? range(idle.minIdleTimeoutInMinutes?.toString(), idle.maxIdleTimeoutInMinutes?.toString())
       : null;
+  // Idle: line 1 is a bare status word — "Required" (the on/off toggle is fixed, allow !==
+  // true) or "Optional" — and line 2 is the timeout range. Shown whenever the template
+  // declares an idleShutdownOverrides block.
+  const idleNode = idle ? (
+    <Stack spacing={0.25} sx={{ minWidth: 0 }}>
+      <Typography variant="caption">{idle.allow !== true ? ws.guidanceIdleRequired : ws.guidanceIdleOptional}</Typography>
+      {idleRange && (
+        <Typography variant="caption" color="text.secondary">
+          {`${ws.guidanceIdleTimeout}: ${idleRange}`}
+        </Typography>
+      )}
+    </Stack>
+  ) : null;
 
-  // Images: one image per line; falls back to "any"/default-only text.
+  // Images: one image per line. A template can allow custom images AND still curate an
+  // allowedImages list (suggestions) — show both: list the images under a "custom also
+  // allowed" note. Custom-only (no list) → "any image"; no custom → the fixed list or the
+  // default-image-only fallback.
+  const hasAllowed = spec.allowedImages != null && spec.allowedImages.length > 0;
   const imageLines = spec.allowCustomImages
-    ? [ws.guidanceAnyImage]
-    : spec.allowedImages && spec.allowedImages.length > 0
-      ? spec.allowedImages
+    ? hasAllowed
+      ? [ws.guidanceAnyImagePlus, ...spec.allowedImages!]
+      : [ws.guidanceAnyImage]
+    : hasAllowed
+      ? spec.allowedImages!
       : [spec.defaultImage ?? ws.guidanceDefaultImageOnly];
 
   // Resources: one `label: range` pair per constrained resource (CPU / Memory / GPU).
@@ -111,7 +130,7 @@ export function TemplateGuidancePanel({ template }: TemplateGuidancePanelProps) 
           )}
           {resourcePairs.length > 0 && boundsRow(ws.guidanceResources, pairGrid(resourcePairs))}
           {storageRange && boundsRow(ws.guidanceStorage, pairGrid([{ label: ws.guidanceStorageSize, value: storageRange }]))}
-          {idleRange && boundsRow(ws.guidanceIdleShutdown, pairGrid([{ label: ws.guidanceIdleTimeout, value: idleRange }]))}
+          {idleNode && boundsRow(ws.guidanceIdleShutdown, idleNode)}
         </Box>
       </Stack>
     </Paper>
