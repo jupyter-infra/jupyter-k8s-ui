@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from './client';
-import type { CreateWorkspaceRequest, Workspace, AdvancedWorkspacePayload } from '../types';
+import type { CreateWorkspaceRequest, UpdateWorkspaceRequest, Workspace, AdvancedWorkspacePayload } from '../types';
 import { getWorkspaceStatus } from '../utils';
 import { isAuthError } from './auth-interceptor';
 
@@ -124,6 +124,19 @@ export function useCreateWorkspaceAdvanced() {
     mutationFn: (data: AdvancedWorkspacePayload) => apiClient.createWorkspaceAdvanced(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: workspaceKeys.all });
+    },
+  });
+}
+
+// Simple-edit: field-shaped selective update (PATCH → server selective overlay). Only the
+// provided fields are touched, so stored requests / unmodeled fields survive.
+export function useUpdateWorkspace() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, data }: { name: string; data: UpdateWorkspaceRequest }) => apiClient.updateWorkspace(name, data),
+    onSuccess: (_res, { name }) => {
+      queryClient.invalidateQueries({ queryKey: workspaceKeys.all });
+      queryClient.invalidateQueries({ queryKey: workspaceKeys.detail(name) });
     },
   });
 }

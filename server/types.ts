@@ -19,10 +19,17 @@ export type OwnershipType = (typeof OWNERSHIP_TYPES)[number];
 export interface K8sMetadata {
   name: string;
   namespace: string;
+  labels?: Record<string, string>;
   annotations?: Record<string, string>;
   creationTimestamp?: string;
   resourceVersion?: string;
 }
+
+// Idle detection is app-specific (endpoint/port/response parsing) and the CRD requires
+// it whenever `idleShutdown` is present. The simple form never authors or parses it — it
+// only relays it verbatim (echoing the template's default on create, the workspace's own
+// on edit). So we treat it as an opaque passthrough object.
+export type IdleDetection = Record<string, unknown>;
 
 export interface K8sResourceRequirements {
   limits?: { cpu?: string; memory?: string; 'nvidia.com/gpu'?: string };
@@ -49,7 +56,7 @@ export interface K8sWorkspace {
     resources?: K8sResourceRequirements;
     storage?: Record<string, unknown>;
     templateRef?: { name: string; namespace?: string };
-    idleShutdown?: { enabled: boolean; idleTimeoutInMinutes?: number };
+    idleShutdown?: { enabled: boolean; idleTimeoutInMinutes?: number; detection?: IdleDetection };
     podSecurityContext?: Record<string, unknown>;
     accessStrategy?: { name: string; namespace?: string };
   };
@@ -80,21 +87,26 @@ export interface K8sWorkspaceTemplate {
     };
     defaultResources?: {
       requests?: { cpu?: string; memory?: string };
+      limits?: { cpu?: string; memory?: string };
     };
     primaryStorage?: {
       defaultSize?: string;
       minSize?: string;
       maxSize?: string;
       defaultMountPath?: string;
+      defaultStorageClassName?: string;
     };
     defaultIdleShutdown?: {
       enabled?: boolean;
       idleTimeoutInMinutes?: number;
+      detection?: IdleDetection;
     };
     idleShutdownOverrides?: {
+      allow?: boolean;
       minIdleTimeoutInMinutes?: number;
       maxIdleTimeoutInMinutes?: number;
     };
+    appType?: string;
     defaultAccessStrategy?: { name: string; namespace?: string };
   };
 }
@@ -133,21 +145,35 @@ export interface TemplateResponse {
   metadata: {
     name: string;
     namespace: string;
+    // Passed through so the frontend can read workspace.jupyter.org/default-template
+    // (the preselection matrix / no-template-card visibility hinge on it).
+    labels: Record<string, string>;
   };
   spec: K8sWorkspaceTemplate['spec'];
 }
 
 // --- Request Types ---
 
+// idleShutdown carries `detection` as an opaque passthrough: the client sends a
+// COMPLETE idleShutdown block (echoing detection verbatim), so the server relays it
+// without merging.
+export interface IdleShutdownBody {
+  enabled: boolean;
+  timeoutInMinutes?: number;
+  detection?: IdleDetection;
+}
+
 export interface CreateWorkspaceBody {
   name: string;
   displayName?: string;
+  image?: string;
   desiredStatus?: DesiredStatus;
   accessType?: AccessType;
   ownershipType?: OwnershipType;
   resources?: K8sResourceRequirements;
   storage?: { size: string };
-  idleShutdown?: { enabled: boolean; timeoutInMinutes?: number };
+  templateRef?: { name: string; namespace?: string };
+  idleShutdown?: IdleShutdownBody;
 }
 
 export interface UpdateWorkspaceBody {
@@ -159,7 +185,7 @@ export interface UpdateWorkspaceBody {
   resources?: K8sResourceRequirements;
   storage?: Record<string, unknown>;
   templateRef?: { name: string; namespace?: string };
-  idleShutdown?: { enabled: boolean; timeoutInMinutes?: number };
+  idleShutdown?: IdleShutdownBody;
   podSecurityContext?: Record<string, unknown>;
   accessStrategy?: { name: string; namespace?: string };
 }

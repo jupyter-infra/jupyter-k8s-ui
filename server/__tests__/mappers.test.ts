@@ -65,19 +65,21 @@ describe('workspaceToResponse', () => {
 });
 
 describe('templateToResponse', () => {
-  test('passes through metadata and spec', () => {
+  test('passes through metadata (incl. labels) and spec', () => {
     const tmpl: K8sWorkspaceTemplate = {
       apiVersion: 'workspace.jupyter.org/v1alpha1',
       kind: 'WorkspaceTemplate',
-      metadata: { name: 'gpu', namespace: 'jupyter' },
+      metadata: { name: 'gpu', namespace: 'jupyter', labels: { 'workspace.jupyter.org/default-template': 'true' } },
       spec: { displayName: 'GPU', defaultImage: 'jupyter:scipy' },
     };
     const res = templateToResponse(tmpl);
-    expect(res.metadata).toEqual({ name: 'gpu', namespace: 'jupyter' });
+    expect(res.metadata).toEqual({ name: 'gpu', namespace: 'jupyter', labels: { 'workspace.jupyter.org/default-template': 'true' } });
     expect(res.spec).toEqual({ displayName: 'GPU', defaultImage: 'jupyter:scipy' });
   });
 
-  test('defaults missing metadata to empty strings', () => {
+  // The preselection matrix reads metadata.labels; a dropped label would break
+  // default-template detection. The frontend also reads it as a dict (undefined → TypeError).
+  test('defaults missing metadata (incl. labels) so frontend never sees undefined', () => {
     const tmpl = {
       apiVersion: 'workspace.jupyter.org/v1alpha1',
       kind: 'WorkspaceTemplate',
@@ -85,6 +87,6 @@ describe('templateToResponse', () => {
       spec: {},
     } as unknown as K8sWorkspaceTemplate;
     const res = templateToResponse(tmpl);
-    expect(res.metadata).toEqual({ name: '', namespace: '' });
+    expect(res.metadata).toEqual({ name: '', namespace: '', labels: {} });
   });
 });

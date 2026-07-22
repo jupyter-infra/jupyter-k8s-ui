@@ -28,6 +28,7 @@ export function templateToResponse(tmpl: K8sWorkspaceTemplate): TemplateResponse
     metadata: {
       name: tmpl.metadata?.name ?? '',
       namespace: tmpl.metadata?.namespace ?? '',
+      labels: tmpl.metadata?.labels ?? {},
     },
     spec: tmpl.spec ?? {},
   };

@@ -23,16 +23,21 @@ export interface StorageSpec {
   storageClassName?: string;
 }
 
+// Idle detection is app-specific and opaque to the UI — we only relay it verbatim
+// (never parse or author it). Mirrors the server's IdleDetection passthrough.
+export type IdleDetection = Record<string, unknown>;
+
 export interface WorkspaceSpec {
   displayName?: string;
   image?: string;
+  appType?: string;
   desiredStatus?: DesiredStatus;
   accessType?: AccessType;
   ownershipType?: OwnershipType;
   resources?: ResourceRequirements;
   storage?: StorageSpec;
   templateRef?: { name: string; namespace?: string };
-  idleShutdown?: { enabled: boolean; idleTimeoutInMinutes?: number };
+  idleShutdown?: { enabled: boolean; idleTimeoutInMinutes?: number; detection?: IdleDetection };
   podSecurityContext?: Record<string, unknown>;
   accessStrategy?: { name: string; namespace?: string };
 }
@@ -80,31 +85,45 @@ export interface WorkspaceTemplateSpec {
     minSize?: string;
     maxSize?: string;
     defaultMountPath?: string;
+    defaultStorageClassName?: string;
   };
   defaultIdleShutdown?: {
     enabled?: boolean;
     idleTimeoutInMinutes?: number;
+    detection?: IdleDetection;
   };
   idleShutdownOverrides?: {
+    allow?: boolean;
     minIdleTimeoutInMinutes?: number;
     maxIdleTimeoutInMinutes?: number;
   };
+  appType?: string;
   defaultAccessStrategy?: { name: string; namespace?: string };
 }
 
 export interface WorkspaceTemplate {
-  metadata: { name: string; namespace: string };
+  metadata: { name: string; namespace: string; labels?: Record<string, string> };
   spec: WorkspaceTemplateSpec;
+}
+
+// Complete idleShutdown block the client sends when idle is present — echoes `detection`
+// verbatim, never a partial block.
+export interface IdleShutdownRequest {
+  enabled: boolean;
+  timeoutInMinutes?: number;
+  detection?: IdleDetection;
 }
 
 export interface CreateWorkspaceRequest {
   name: string;
   displayName: string;
+  image?: string;
   resources?: ResourceRequirements;
   storage?: { size: string };
   accessType?: AccessType;
   ownershipType?: OwnershipType;
-  idleShutdown?: { enabled: boolean; timeoutInMinutes?: number };
+  templateRef?: { name: string; namespace?: string };
+  idleShutdown?: IdleShutdownRequest;
 }
 
 export interface UpdateWorkspaceRequest {
@@ -116,7 +135,7 @@ export interface UpdateWorkspaceRequest {
   resources?: ResourceRequirements;
   storage?: Record<string, unknown>;
   templateRef?: { name: string; namespace?: string };
-  idleShutdown?: { enabled: boolean; timeoutInMinutes?: number };
+  idleShutdown?: IdleShutdownRequest;
   podSecurityContext?: Record<string, unknown>;
   accessStrategy?: { name: string; namespace?: string };
 }
@@ -154,6 +173,9 @@ export interface DiscoveredAccessStrategy {
 export interface DiscoveryResponse<T> {
   items: T[];
   access: DiscoveryAccess;
+  // Present on the templates response: which namespace is the user's own vs. the shared
+  // one, so the picker can mirror the operator's own-ns-beats-shared default precedence (A8).
+  namespaces?: { own: string; shared: string };
 }
 
 export interface ClusterAccessInfo {

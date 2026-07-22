@@ -122,6 +122,31 @@ describe('handleCreateWorkspace', () => {
     expect(obj.metadata.namespace).toBe('test-ns');
   });
 
+  // The simple-create branch must spread templateRef + image into the spec (it
+  // previously spread templateRef on the advanced branch only).
+  test('spreads templateRef and image from the simple-form body into the spec', async () => {
+    await handleCreateWorkspace('jwt', jsonRequest({ name: 'ws', templateRef: { name: 'gpu', namespace: 'shared' }, image: 'custom:2' }));
+    const obj = lastCreated();
+    expect(obj.spec.templateRef).toEqual({ name: 'gpu', namespace: 'shared' });
+    expect(obj.spec.image).toBe('custom:2');
+  });
+
+  test('omits templateRef and image when the simple-form body lacks them', async () => {
+    await handleCreateWorkspace('jwt', jsonRequest({ name: 'ws' }));
+    const obj = lastCreated();
+    expect(obj.spec).not.toHaveProperty('templateRef');
+    expect(obj.spec).not.toHaveProperty('image');
+  });
+
+  // A complete idleShutdown block (incl. detection) must round-trip verbatim through
+  // create — the CRD requires detection whenever idleShutdown is present.
+  test('passes idleShutdown.detection through create verbatim', async () => {
+    const detection = { httpGet: { path: '/api/status', port: 8888, transport: 'network' } };
+    await handleCreateWorkspace('jwt', jsonRequest({ name: 'ws', idleShutdown: { enabled: true, timeoutInMinutes: 30, detection } }));
+    const obj = lastCreated();
+    expect(obj.spec.idleShutdown).toEqual({ enabled: true, idleTimeoutInMinutes: 30, detection });
+  });
+
   test('returns 201 on success', async () => {
     const res = await handleCreateWorkspace('jwt', jsonRequest({ name: 'ws' }));
     expect(res.status).toBe(201);
@@ -183,6 +208,18 @@ describe('handleUpdateWorkspace', () => {
 
     const updated = lastReplaced();
     expect(updated.spec.idleShutdown).toEqual({ enabled: true, idleTimeoutInMinutes: 45 });
+  });
+
+  // The wholesale idleShutdown replace must carry detection through on update, since
+  // the client echoes the workspace's own detection verbatim (no server-side merge).
+  test('passes idleShutdown.detection through update verbatim', async () => {
+    mockedK8s.get.mockImplementationOnce(async () => ({ body: buildK8sWorkspace('ws') }));
+    const detection = { httpGet: { path: '/api/status', port: 8888 } };
+
+    await handleUpdateWorkspace('jwt', 'ws', jsonRequest({ idleShutdown: { enabled: true, timeoutInMinutes: 45, detection } }, 'PATCH'));
+
+    const updated = lastReplaced();
+    expect(updated.spec.idleShutdown).toEqual({ enabled: true, idleTimeoutInMinutes: 45, detection });
   });
 
   test('rejects invalid accessType with 400 before touching K8s', async () => {

@@ -68,8 +68,11 @@ class ApiClient {
 
   createWorkspace = (data: CreateWorkspaceRequest) => this.request<Workspace>('/workspaces', { method: 'POST', body: JSON.stringify(data) });
 
+  // Field-shaped selective update (server overlays only the provided fields onto the
+  // existing spec). Used by the simple-edit page so untouched fields — including stored
+  // requests — are left intact. PATCH so the server takes the merge branch.
   updateWorkspace = (name: string, data: UpdateWorkspaceRequest) =>
-    this.request<Workspace>(`/workspaces/${name}`, { method: 'PUT', body: JSON.stringify(data) });
+    this.request<Workspace>(`/workspaces/${name}`, { method: 'PATCH', body: JSON.stringify(data) });
 
   deleteWorkspace = (name: string) => this.request<void>(`/workspaces/${name}`, { method: 'DELETE' });
 
