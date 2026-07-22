@@ -1,10 +1,14 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import svgr from 'vite-plugin-svgr';
 import path from 'path';
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  // svgr lets us import app-type logos as React components via `?react` (see
+  // src/components/icons/appTypeLogo.tsx). Scoped to the `?react` query so it doesn't
+  // interfere with any plain-URL SVG imports.
+  plugins: [svgr({ include: '**/*.svg?react' }), react()],
   resolve: {
     alias: [{ find: '@', replacement: path.resolve(__dirname, './src') }],
     // NOTE: do NOT alias `monaco-editor` to its `editor.api` entry to trim bundled
