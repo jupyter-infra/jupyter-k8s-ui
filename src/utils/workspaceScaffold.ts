@@ -33,6 +33,24 @@ export function buildCreateScaffold(template: DiscoveredTemplate | null, docsUrl
   const resources = spec?.defaultResources ? inline(spec.defaultResources) : '{}';
   const accessType = spec?.defaultAccessType ?? 'Public';
   const ownershipType = spec?.defaultOwnershipType ?? 'Public';
+  const storageSize = spec?.primaryStorage?.defaultSize ?? '10Gi';
+  // The CRD requires `detection` whenever `idleShutdown` is present, so the example must
+  // carry it. Fold in the template's own defaultIdleShutdown (detection included) when set;
+  // otherwise fall back to the plain-vanilla JupyterLab detection block.
+  const idleShutdown = spec?.defaultIdleShutdown
+    ? inline(spec.defaultIdleShutdown)
+    : inline({
+        enabled: true,
+        idleTimeoutInMinutes: 30,
+        detection: {
+          httpGet: {
+            path: '/api/status',
+            port: 8888,
+            transport: 'network',
+            lastActivityTimestamp: { responseBodyPath: 'last_activity', format: 'RFC3339' },
+          },
+        },
+      });
 
   return [
     'desiredStatus: Running',
@@ -43,15 +61,15 @@ export function buildCreateScaffold(template: DiscoveredTemplate | null, docsUrl
     `# accessType: ${accessType}`,
     `# ownershipType: ${ownershipType}`,
     `# resources: ${resources}`,
-    '# storage: { size: 10Gi }',
-    '# idleShutdown: { enabled: true, idleTimeoutInMinutes: 30 }',
+    `# storage: { size: ${storageSize} }`,
+    `# idleShutdown: ${idleShutdown}`,
     `# env: ${env}`,
     '# appType: jupyterlab',
     '',
     '# --- Advanced fields ---',
     `# see ${docsUrl}`,
-    '# accessStrategy: { name: my-access-strategy }',
-    '# serviceAccountName: my-service-account',
+    '# accessStrategy: {}',
+    '# serviceAccountName: default',
     '# nodeSelector: {}',
     '# affinity: {}',
     '# tolerations: []',
