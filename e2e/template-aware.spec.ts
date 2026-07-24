@@ -39,6 +39,10 @@ test.describe('Template-aware simple create + edit', () => {
     const imageField = page.getByRole('combobox', { name: /image/i });
     await expect(imageField).toBeVisible();
 
+    // The `default` template has NO defaultIdleShutdown → the simple form can't author idle
+    // (no detection to echo), so the idle toggle is not rendered at all.
+    await expect(page.getByRole('checkbox', { name: /enable automatic shutdown when idle/i })).toHaveCount(0);
+
     // Submit — the operator resolves the (auto-used) default template and admits.
     await page.getByRole('button', { name: /create workspace/i }).click();
     await expect(page).toHaveURL('/', { timeout: 10_000 });
@@ -47,6 +51,11 @@ test.describe('Template-aware simple create + edit', () => {
     const card = page.getByLabel(new RegExp(`${WS_NAME}.*workspace`, 'i'));
     await expect(card).toBeVisible({ timeout: 10_000 });
     await waitForCardStatus(page, card, 'Running');
+
+    // The default template's appType is `jupyterlab` → the branded Jupyter SVG renders (not
+    // the neutral fallback). Asserting on the branded-SVG testid verifies the logo registry
+    // actually resolved, not merely that the logo wrapper box exists.
+    await expect(card.getByTestId('app-type-logo-svg')).toBeVisible();
 
     // WYSIWYG: the template's default image the form displayed actually landed on the
     // created workspace (detail page shows the short name:tag pill).

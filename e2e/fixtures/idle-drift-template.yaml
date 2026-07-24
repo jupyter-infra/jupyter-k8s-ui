@@ -1,0 +1,52 @@
+# A non-default template used ONLY by idle-drift.spec.ts. Starts PERMISSIVE: idle is
+# disabled by default and overrides are allowed, so a workspace can be created with idle off.
+# The drift test then flips idleShutdownOverrides.allow to false AND the default to enabled
+# (kubectl patch), so the template now REQUIRES idle — leaving the existing idle-off workspace
+# in violation. This exercises conform-on-load forcing idleShutdown.enabled → true (the frozen
+# toggle otherwise gives the user no way to satisfy the operator's structural lock). The spec
+# restores the permissive state afterward, so the fixture on disk is the pristine start.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: idle-drift-template
+  namespace: default
+  labels:
+    workspace.jupyter.org/default-template: 'false'
+spec:
+  displayName: Idle Drift Template
+  description: Idle overrides flipped mid-test to exercise the enabled-conform path
+  appType: jupyterlab
+  defaultImage: nginx:latest
+  allowedImages:
+    - nginx:latest
+  defaultResources:
+    requests:
+      cpu: '100m'
+      memory: '128Mi'
+    limits:
+      cpu: '500m'
+      memory: '512Mi'
+  resourceBounds:
+    resources:
+      cpu:
+        min: '100m'
+        max: '2'
+      memory:
+        min: '128Mi'
+        max: '2Gi'
+  primaryStorage:
+    defaultSize: '1Gi'
+    minSize: '1Gi'
+    maxSize: '10Gi'
+    defaultMountPath: '/data'
+  defaultIdleShutdown:
+    enabled: false
+    idleTimeoutInMinutes: 30
+    detection:
+      httpGet:
+        path: /
+        port: 80
+  idleShutdownOverrides:
+    allow: true
+    minIdleTimeoutInMinutes: 15
+    maxIdleTimeoutInMinutes: 120

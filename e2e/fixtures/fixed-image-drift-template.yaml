@@ -1,0 +1,39 @@
+# A non-default template with a FIXED image (no allowedImages, no allowCustomImages), used
+# ONLY by template-drift.spec.ts. The image_validator treats an empty allowedImages as
+# [defaultImage], so the template pins the image to defaultImage. The drift test creates a
+# workspace against this template, then mutates defaultImage (kubectl patch) so the stored
+# workspace image no longer matches — exercising conform-on-load + the operator's whole-spec
+# revalidation on save. The spec restores defaultImage afterward, so the fixture on disk is
+# the pristine starting state.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: fixed-image-drift-template
+  namespace: default
+  labels:
+    workspace.jupyter.org/default-template: 'false'
+spec:
+  displayName: Fixed Image Drift Template
+  description: Fixed image; mutated mid-test to exercise conform-on-load drift
+  appType: jupyterlab
+  defaultImage: nginx:latest
+  defaultResources:
+    requests:
+      cpu: '100m'
+      memory: '128Mi'
+    limits:
+      cpu: '500m'
+      memory: '512Mi'
+  resourceBounds:
+    resources:
+      cpu:
+        min: '100m'
+        max: '2'
+      memory:
+        min: '128Mi'
+        max: '2Gi'
+  primaryStorage:
+    defaultSize: '1Gi'
+    minSize: '1Gi'
+    maxSize: '10Gi'
+    defaultMountPath: '/data'

@@ -63,9 +63,14 @@ test.describe('No-template create', () => {
     const page = await browser.newPage();
     await deleteWorkspace(page, WS_NAME);
     await page.close();
-    // Restore the flagged default so the other specs' assumptions hold.
-    setDefaultFlag('true');
   });
+
+  // Restore the flagged default in its OWN fixture-less afterAll so it runs unconditionally
+  // — the workspace-cleanup hook above takes the `browser` fixture, and if the browser fails
+  // to launch that hook body never runs, leaving `default` unflagged and breaking every
+  // later run (the advanced-editor create test needs a default template injected). This hook
+  // touches no fixtures, so it always executes.
+  test.afterAll(() => setDefaultFlag('true'));
 
   test('picker shows the No-template card and preselects it (no default flagged)', async ({ page }) => {
     await page.goto('/create');
@@ -80,6 +85,17 @@ test.describe('No-template create', () => {
     const imageField = page.getByRole('combobox', { name: /image/i });
     await expect(imageField).toBeVisible();
     await expect(imageField).toBeEditable();
+
+    // No template → no idle-shutdown source (the form can't infer detection), so the idle
+    // toggle is not rendered at all.
+    await expect(page.getByRole('checkbox', { name: /enable automatic shutdown when idle/i })).toHaveCount(0);
+
+    // No template + empty image is unstartable → the Create button is disabled until an
+    // image is typed (the edge Gaurav caught: no templateRef AND no image = can't start).
+    const createBtn = page.getByRole('button', { name: /create workspace/i });
+    await expect(createBtn).toBeDisabled();
+    await imageField.fill('nginx:latest');
+    await expect(createBtn).toBeEnabled();
   });
 
   test('creates a bare workspace (typed image, no templateRef) that reaches Running', async ({ page }) => {

@@ -209,6 +209,30 @@ test.describe('Advanced YAML editor', () => {
     await expect(page.getByRole('heading', { name: /Renamed Adv/i })).toBeVisible({ timeout: 10_000 });
   });
 
+  test('switching the template in YAML edit surfaces the storage caution; reverting hides it', async ({ page }) => {
+    // Edit-only advisory: switching templates on an EXISTING workspace can request changes
+    // K8s can't satisfy (storage can't shrink). It fires only when the selected templateRef
+    // differs from the stored value, so it must be absent on load and after reverting.
+    const name = `${RUN_ID}-create`; // created with the flagged-default template (`default`)
+    await page.goto(`/workspace/${name}/edit`);
+    await waitForEditor(page);
+
+    const caution = page.getByText(/may request resources that can't be applied/i);
+    // On load the selected template equals the stored one → no caution.
+    await expect(caution).toHaveCount(0);
+
+    // Switch to a different template → caution appears.
+    const combobox = page.getByRole('combobox', { name: /template/i });
+    await combobox.fill('alt-template');
+    await page.getByRole('option', { name: 'alt-template' }).click();
+    await expect(caution).toBeVisible();
+
+    // Revert to the stored template → caution disappears (fires only on a real difference).
+    await combobox.fill('default');
+    await page.getByRole('option', { name: 'default' }).click();
+    await expect(caution).toHaveCount(0);
+  });
+
   test('YAML syntax error blocks save', async ({ page }) => {
     await openAdvancedCreate(page);
     await fillIdentity(page, `${RUN_ID}-syntax`);

@@ -51,6 +51,8 @@ test.describe('Template selection', () => {
 
   // A workspace created against `alt-template` (used by the detail + list assertions).
   const ALT_WS = `${RUN_ID}-alt`;
+  // A separate workspace for the idle toggle-off (create) → toggle-on (edit) round-trip.
+  const IDLE_WS = `${RUN_ID}-idle`;
 
   test('picker preselects the flagged default; carries the selection into the YAML editor', async ({ page }) => {
     await page.goto('/create');
@@ -116,8 +118,11 @@ test.describe('Template selection', () => {
 
     // Template pill = the templateRef name.
     await expect(card.getByText('alt-template', { exact: true })).toBeVisible();
-    // App logo is present (decorative → located by testid).
+    // alt-template's appType is `code-server` — no registered logo → the neutral fallback.
+    // The logo slot exists, but it must NOT carry the branded-SVG testid (that would mean a
+    // real logo rendered, which is the jupyterlab case asserted in template-aware.spec.ts).
     await expect(card.getByTestId('workspace-app-logo')).toBeVisible();
+    await expect(card.getByTestId('app-type-logo-svg')).toHaveCount(0);
   });
 
   test('detail page shows Image, Template, and Idle-shutdown values', async ({ page }) => {
@@ -164,6 +169,8 @@ test.describe('Template selection', () => {
     await expect(idleToggle).toBeVisible();
     await expect(idleToggle).toBeDisabled();
     await expect(idleToggle).toBeChecked();
+    // A lock icon marks the frozen toggle (the tooltip explains why; not asserted here).
+    await expect(page.getByTestId('idle-locked-icon')).toBeVisible();
 
     // The timeout slider is bound to the template's min/max (30–120 min), not the default
     // 1–480. It's enabled (min !== max) so the timeout stays adjustable.
@@ -171,6 +178,63 @@ test.describe('Template selection', () => {
     await expect(timeoutSlider).toBeVisible();
     await expect(timeoutSlider).toHaveAttribute('aria-valuemin', '30');
     await expect(timeoutSlider).toHaveAttribute('aria-valuemax', '120');
+  });
+
+  test('idle toggle-off on create then toggle-on on edit round-trips (allow=true template)', async ({ page }) => {
+    // `alt-template` enables idle by default AND permits disabling (idleShutdownOverrides
+    // .allow=true), so the toggle is interactive. This exercises two fixes together:
+    //   (a) create with the toggle OFF must PERSIST as disabled — omitting idleShutdown would
+    //       let the operator's defaulter re-enable it from the template default; and
+    //   (b) simple edit must let the user turn it back ON (idle controls show whenever the
+    //       template is idle-capable) and persist enabled.
+
+    // --- (a) Create with idle toggled OFF ---
+    await page.goto('/create');
+    await page.getByRole('textbox', { name: /^name$/i }).fill(IDLE_WS);
+    await page.getByRole('textbox', { name: /display name/i }).fill(IDLE_WS);
+    await page.getByRole('button', { name: /select Alt Template template/i }).click();
+
+    // Idle is enabled-by-default here; flip it off (the toggle is interactive, not frozen).
+    const createToggle = page.getByRole('checkbox', { name: /enable automatic shutdown when idle/i });
+    await expect(createToggle).toBeChecked();
+    await expect(createToggle).toBeEnabled();
+    await createToggle.uncheck();
+
+    await page.getByRole('button', { name: /create workspace/i }).click();
+    await expect(page).toHaveURL('/', { timeout: 10_000 });
+    await page.getByRole('button', { name: /all/i }).click();
+    await waitForCardStatus(page, IDLE_WS, 'Running');
+
+    // Detail confirms idle PERSISTED as disabled (not re-enabled by the operator defaulter).
+    await page.goto(`/workspace/${IDLE_WS}`);
+    await expect(page.getByRole('heading', { name: IDLE_WS })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Disabled', { exact: true })).toBeVisible();
+
+    // --- (b) Edit: toggle idle back ON ---
+    // Stop first — edit requires a Stopped workspace.
+    await page.getByRole('button', { name: /stop/i }).click();
+    await expect(page.getByText('Stopped', { exact: true })).toBeVisible({ timeout: 45_000 });
+
+    await page.goto(`/workspace/${IDLE_WS}/edit`);
+    await expect(page.getByRole('heading', { name: /edit workspace/i })).toBeVisible({ timeout: 10_000 });
+
+    // The idle controls are visible (template is idle-capable) and the toggle is currently
+    // off; turn it on and save.
+    const editToggle = page.getByRole('checkbox', { name: /enable automatic shutdown when idle/i });
+    await expect(editToggle).toBeVisible();
+    await expect(editToggle).not.toBeChecked();
+    await editToggle.check();
+    await page.getByRole('button', { name: /save changes/i }).click();
+    await expect(page).toHaveURL('/', { timeout: 10_000 });
+
+    // Detail confirms idle is now enabled again — shows a timeout, not "Disabled".
+    await page.goto(`/workspace/${IDLE_WS}`);
+    await expect(page.getByRole('heading', { name: IDLE_WS })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/\d+ minutes/)).toBeVisible();
+  });
+
+  test('cleans up the idle round-trip workspace', async ({ page }) => {
+    await deleteWorkspace(page, IDLE_WS);
   });
 
   test('cleans up the alt-template workspace', async ({ page }) => {

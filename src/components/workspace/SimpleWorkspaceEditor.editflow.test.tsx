@@ -281,8 +281,8 @@ describe('SimpleWorkspaceEditor', () => {
       }),
     );
     await screen.findByText(/^resources$/i);
-    // Banner discloses the forced enable.
-    expect(screen.getByText(/idle shutdown was enabled \(required by template\)/i)).toBeTruthy();
+    // Banner discloses the forced enable (assert via strings, not a hardcoded literal).
+    expect(screen.getByText(strings.workspace.editConformIdleEnabled)).toBeTruthy();
     // The frozen toggle is disabled + checked, with a lock icon whose tooltip carries the
     // locked-idle copy (asserted via strings, not a hardcoded literal).
     const idleToggle = screen.getByRole('checkbox', { name: strings.workspace.idleShutdownEnable });
