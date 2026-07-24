@@ -50,9 +50,12 @@ interface WorkspaceResourceFormProps {
   // storage is editable on create, read-only on edit (PVC resize isn't webhook-
   // validated — dry-run isn't authoritative for it).
   storageReadOnly?: boolean;
+  // Blocking error on the image field (e.g. no-template + empty image = unstartable). Only
+  // meaningful for the free/select modes; fixed images can't be empty when a template drives them.
+  imageError?: string;
 }
 
-export function WorkspaceResourceForm({ controls, values, onChange, storageReadOnly = false }: WorkspaceResourceFormProps) {
+export function WorkspaceResourceForm({ controls, values, onChange, storageReadOnly = false, imageError }: WorkspaceResourceFormProps) {
   const { workspace: ws, common } = strings;
 
   return (
@@ -63,7 +66,16 @@ export function WorkspaceResourceForm({ controls, values, onChange, storageReadO
           <Stack spacing={2} padding={3}>
             <Typography variant="subtitle2">{ws.sectionEnvironment}</Typography>
             {controls.image.mode === 'select' ? (
-              <TextField select label={ws.fieldImage} value={values.image} onChange={(e) => onChange('image', e.target.value)} size="small" fullWidth>
+              <TextField
+                select
+                label={ws.fieldImage}
+                value={values.image}
+                onChange={(e) => onChange('image', e.target.value)}
+                size="small"
+                fullWidth
+                error={Boolean(imageError)}
+                helperText={imageError}
+              >
                 {controls.image.options.map((img) => (
                   <MenuItem key={img} value={img}>
                     {img}
@@ -82,7 +94,13 @@ export function WorkspaceResourceForm({ controls, values, onChange, storageReadO
                 size="small"
                 fullWidth
                 renderInput={(params) => (
-                  <TextField {...params} label={ws.fieldImage} placeholder={ws.fieldImagePlaceholder} helperText={ws.fieldImageHelper} />
+                  <TextField
+                    {...params}
+                    label={ws.fieldImage}
+                    placeholder={ws.fieldImagePlaceholder}
+                    error={Boolean(imageError)}
+                    helperText={imageError ?? ws.fieldImageHelper}
+                  />
                 )}
               />
             )}
@@ -192,7 +210,17 @@ export function WorkspaceResourceForm({ controls, values, onChange, storageReadO
               <Divider />
               <Stack direction="row" alignItems="center" justifyContent="space-between">
                 <Stack>
-                  <Typography variant="body2">{ws.idleShutdownEnable}</Typography>
+                  <Stack direction="row" alignItems="center" spacing={0.5}>
+                    <Typography variant="body2">{ws.idleShutdownEnable}</Typography>
+                    {/* Template locks the on/off structure (idleShutdownOverrides.allow=false):
+                        the toggle is frozen ON. A disabled Switch swallows hover, so anchor the
+                        tooltip to the lock icon beside the label. */}
+                    {controls.idle.toggleFrozen && (
+                      <Tooltip title={ws.idleShutdownLockedTooltip}>
+                        <LockOutlined color="disabled" fontSize="small" data-testid="idle-locked-icon" />
+                      </Tooltip>
+                    )}
+                  </Stack>
                   {values.idleEnabled && (
                     <Typography variant="caption" color="text.secondary">
                       Shutdown after {values.idleTimeout} {common.min} of inactivity

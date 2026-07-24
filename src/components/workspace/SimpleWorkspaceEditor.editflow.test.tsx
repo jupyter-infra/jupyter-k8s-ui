@@ -3,6 +3,7 @@ import { render, screen, cleanup, fireEvent, waitFor, act } from '@testing-libra
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import type { DiscoveredTemplate, DiscoveryResponse, UpdateWorkspaceRequest, Workspace } from '../../types';
+import { strings } from '../../constants';
 
 const updateSpy = mock(async (): Promise<unknown> => ({}));
 let templatesResponse: DiscoveryResponse<DiscoveredTemplate> = {
@@ -200,5 +201,113 @@ describe('SimpleWorkspaceEditor', () => {
     save();
     await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
     expect(lastPayload().idleShutdown).toEqual({ enabled: true, timeoutInMinutes: 60, detection });
+  });
+
+  test('no stored idle block under an idle-capable template: toggle shows OFF, save authors a block from the template default', async () => {
+    // A workspace with no idleShutdown block under an idle-capable template DOES show the
+    // idle toggle (seeded OFF). Turning it on authors a complete block from the template's
+    // default detection — the UI never invents detection itself.
+    const detection = { httpGet: { port: 8888 } };
+    templatesResponse = {
+      items: [
+        tmpl({
+          displayName: 'EKS',
+          defaultIdleShutdown: { enabled: true, idleTimeoutInMinutes: 30, detection },
+          idleShutdownOverrides: { allow: true, minIdleTimeoutInMinutes: 5, maxIdleTimeoutInMinutes: 120 },
+        }),
+      ],
+      access: { user: 'ok', shared: 'ok' },
+      namespaces: { own: 'user-ns', shared: 'shared-ns' },
+    };
+    // Workspace has NO idleShutdown block.
+    await renderEditor(baseWorkspace({ templateRef: { name: 'eks-oidc', namespace: 'shared-ns' } }));
+    await screen.findByText(/^resources$/i);
+    // The toggle is visible and seeded OFF.
+    const toggle = screen.getByRole('checkbox', { name: /idle/i });
+    expect((toggle as HTMLInputElement).checked).toBe(false);
+    // Turn idle on and save.
+    fireEvent.click(toggle);
+    save();
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    // Block authored from the template default: enabled true, detection from the template.
+    expect(lastPayload().idleShutdown).toEqual({ enabled: true, timeoutInMinutes: 30, detection });
+  });
+
+  test('no stored idle block, toggle left OFF: save sends an explicit {enabled:false} block (not omitted)', async () => {
+    // Even with the toggle left off, save must send an explicit disabled block so the
+    // operator's defaulter can't re-enable idle from the (enabled) template default.
+    const detection = { httpGet: { port: 8888 } };
+    templatesResponse = {
+      items: [
+        tmpl({
+          displayName: 'EKS',
+          defaultIdleShutdown: { enabled: true, idleTimeoutInMinutes: 30, detection },
+          idleShutdownOverrides: { allow: true, minIdleTimeoutInMinutes: 5, maxIdleTimeoutInMinutes: 120 },
+        }),
+      ],
+      access: { user: 'ok', shared: 'ok' },
+      namespaces: { own: 'user-ns', shared: 'shared-ns' },
+    };
+    await renderEditor(baseWorkspace({ templateRef: { name: 'eks-oidc', namespace: 'shared-ns' } }));
+    await screen.findByText(/^resources$/i);
+    save();
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    expect(lastPayload().idleShutdown).toEqual({ enabled: false, timeoutInMinutes: 30, detection });
+  });
+
+  test('template drifted to REQUIRE idle: conform forces enabled on, banner discloses it, save sends enabled block', async () => {
+    // Template now locks idle (allow:false) with an enabled default, but the workspace's
+    // stored block is disabled — reachable only via drift. The operator's structural lock
+    // rejects a disabled block under this template, and the toggle is frozen, so the editor
+    // must conform enabled→true, disclose it, and send the enabled block (from the template
+    // default detection) so the save is admitted.
+    const detection = { httpGet: { port: 8888 } };
+    templatesResponse = {
+      items: [
+        tmpl({
+          displayName: 'EKS',
+          defaultIdleShutdown: { enabled: true, idleTimeoutInMinutes: 30, detection },
+          idleShutdownOverrides: { allow: false, minIdleTimeoutInMinutes: 30, maxIdleTimeoutInMinutes: 120 },
+        }),
+      ],
+      access: { user: 'ok', shared: 'ok' },
+      namespaces: { own: 'user-ns', shared: 'shared-ns' },
+    };
+    // Workspace stored idle DISABLED (the drift-created state).
+    await renderEditor(
+      baseWorkspace({
+        templateRef: { name: 'eks-oidc', namespace: 'shared-ns' },
+        idleShutdown: { enabled: false, idleTimeoutInMinutes: 30, detection },
+      }),
+    );
+    await screen.findByText(/^resources$/i);
+    // Banner discloses the forced enable.
+    expect(screen.getByText(/idle shutdown was enabled \(required by template\)/i)).toBeTruthy();
+    // The frozen toggle is disabled + checked, with a lock icon whose tooltip carries the
+    // locked-idle copy (asserted via strings, not a hardcoded literal).
+    const idleToggle = screen.getByRole('checkbox', { name: strings.workspace.idleShutdownEnable });
+    expect((idleToggle as HTMLInputElement).disabled).toBe(true);
+    expect((idleToggle as HTMLInputElement).checked).toBe(true);
+    const lockIcon = screen.getByTestId('idle-locked-icon');
+    expect(lockIcon.closest('[aria-label]')?.getAttribute('aria-label')).toBe(strings.workspace.idleShutdownLockedTooltip);
+    save();
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    expect(lastPayload().idleShutdown).toEqual({ enabled: true, timeoutInMinutes: 30, detection });
+  });
+
+  test('fixed-image conform-on-load sends the conformed image on save', async () => {
+    // Template pins a fixed image (no allowedImages, no custom) whose defaultImage drifted
+    // from what the workspace stores. conform-on-load rewrites the stored image to the
+    // template default; save must SEND that image or the operator's revalidation rejects it.
+    templatesResponse = {
+      items: [tmpl({ displayName: 'EKS', defaultImage: 'nginx:1.27' })],
+      access: { user: 'ok', shared: 'ok' },
+      namespaces: { own: 'user-ns', shared: 'shared-ns' },
+    };
+    await renderEditor(baseWorkspace({ templateRef: { name: 'eks-oidc', namespace: 'shared-ns' }, image: 'nginx:latest' }));
+    await screen.findByText(/^resources$/i);
+    save();
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    expect(lastPayload().image).toBe('nginx:1.27');
   });
 });

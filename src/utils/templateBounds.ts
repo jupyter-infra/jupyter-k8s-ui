@@ -201,26 +201,32 @@ function resolveImage(template: WorkspaceTemplate): ImageControl {
 }
 
 // Idle three-state model. Unavailable when the template has no defaultIdleShutdown (no
-// detection source → the simple form can't author idle). Otherwise Structure-locked when
-// idleShutdownOverrides.allow !== true, else Interactive.
+// detection source → the simple form can't author idle). Otherwise Structure-locked ONLY
+// when idleShutdownOverrides.allow === false, else Interactive.
+//
+// Freeze condition is `allow === false`, NOT `allow !== true`: a served template can never
+// carry an unset `allow` (the API server fills in `allow: true` whenever the overrides
+// block is present), and when the whole block is ABSENT the operator skips idle validation
+// entirely — so the user is free to toggle idle. Treating absent as locked was wrong: it
+// froze the toggle even though `--dry-run=server` admits a workspace that disables idle.
 function resolveIdle(template: WorkspaceTemplate): IdleControls {
   const def = template.spec.defaultIdleShutdown;
   if (!def) return { available: false };
 
   const overrides = template.spec.idleShutdownOverrides;
-  const allow = overrides?.allow === true;
+  const frozen = overrides?.allow === false;
   const defaultTimeout = def.idleTimeoutInMinutes ?? IDLE_SHUTDOWN_DEFAULTS.DEFAULT_TIMEOUT;
 
-  // Timeout bounds: min = minIdleTimeoutInMinutes ?? (allow ? 1 : default); max =
-  // maxIdleTimeoutInMinutes ?? (allow ? 480 : default). With allow:false + both omitted →
-  // min=max=default → slider pinned.
-  const min = overrides?.minIdleTimeoutInMinutes ?? (allow ? 1 : defaultTimeout);
-  const max = overrides?.maxIdleTimeoutInMinutes ?? (allow ? IDLE_SHUTDOWN_DEFAULTS.MAX_TIMEOUT : defaultTimeout);
+  // Timeout bounds: min = minIdleTimeoutInMinutes ?? (frozen ? default : 1); max =
+  // maxIdleTimeoutInMinutes ?? (frozen ? default : 480). With allow:false + both omitted →
+  // min=max=default → slider pinned. Absent-block / allow:true → editable 1..480.
+  const min = overrides?.minIdleTimeoutInMinutes ?? (frozen ? defaultTimeout : 1);
+  const max = overrides?.maxIdleTimeoutInMinutes ?? (frozen ? defaultTimeout : IDLE_SHUTDOWN_DEFAULTS.MAX_TIMEOUT);
 
   return {
     available: true,
     enabledDefault: def.enabled ?? false,
-    toggleFrozen: !allow,
+    toggleFrozen: frozen,
     timeout: {
       min,
       max: Math.max(min, max),
@@ -243,7 +249,7 @@ function normalizeOwnership(value: string | undefined): OwnershipType | null {
 
 // A single value that was adjusted to fit the current template, for the disclosure banner.
 export interface ConformAdjustment {
-  field: 'cpu' | 'memory' | 'storage' | 'image' | 'idleTimeout';
+  field: 'cpu' | 'memory' | 'storage' | 'image' | 'idleTimeout' | 'idleEnabled';
   from: string;
   to: string;
 }

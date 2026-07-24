@@ -13,19 +13,27 @@ import JupyterLogo from '../../assets/logos/jupyter.svg?react';
 
 type LogoComponent = ComponentType<SVGProps<SVGSVGElement>>;
 
-// Keyed by lowercased appType. jupyter / jupyterlab share the Jupyter mark.
+// Keyed by NORMALIZED appType (lowercased, `-`/`_`/spaces stripped).
+// jupyter / jupyterlab share the Jupyter mark.
+// Normalizing means `jupyter-lab`, `jupyter_lab`, and `JupyterLab`
+// resolve to the same entry instead of silently falling back.
 const APP_TYPE_LOGOS: Record<string, LogoComponent> = {
   jupyter: JupyterLogo,
   jupyterlab: JupyterLogo,
-  // TODO: admin-supplied logos via GET /api/v1/config (follow-up PR). Also room here for
-  // vscode, rstudio, … — one entry each, no structural change.
+  // future: admin-supplied logos.
 };
 
-// Returns a rendered logo for the given appType, or a neutral <Apps/> fallback.
+function normalizeAppType(appType: string): string {
+  return appType.toLowerCase().replace(/[-_\s]/g, '');
+}
+
+// Returns a rendered logo for the given appType, or a neutral <Apps/> fallback. The branded
+// logo carries a `data-testid="app-type-logo-svg"` so tests can distinguish a real logo from
+// the fallback (the fallback renders no such element).
 export function getAppTypeLogo(appType?: string, size = 28): ReactNode {
-  const Logo = appType ? APP_TYPE_LOGOS[appType.toLowerCase()] : undefined;
+  const Logo = appType ? APP_TYPE_LOGOS[normalizeAppType(appType)] : undefined;
   if (Logo) {
-    return <Logo width={size} height={size} aria-hidden="true" focusable="false" />;
+    return <Logo width={size} height={size} aria-hidden="true" focusable="false" data-testid="app-type-logo-svg" />;
   }
   return <Apps sx={{ fontSize: size }} aria-hidden="true" />;
 }

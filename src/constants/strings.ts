@@ -89,6 +89,7 @@ export const strings = {
     // Idle shutdown
     idleShutdownEnable: 'Enable automatic shutdown when idle',
     idleShutdownTimeout: 'Idle timeout',
+    idleShutdownLockedTooltip: 'This template requires idle shutdown to be enabled.',
 
     // Form fields
     fieldName: 'Name',
@@ -100,6 +101,7 @@ export const strings = {
     fieldImage: 'Image',
     fieldImagePlaceholder: 'Select or enter a custom image...',
     fieldImageHelper: 'You can enter any container image URL',
+    imageRequiredNoTemplate: 'Specify an application image when not referencing a template.',
     fieldMountPath: 'Storage Mount Path',
     fieldMountPathHelper: 'Directory where persistent storage will be mounted',
 
@@ -147,6 +149,7 @@ export const strings = {
     editConformStorage: (from: string, to: string) => `Storage adjusted from ${from} to ${to} (template limit).`,
     editConformImage: (from: string, to: string) => `Image changed from "${from}" to "${to}" (not allowed by template).`,
     editConformIdleTimeout: (from: string, to: string) => `Idle timeout adjusted from ${from} to ${to} (template bounds).`,
+    editConformIdleEnabled: 'Idle shutdown was enabled as required by the template.',
 
     // Advanced YAML editor
     advancedCreateTitle: 'Create Workspace (Advanced)',
@@ -160,6 +163,8 @@ export const strings = {
     advancedTemplateNone: '(none — use namespace default)',
     advancedTemplateFreeText: 'Enter template name manually',
     advancedResolvedBanner: 'This shows the current resolved configuration, including values applied by the template.',
+    advancedTemplateSwitchCaution:
+      "Changing the template may request resources that can't be applied to an existing workspace. For example, a storage volume may not shrink, and only certain types of storage support scaling up in place. Incompatible changes may cause the workspace to fail to restart.",
     advancedTemplateSwitchTitle: 'Regenerate scaffold?',
     advancedTemplateSwitchMessage: (tmpl: string) =>
       `Apply "${tmpl}"'s defaults to the editor? This regenerates the scaffold and discards your current YAML edits.`,

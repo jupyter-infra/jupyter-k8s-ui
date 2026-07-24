@@ -164,9 +164,19 @@ describe('resolveTemplateControls — idle three states', () => {
     });
   });
 
-  test('allow unset → structure-locked (toggleFrozen true)', () => {
+  test('overrides block present but allow unset → interactive (freeze only on allow===false)', () => {
+    // A served template can't actually carry an unset allow (the API server fills allow:true
+    // whenever the block is present), but if one does we must NOT freeze — the operator would
+    // admit toggling idle. Freeze is gated on an explicit allow===false, not allow!==true.
     const r = resolveTemplateControls(tmpl({ defaultIdleShutdown: { enabled: true, idleTimeoutInMinutes: 30 }, idleShutdownOverrides: {} }));
-    expect(r.idle).toMatchObject({ available: true, toggleFrozen: true });
+    expect(r.idle).toMatchObject({ available: true, toggleFrozen: false, timeout: { min: 1, max: IDLE_SHUTDOWN_DEFAULTS.MAX_TIMEOUT } });
+  });
+
+  test('defaultIdleShutdown but NO overrides block → interactive, editable 1..480', () => {
+    // Absent overrides block: the operator skips idle validation entirely, so the user is
+    // free to toggle idle and set any timeout. (Regression: previously froze the toggle.)
+    const r = resolveTemplateControls(tmpl({ defaultIdleShutdown: { enabled: true, idleTimeoutInMinutes: 30 } }));
+    expect(r.idle).toMatchObject({ available: true, toggleFrozen: false, timeout: { min: 1, max: IDLE_SHUTDOWN_DEFAULTS.MAX_TIMEOUT, default: 30 } });
   });
 
   test('allow:false + both bounds omitted → timeout pinned to default (min=max=default)', () => {

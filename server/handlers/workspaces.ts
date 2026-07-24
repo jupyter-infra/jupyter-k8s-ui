@@ -157,7 +157,10 @@ export async function handleUpdateWorkspace(jwt: string, workspaceName: string, 
       if (rawBody.templateRef) nextSpec.templateRef = rawBody.templateRef;
       updated.spec = nextSpec;
     } else {
-      // Simple form / start-stop PATCH: selective field overlay (unchanged).
+      // Simple form / start-stop: selective field overlay. This code path is chosen by the
+      // BODY SHAPE (field-shaped, no `spec`), not the HTTP verb — both PUT and PATCH route
+      // here (see middleware/router.ts) and behave identically; only the raw-spec body
+      // above takes the full-replace path.
       const body = rawBody as UpdateWorkspaceBody;
       if (body.displayName !== undefined) updated.spec.displayName = body.displayName;
       if (body.image !== undefined) updated.spec.image = body.image;

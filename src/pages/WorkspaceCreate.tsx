@@ -145,11 +145,14 @@ export function WorkspaceCreate() {
     if (controls.image.mode !== 'fixed' && values.image) request.image = values.image;
     else if (controls.image.mode === 'fixed' && controls.image.value) request.image = controls.image.value;
 
-    // Idle: send a COMPLETE block echoing the template's detection verbatim, only when idle
-    // is available AND enabled. No template / unavailable → omit entirely.
-    if (controls.idle.available && values.idleEnabled) {
+    // Idle: send a COMPLETE block echoing the template's detection verbatim. Send it when
+    // idle is available AND (the user enabled it OR the template default is enabled) — the
+    // latter so an explicit toggle-OFF is honored: omitting the block lets the operator's
+    // defaulter copy the template's enabled default back on, re-enabling idle against the
+    // user's choice. No template / unavailable, or an untouched disabled default → omit.
+    if (controls.idle.available && (values.idleEnabled || controls.idle.enabledDefault)) {
       request.idleShutdown = {
-        enabled: true,
+        enabled: values.idleEnabled,
         timeoutInMinutes: values.idleTimeout,
         ...(controls.idle.detection !== undefined && { detection: controls.idle.detection }),
       };
@@ -162,6 +165,14 @@ export function WorkspaceCreate() {
       // Error surfaced via createMutation.error
     }
   };
+
+  // A workspace needs SOMETHING to supply its image: a templateRef (operator injects the
+  // template's defaultImage) or an explicit image. The no-template + empty-image
+  // intersection produces a workspace that can never start, so block submit on exactly
+  // that case (template-backed free-image stays submittable — the operator fills it in).
+  const willSendTemplateRef = Boolean(controls.templateRef || selectedTemplate);
+  const willSendImage = (controls.image.mode !== 'fixed' && !!values.image) || (controls.image.mode === 'fixed' && !!controls.image.value);
+  const unstartable = !willSendTemplateRef && !willSendImage;
 
   const { workspace: ws } = strings;
 
@@ -226,7 +237,12 @@ export function WorkspaceCreate() {
               <TemplatePicker query={templatesQuery} selected={selectedTemplate} onSelect={handleSelectTemplate} onInitialResolved={handleInitialResolved} />
             )}
 
-            <WorkspaceResourceForm controls={controls} values={values} onChange={handleFieldChange} />
+            <WorkspaceResourceForm
+              controls={controls}
+              values={values}
+              onChange={handleFieldChange}
+              imageError={unstartable ? ws.imageRequiredNoTemplate : undefined}
+            />
 
             {/* Advanced box — toggle the YAML editor inline (keeps name/displayName above) */}
             <AdvancedBox onSwitchToYaml={() => setAdvanced(true)} />
@@ -235,7 +251,7 @@ export function WorkspaceCreate() {
               <Button variant="text" onClick={() => navigate('/')}>
                 {strings.common.cancel}
               </Button>
-              <Button type="submit" variant="contained" disabled={!name || createMutation.isPending}>
+              <Button type="submit" variant="contained" disabled={!name || unstartable || createMutation.isPending}>
                 {createMutation.isPending ? <CircularProgress size={20} color="inherit" /> : ws.createWorkspace}
               </Button>
             </Stack>

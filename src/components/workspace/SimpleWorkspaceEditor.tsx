@@ -11,8 +11,11 @@
 //     each adjustment in one dismissable banner (forced by whole-spec revalidation).
 //   — unresolvable templateRef (RBAC-invisible / deleted): seed from the stored spec,
 //     NO guessed static bounds, preserve the ref, note "template not accessible".
-//   — idle controls appear only if the workspace already has an idleShutdown block;
-//     seeded from its own values, echoing its own detection. No block → no idle UI.
+//   — idle controls appear whenever the resolved template is idle-capable. With a stored
+//     idleShutdown block they seed from its own values (echoing its own detection); without
+//     one they seed OFF and save authors a block from the template's default detection. Save
+//     always sends a complete block when idle is available, so a toggle-OFF sticks (omitting
+//     it would let the operator's defaulter re-enable idle from the template default).
 //   — storage read-only on edit.
 //   Identity: name read-only (immutable); displayName editable.
 //   Save: selective PATCH, no desiredStatus (stay Stopped), navigate to '/'.
@@ -66,8 +69,10 @@ function seedFromSpec(
 
   const adjustments = [...cpu.adjustments, ...memory.adjustments, ...image.adjustments];
 
-  // Idle controls only when the workspace already has an idle block. Seed from its own
-  // values; if the template offers idle bounds use them, else fall back to 1..480.
+  // Seed the idle toggle. With a stored idleShutdown block, seed from its own values
+  // (conforming the timeout to the template bounds). Without one, seed OFF at the template's
+  // default timeout — the user can still turn it on, and save authors a block from the
+  // template's default detection. (idle controls render whenever the template is idle-capable.)
   const hasIdleBlock = spec.idleShutdown !== undefined;
   let idleEnabled = false;
   let idleTimeout = controls.idle.available ? controls.idle.timeout.default : 30;
@@ -81,6 +86,17 @@ function seedFromSpec(
     } else {
       idleTimeout = storedTimeout;
     }
+  }
+
+  // Conform the ENABLED flag for a template that drifted to REQUIRE idle
+  // (idleShutdownOverrides.allow=false + an enabled default). The operator's structural lock
+  // rejects any workspace whose idleShutdown doesn't match the default except the timeout —
+  // including a disabled or absent block — and the frozen toggle leaves the user no way to
+  // fix it. Force it on and disclose the change, mirroring the image conform. (Reachable only
+  // via drift: the operator wouldn't have admitted an off/absent block under this template.)
+  if (controls.idle.available && controls.idle.toggleFrozen && controls.idle.enabledDefault && !idleEnabled) {
+    adjustments.push({ field: 'idleEnabled', from: hasIdleBlock ? 'off' : 'unset', to: 'on' });
+    idleEnabled = true;
   }
 
   return {
@@ -189,17 +205,29 @@ export function SimpleWorkspaceEditor({ workspace, displayName, onDisplayNameCha
       };
     }
 
-    // Image: send when the form models it and it changed. Free/select modes are editable.
-    if (controls.image.mode !== 'fixed' && values.image && values.image !== workspace.spec.image) {
+    // Image: send whenever the (possibly conformed) value differs from what's stored —
+    // including the FIXED mode. conform-on-load can rewrite a drifted stored image to the
+    // template's current defaultImage and disclose it in the banner; the operator's
+    // whole-spec revalidation then rejects the save unless we actually send that new image.
+    if (values.image && values.image !== workspace.spec.image) {
       request.image = values.image;
     }
 
-    // Idle: only when the workspace has an idle block. Echo its own detection verbatim.
-    if (seed.hasIdleBlock && controls.idle.available) {
+    // Idle: whenever the template is idle-capable, send a COMPLETE block reflecting the
+    // toggle — even for a workspace that had no stored idleShutdown. This lets the user turn
+    // idle ON (we author the block from the template's default detection) and, just as
+    // importantly, makes an explicit toggle-OFF stick: omitting the block would let the
+    // operator's defaulter copy the template's enabled default back on.
+    //
+    // Detection source: the workspace's own block when it has one (preserve verbatim), else
+    // the template's default detection — the CRD requires detection whenever idleShutdown is
+    // present, and the UI never authors detection itself.
+    if (controls.idle.available) {
+      const detection = workspace.spec.idleShutdown?.detection ?? controls.idle.detection;
       request.idleShutdown = {
         enabled: values.idleEnabled,
         timeoutInMinutes: values.idleTimeout,
-        ...(workspace.spec.idleShutdown?.detection !== undefined && { detection: workspace.spec.idleShutdown.detection }),
+        ...(detection !== undefined && { detection }),
       };
     }
 
@@ -211,7 +239,7 @@ export function SimpleWorkspaceEditor({ workspace, displayName, onDisplayNameCha
         err instanceof ApiError ? (err.details ? `${err.message}: ${err.details}` : err.message) : err instanceof Error ? err.message : 'Save failed',
       );
     }
-  }, [displayName, workspace, storedRef, values, shouldSendResources, controls, seed.hasIdleBlock, updateMutation, navigate]);
+  }, [displayName, workspace, storedRef, values, shouldSendResources, controls, updateMutation, navigate]);
 
   const showBanner = seed.adjustments.length > 0 && !bannerDismissed;
 
@@ -278,6 +306,8 @@ function ConformBanner({ adjustments, onDismiss }: { adjustments: ConformAdjustm
         return ws.editConformImage(a.from, a.to);
       case 'idleTimeout':
         return ws.editConformIdleTimeout(a.from, a.to);
+      case 'idleEnabled':
+        return ws.editConformIdleEnabled;
     }
   };
   return (

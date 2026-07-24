@@ -255,6 +255,16 @@ export function WorkspaceSpecEditor({
     return ws.advancedImageNotAllowed(resolvedTemplate.metadata.name);
   }, [resolvedTemplate, parsed.spec?.image, ws]);
 
+  // Edit-only caution: switching the template on an EXISTING workspace can request changes
+  // K8s can't satisfy (e.g. a PVC can never shrink; growth depends on the StorageClass).
+  // We don't restrict the switch (advanced mode mirrors kubectl), just surface it,
+  // and only when the selected templateRef actually differs from the workspace's stored value,
+  // so opening YAML for unrelated edits doesn't nag the user.
+  // Create needs no warning (no existing volume); simple edit locks the template
+  // so a switch can't originate there.
+  const storedTemplateRef = existing?.spec.templateRef?.name ?? null;
+  const templateSwitched = isEdit && seeded && templateRef !== storedTemplateRef;
+
   // A genuine user edit invalidates the last dry-run result and marks the buffer dirty.
   const handleYamlChange = useCallback((value: string, isUserEdit: boolean) => {
     setYamlText(value);
@@ -425,6 +435,7 @@ export function WorkspaceSpecEditor({
       <Paper variant="outlined">
         <Stack spacing={2} padding={3}>
           <TemplateSelect value={templateRef} onChange={setTemplateRef} onTemplateResolved={handleTemplateResolved} />
+          {templateSwitched && <Alert severity="warning">{ws.advancedTemplateSwitchCaution}</Alert>}
         </Stack>
       </Paper>
 

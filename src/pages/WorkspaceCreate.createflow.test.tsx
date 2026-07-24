@@ -153,11 +153,15 @@ describe('template-aware simple create', () => {
   test('no-template create sends WYSIWYG static defaults, no templateRef, ownership OwnerOnly', async () => {
     await renderCreate();
     await screen.findByText(/^resources$/i);
+    // No template + empty image = unstartable → submit is blocked. Type an image so the
+    // workspace has something to run (mirrors the real no-template flow).
+    fireEvent.change(screen.getByRole('combobox', { name: /image/i }), { target: { value: 'nginx:latest' } });
     submit();
 
     await waitFor(() => expect(createSimpleSpy).toHaveBeenCalledTimes(1));
     const p = lastSimplePayload();
     expect(p.templateRef).toBeUndefined();
+    expect(p.image).toBe('nginx:latest');
     expect(p.ownershipType).toBe('OwnerOnly'); // not driven by the Public default toggle
     expect(p.accessType).toBe('Public');
     // STATIC_DEFAULTS: cpu 1 / memory 2Gi / storage 10Gi, complete resources block.
@@ -165,6 +169,16 @@ describe('template-aware simple create', () => {
     expect(p.resources?.requests).toBeDefined();
     expect(p.storage).toEqual({ size: '10Gi' });
     expect(p.idleShutdown).toBeUndefined(); // no template → no idle
+  });
+
+  test('no template + empty image blocks submit (unstartable workspace)', async () => {
+    await renderCreate();
+    await screen.findByText(/^resources$/i);
+    // Empty image, no template → the Create button is disabled and submit sends nothing.
+    expect((screen.getByRole('button', { name: /create workspace/i }) as HTMLButtonElement).disabled).toBe(true);
+    submit();
+    await flush();
+    expect(createSimpleSpy).not.toHaveBeenCalled();
   });
 
   test('selecting a template reshapes the payload to the template default + carries templateRef', async () => {
@@ -226,6 +240,35 @@ describe('template-aware simple create', () => {
     await waitFor(() => expect(createSimpleSpy).toHaveBeenCalledTimes(1));
     const p = lastSimplePayload();
     expect(p.idleShutdown).toEqual({ enabled: true, timeoutInMinutes: 30, detection });
+  });
+
+  test('disabling an enabled-by-default idle template sends an explicit {enabled:false} block', async () => {
+    // Toggling idle OFF must send an explicit disabled block, NOT omit idleShutdown —
+    // omitting it lets the operator's defaulter copy the template's enabled default back on,
+    // re-enabling idle against the user's choice.
+    const detection = { httpGet: { port: 8888 } };
+    templatesResponse = {
+      items: [
+        tmplFixture(
+          {
+            defaultIdleShutdown: { enabled: true, idleTimeoutInMinutes: 30, detection },
+            idleShutdownOverrides: { allow: true, minIdleTimeoutInMinutes: 5, maxIdleTimeoutInMinutes: 120 },
+          },
+          'idle-tmpl',
+        ),
+      ],
+      access: { user: 'ok', shared: 'ok' },
+      namespaces: { own: 'user-ns', shared: 'shared-ns' },
+    };
+    await renderCreate();
+    fireEvent.click(await screen.findByRole('button', { name: /select idle-tmpl template/i }));
+    // Toggle idle off (default is enabled for this template).
+    fireEvent.click(await screen.findByRole('checkbox', { name: /idle/i }));
+    submit();
+
+    await waitFor(() => expect(createSimpleSpy).toHaveBeenCalledTimes(1));
+    const p = lastSimplePayload();
+    expect(p.idleShutdown).toEqual({ enabled: false, timeoutInMinutes: 30, detection });
   });
 
   test('a flagged default template is auto-selected and suppresses the no-template card', async () => {

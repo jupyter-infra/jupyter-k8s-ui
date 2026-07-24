@@ -128,8 +128,9 @@ export function useCreateWorkspaceAdvanced() {
   });
 }
 
-// Simple-edit: field-shaped selective update (PATCH → server selective overlay). Only the
-// provided fields are touched, so stored requests / unmodeled fields survive.
+// Simple-edit: field-shaped selective update via PATCH. The server overlays only the
+// fields present in the body onto the live spec, so stored requests / unmodeled fields
+// survive. That's a property of the overlay (body-shape driven), not the PATCH verb.
 export function useUpdateWorkspace() {
   const queryClient = useQueryClient();
   return useMutation({

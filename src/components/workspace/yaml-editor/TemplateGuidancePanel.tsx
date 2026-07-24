@@ -62,12 +62,14 @@ export function TemplateGuidancePanel({ template }: TemplateGuidancePanelProps) 
     idle && (idle.minIdleTimeoutInMinutes != null || idle.maxIdleTimeoutInMinutes != null)
       ? range(idle.minIdleTimeoutInMinutes?.toString(), idle.maxIdleTimeoutInMinutes?.toString())
       : null;
-  // Idle: line 1 is a bare status word — "Required" (the on/off toggle is fixed, allow !==
-  // true) or "Optional" — and line 2 is the timeout range. Shown whenever the template
-  // declares an idleShutdownOverrides block.
+  // Idle: line 1 is a bare status word — "Required" (the on/off toggle is fixed, allow ===
+  // false) or "Optional" — and line 2 is the timeout range. Shown whenever the template
+  // declares an idleShutdownOverrides block. Mirrors resolveIdle's freeze condition:
+  // only an explicit allow:false locks the toggle; an unset allow (block present) is
+  // Optional.
   const idleNode = idle ? (
     <Stack spacing={0.25} sx={{ minWidth: 0 }}>
-      <Typography variant="caption">{idle.allow !== true ? ws.guidanceIdleRequired : ws.guidanceIdleOptional}</Typography>
+      <Typography variant="caption">{idle.allow === false ? ws.guidanceIdleRequired : ws.guidanceIdleOptional}</Typography>
       {idleRange && (
         <Typography variant="caption" color="text.secondary">
           {`${ws.guidanceIdleTimeout}: ${idleRange}`}
