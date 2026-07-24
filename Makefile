@@ -160,7 +160,7 @@ serve-host: build ## Build + serve the whole app (UI + API) on all interfaces
 	fi
 	@set -a; . ./.env; set +a; \
 		if [ "$(SERVE_HOST_TIMEOUT)" != "0" ] && command -v timeout >/dev/null 2>&1; then \
-			NODE_ENV=development SESSION_ENABLED=false PORT=$(SERVE_HOST_PORT) timeout $(SERVE_HOST_TIMEOUT) bun run server/index.ts; \
+			NODE_ENV=development SESSION_ENABLED=false PORT=$(SERVE_HOST_PORT) timeout --foreground $(SERVE_HOST_TIMEOUT) bun run server/index.ts; \
 		else \
 			NODE_ENV=development SESSION_ENABLED=false PORT=$(SERVE_HOST_PORT) bun run server/index.ts; \
 		fi
@@ -266,7 +266,7 @@ E2E_SERVER_PID_FILE := /tmp/jupyter-k8s-ui-e2e-server-$(E2E_SERVER_PORT).pid
 .PHONY: test-e2e
 test-e2e: setup-e2e load-images-e2e deploy-e2e ## Run Playwright E2E tests (sets up cluster + server automatically).
 	@$(MAKE) _e2e-start-server
-	@E2E_BASE_URL=http://localhost:$(E2E_SERVER_PORT) E2E_WORKSPACE_IMAGE=$(E2E_WORKSPACE_IMAGE) bunx playwright test; \
+	@E2E_BASE_URL=http://localhost:$(E2E_SERVER_PORT) E2E_WORKSPACE_IMAGE=$(E2E_WORKSPACE_IMAGE) E2E_KIND_CLUSTER=$(E2E_KIND_CLUSTER) bunx playwright test; \
 		EXIT_CODE=$$?; \
 		$(MAKE) _e2e-stop-server; \
 		exit $$EXIT_CODE
