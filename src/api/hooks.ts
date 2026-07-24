@@ -74,7 +74,7 @@ export function useWorkspaces() {
 // terminal conditions, and stopping polling there freezes the page (#51).
 export function isWorkspaceSettled(workspace: Workspace | undefined): boolean {
   if (!workspace) return false;
-  const desired = workspace.spec.desiredStatus === 'Running' ? 'Running' : 'Stopped';
+  const desired = workspace.spec.desiredStatus ?? 'Stopped';
   return getWorkspaceStatus(workspace) === desired;
 }
 
