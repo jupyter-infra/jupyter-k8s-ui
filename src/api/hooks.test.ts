@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import React from 'react';
 import type { Workspace } from '../types';
-import { workspaceKeys, useDeleteWorkspace, useStartWorkspace } from './hooks';
+import { workspaceKeys, useDeleteWorkspace, useStartWorkspace, isWorkspaceSettled } from './hooks';
 
 // Mock the API client
 const mockDelete = mock(async (): Promise<void> => undefined);
@@ -125,3 +125,42 @@ describe('useStartWorkspace — optimistic update', () => {
 
 // useStopWorkspace follows the same optimistic-update pattern as useStartWorkspace
 // (same code path, different desired status). Covered by the start tests above.
+
+describe('isWorkspaceSettled', () => {
+  const ws = (desiredStatus: 'Running' | 'Stopped' | undefined, conditions: Array<{ type: string; status: string }>): Workspace =>
+    ({
+      metadata: { name: 'w', namespace: 'default', annotations: {}, creationTimestamp: '' },
+      spec: desiredStatus ? { desiredStatus } : {},
+      status: { conditions },
+    }) as Workspace;
+
+  test('undefined workspace is not settled', () => {
+    expect(isWorkspaceSettled(undefined)).toBe(false);
+  });
+
+  // The race from #51: a refetch lands after desiredStatus flips but before the
+  // operator updates conditions. The stale terminal status must keep polling.
+  test('conditions Stopped with desired Running is not settled (post-Start race)', () => {
+    expect(isWorkspaceSettled(ws('Running', [{ type: 'Stopped', status: 'True' }]))).toBe(false);
+  });
+
+  test('conditions Running with desired Stopped is not settled (post-Stop race)', () => {
+    expect(isWorkspaceSettled(ws('Stopped', [{ type: 'Available', status: 'True' }]))).toBe(false);
+  });
+
+  test('Running with desired Running is settled', () => {
+    expect(isWorkspaceSettled(ws('Running', [{ type: 'Available', status: 'True' }]))).toBe(true);
+  });
+
+  test('Stopped with desired Stopped is settled', () => {
+    expect(isWorkspaceSettled(ws('Stopped', [{ type: 'Stopped', status: 'True' }]))).toBe(true);
+  });
+
+  test('unset desiredStatus expects Stopped', () => {
+    expect(isWorkspaceSettled(ws(undefined, [{ type: 'Stopped', status: 'True' }]))).toBe(true);
+  });
+
+  test('transitional status is not settled even when moving toward desired', () => {
+    expect(isWorkspaceSettled(ws('Running', [{ type: 'Progressing', status: 'True' }]))).toBe(false);
+  });
+});

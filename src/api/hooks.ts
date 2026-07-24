@@ -68,10 +68,14 @@ export function useWorkspaces() {
   });
 }
 
-function isWorkspaceSettled(workspace: Workspace | undefined): boolean {
+// Settled means the derived status has converged on spec.desiredStatus (unset
+// desiredStatus expects Stopped, mirroring getWorkspaceStatus). A terminal status
+// alone is not enough: a refetch right after Start/Stop can still see the old
+// terminal conditions, and stopping polling there freezes the page (#51).
+export function isWorkspaceSettled(workspace: Workspace | undefined): boolean {
   if (!workspace) return false;
-  const status = getWorkspaceStatus(workspace);
-  return status === 'Running' || status === 'Stopped';
+  const desired = workspace.spec.desiredStatus === 'Running' ? 'Running' : 'Stopped';
+  return getWorkspaceStatus(workspace) === desired;
 }
 
 export function useWorkspace(name: string) {
