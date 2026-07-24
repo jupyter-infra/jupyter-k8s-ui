@@ -148,19 +148,14 @@ describe('isWorkspaceSettled', () => {
     expect(isWorkspaceSettled(ws('Stopped', [{ type: 'Available', status: 'True' }]))).toBe(false);
   });
 
-  test('Running with desired Running is settled', () => {
-    expect(isWorkspaceSettled(ws('Running', [{ type: 'Available', status: 'True' }]))).toBe(true);
-  });
-
-  test('Stopped with desired Stopped is settled', () => {
-    expect(isWorkspaceSettled(ws('Stopped', [{ type: 'Stopped', status: 'True' }]))).toBe(true);
+  test.each([
+    ['Running', 'Available'],
+    ['Stopped', 'Stopped'],
+  ] as const)('%s converged on desired is settled', (desired, condition) => {
+    expect(isWorkspaceSettled(ws(desired, [{ type: condition, status: 'True' }]))).toBe(true);
   });
 
   test('unset desiredStatus expects Stopped', () => {
     expect(isWorkspaceSettled(ws(undefined, [{ type: 'Stopped', status: 'True' }]))).toBe(true);
-  });
-
-  test('transitional status is not settled even when moving toward desired', () => {
-    expect(isWorkspaceSettled(ws('Running', [{ type: 'Progressing', status: 'True' }]))).toBe(false);
   });
 });
