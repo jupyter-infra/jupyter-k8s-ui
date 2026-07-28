@@ -4,6 +4,7 @@ import { log } from './logger';
 import { handleRequest } from './middleware/router';
 import { initSecretWatcher, stopSecretWatcher } from './secret-watcher';
 import { initSchemaStore } from './schema/store';
+import { initNamespaceUniverse, stopNamespaceUniverse } from './k8s/namespace-universe';
 
 // --- Initialize ---
 
@@ -34,6 +35,12 @@ initSchemaStore().catch((err) => {
   log('error', `Failed to initialize CRD schema store: ${err instanceof Error ? err.message : String(err)}`);
 });
 
+// Start the namespace-universe poll (SA label-list, static fallback). Non-fatal: on
+// failure it seeds the static list so discovery still serves the default namespace.
+initNamespaceUniverse().catch((err) => {
+  log('error', `Failed to initialize namespace universe: ${err instanceof Error ? err.message : String(err)}`);
+});
+
 const server = serve({
   port: serverConfig.port,
   fetch: handleRequest,
@@ -46,6 +53,7 @@ log('info', `Server running at http://localhost:${server.port}`);
 async function shutdown() {
   log('info', 'Shutting down server...');
   await stopSecretWatcher();
+  stopNamespaceUniverse();
   server.stop();
   process.exit(0);
 }

@@ -1,5 +1,5 @@
 import { serverConfig } from '../k8s/config';
-import { createUserK8sClient } from '../k8s/client';
+import { reuseOrCreateUserK8sClient } from '../k8s/client';
 import { ACCESS_STRATEGY_PLURAL } from '../k8s/constants';
 import { discoverAcrossNamespaces } from '../k8s/discovery';
 import { log } from '../logger';
@@ -12,10 +12,10 @@ interface K8sAccessStrategy {
   spec?: { displayName?: string; description?: string };
 }
 
-export async function handleListAccessStrategies(jwt: string): Promise<Response> {
+export async function handleListAccessStrategies(jwt: string, namespace: string): Promise<Response> {
   try {
-    const k8sClient = await createUserK8sClient(jwt);
-    const result = await discoverAcrossNamespaces<K8sAccessStrategy>(k8sClient, ACCESS_STRATEGY_PLURAL, serverConfig.namespace, serverConfig.sharedNamespace);
+    const k8sClient = await reuseOrCreateUserK8sClient(jwt);
+    const result = await discoverAcrossNamespaces<K8sAccessStrategy>(k8sClient, ACCESS_STRATEGY_PLURAL, namespace, serverConfig.sharedNamespace);
     const items = result.items.map((as) => ({
       name: as.metadata?.name ?? '',
       sourceNamespace: as.sourceNamespace,

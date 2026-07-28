@@ -12,6 +12,9 @@ import { handleListAccessStrategies } from '../handlers/access-strategies';
 import { handleGetMe } from '../handlers/me';
 import { handleGetClusterAccess } from '../handlers/cluster-access';
 import { handleGetCrdSchema } from '../handlers/crd-schema';
+import { isNamespaceUniverseReady } from '../k8s/namespace-universe';
+import { handleGetMyNamespace, handlePatchMyNamespace, handleListNamespaces, handleGetNamespaceAccess } from '../handlers/namespaces';
+import { resolveNamespace } from '../k8s/resolve-namespace';
 
 // --- Route paths ---
 
@@ -20,6 +23,9 @@ const API_PREFIX = '/api/v1';
 const ROUTES = {
   health: `${API_PREFIX}/health`,
   me: `${API_PREFIX}/me`,
+  myNamespace: `${API_PREFIX}/my-namespace`,
+  namespaces: `${API_PREFIX}/namespaces`,
+  namespaceAccess: new RegExp(`^${API_PREFIX}/namespaces/([^/]+)/access$`),
   workspaces: `${API_PREFIX}/workspaces`,
   workspace: new RegExp(`^${API_PREFIX}/workspaces/([^/]+)$`),
   templates: `${API_PREFIX}/templates`,
@@ -79,7 +85,10 @@ async function routeRequest(req: Request): Promise<Response> {
 
   // Public endpoints
   if (pathname === ROUTES.health && method === 'GET') {
-    return jsonResponse({ status: 'ok' });
+    // `ready` reflects the namespace-universe poll's initial sync. A readiness probe
+    // (configured in the deployment charts) can gate traffic on it so a pod never serves
+    // discovery with an empty universe; liveness should stay on `status:ok` regardless.
+    return jsonResponse({ status: 'ok', ready: isNamespaceUniverseReady() });
   }
 
   if (pathname === ROUTES.me && method === 'GET') {
@@ -114,12 +123,45 @@ async function routeRequest(req: Request): Promise<Response> {
       return errorResponse(415, 'Content-Type must be application/json');
     }
 
-    if (pathname === ROUTES.workspaces) {
+    // --- Namespace selection endpoints ---
+
+    if (pathname === ROUTES.myNamespace) {
+      // GET: cheap bootstrap (cookie read, no SSAR, no cookie write).
+      // PATCH: persist the active-namespace preference (writes activeNs; no SSAR).
       return dispatch(
         method,
         {
-          GET: () => handleListWorkspaces(jwt),
-          POST: () => handleCreateWorkspace(jwt, req),
+          GET: () => Promise.resolve(handleGetMyNamespace(req)),
+          PATCH: () => handlePatchMyNamespace(req),
+        },
+        jwt,
+        source,
+      );
+    }
+
+    if (pathname === ROUTES.namespaces && method === 'GET') {
+      // Switcher list; refreshes the `visible` snapshot cookie (?refresh=1 forces recompute).
+      return withSessionCookie(await handleListNamespaces(req, jwt), jwt, source);
+    }
+
+    const namespaceAccessMatch = pathname.match(ROUTES.namespaceAccess);
+    if (namespaceAccessMatch && method === 'GET') {
+      const ns = namespaceAccessMatch[1];
+      if (!isValidK8sName(ns)) {
+        return errorResponse(400, 'Invalid namespace');
+      }
+      return withSessionCookie(await handleGetNamespaceAccess(jwt, ns), jwt, source);
+    }
+
+    if (pathname === ROUTES.workspaces) {
+      const resolved = await resolveNamespace(req, jwt);
+      if (!resolved.ok) return resolved.response;
+      const ns = resolved.namespace;
+      return dispatch(
+        method,
+        {
+          GET: () => handleListWorkspaces(jwt, ns),
+          POST: () => handleCreateWorkspace(jwt, ns, req),
         },
         jwt,
         source,
@@ -132,13 +174,16 @@ async function routeRequest(req: Request): Promise<Response> {
       if (!isValidK8sName(name)) {
         return errorResponse(400, 'Invalid workspace name');
       }
+      const resolved = await resolveNamespace(req, jwt);
+      if (!resolved.ok) return resolved.response;
+      const ns = resolved.namespace;
       return dispatch(
         method,
         {
-          GET: () => handleGetWorkspace(jwt, name),
-          PUT: () => handleUpdateWorkspace(jwt, name, req),
-          PATCH: () => handleUpdateWorkspace(jwt, name, req),
-          DELETE: () => handleDeleteWorkspace(jwt, name),
+          GET: () => handleGetWorkspace(jwt, ns, name),
+          PUT: () => handleUpdateWorkspace(jwt, ns, name, req),
+          PATCH: () => handleUpdateWorkspace(jwt, ns, name, req),
+          DELETE: () => handleDeleteWorkspace(jwt, ns, name),
         },
         jwt,
         source,
@@ -146,10 +191,13 @@ async function routeRequest(req: Request): Promise<Response> {
     }
 
     if (pathname === ROUTES.templates) {
+      const resolved = await resolveNamespace(req, jwt);
+      if (!resolved.ok) return resolved.response;
+      const ns = resolved.namespace;
       return dispatch(
         method,
         {
-          GET: () => handleListTemplates(jwt),
+          GET: () => handleListTemplates(jwt, ns),
         },
         jwt,
         source,
@@ -157,10 +205,13 @@ async function routeRequest(req: Request): Promise<Response> {
     }
 
     if (pathname === ROUTES.accessStrategies) {
+      const resolved = await resolveNamespace(req, jwt);
+      if (!resolved.ok) return resolved.response;
+      const ns = resolved.namespace;
       return dispatch(
         method,
         {
-          GET: () => handleListAccessStrategies(jwt),
+          GET: () => handleListAccessStrategies(jwt, ns),
         },
         jwt,
         source,
