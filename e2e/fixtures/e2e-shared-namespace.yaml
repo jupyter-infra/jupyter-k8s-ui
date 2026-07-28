@@ -1,0 +1,43 @@
+# The shared template namespace (SHARED_TEMPLATE_NAMESPACE) for E2E. This fixture creates the
+# namespace and the read-RBAC ONLY — it deliberately ships NO template. The shared template
+# is an OPT-IN fixture (e2e/fixtures/optional/shared-template.yaml) that specs which need the
+# "own-ns ∪ shared" merge apply in beforeAll and delete in afterAll (see
+# namespace-switch.spec.ts).
+#
+# Why opt-in: with NO shared template present, a namespace whose only own template is a
+# flagged default (e2e-team-b's team-b-template) is a genuine single-flagged-default picker
+# — the case where the picker renders nothing and auto-adopts the template. Keeping the
+# shared template out of the always-on fixtures is what makes that state reachable in E2E
+# (see single-default-template.spec.ts). The read-RBAC stays always-on so an applied shared
+# template surfaces immediately (discovery runs under the user's token).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: e2e-shared
+---
+# The dev identity must be able to LIST templates in the shared namespace for discovery to
+# surface them (discovery runs under the user's token, not the SA). get/list only — the
+# shared templates are read-only from the console.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: e2e-shared-template-reader
+  namespace: e2e-shared
+rules:
+  - apiGroups: ['workspace.jupyter.org']
+    resources: ['workspacetemplates', 'workspaceaccessstrategies']
+    verbs: ['get', 'list']
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: e2e-test-shared-reader
+  namespace: e2e-shared
+subjects:
+  - kind: ServiceAccount
+    name: e2e-test
+    namespace: default
+roleRef:
+  kind: Role
+  name: e2e-shared-template-reader
+  apiGroup: rbac.authorization.k8s.io

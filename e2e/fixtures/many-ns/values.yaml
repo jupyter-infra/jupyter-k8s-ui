@@ -1,0 +1,37 @@
+# Many-namespace E2E fixture parameters. Override with `--set` from the spec if needed.
+
+# Number of LABELED namespaces: carry the discovery label so they're discovery candidates
+# (sa-list). By default each also gets a list-workspaces RoleBinding for the e2e-test
+# identity, so it passes the confused-deputy SSAR and is visible in the switcher — EXCEPT the
+# indices listed in `forbiddenIndices` below.
+labeledCount: 25
+
+# Zero-padded string indices (matching the `%02d` suffix) of labeled namespaces that get the
+# discovery label but NO RBAC — genuine confused-deputy candidates: the SA sees them (labeled
+# → in the universe), but the per-user SSAR fan-out in GET /namespaces must DROP them from
+# the switcher list. Empty by default (all labeled → authorized). The spec overrides this
+# (via --set-json) to interleave one forbidden namespace per page, proving the SSAR filters
+# on every page. Position of `e2e-mns-labeled-NN` in the ordered universe is NN+2 (after
+# `default` and `e2e-team-b`).
+forbiddenIndices: []
+
+# Number of UNLABELED namespaces: NO discovery label and NO RBAC for e2e-test. They're
+# excluded from the SA candidate list (unlabeled) AND denied by find-by-name (live SSAR) —
+# genuinely invisible everywhere. Proves "unlabeled + unauthorized → never appears".
+unlabeledCount: 5
+
+# Name prefixes. Zero-padded index is appended so lexical order matches numeric order
+# (the switcher sorts the alphabetical tail — mns-labeled-03 sorts before mns-labeled-10).
+labeledPrefix: e2e-mns-labeled
+unlabeledPrefix: e2e-mns-plain
+
+# The discovery label the web-app SA selects on (must match the server's
+# WORKSPACE_NAMESPACE_LABEL / labelSelector).
+discoveryLabelKey: workspace.jupyter.org/workspaces-enabled
+
+# Cleanup label stamped on EVERY object — teardown runs `kubectl delete ns -l <this>`.
+cleanupLabelKey: e2e-many-test
+
+# The identity granted list-workspaces in each labeled namespace (the E2E test SA).
+subjectServiceAccount: e2e-test
+subjectNamespace: default

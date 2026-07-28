@@ -1,0 +1,44 @@
+# OPT-IN shared template. NOT applied by `make deploy-e2e` (kubectl apply -f e2e/fixtures/
+# is non-recursive, so this subdirectory is skipped). Specs that need the cross-namespace
+# "own-ns ∪ shared" merge apply this in beforeAll and delete it in afterAll
+# (namespace-switch.spec.ts). The e2e-shared namespace + read-RBAC come from the always-on
+# e2e-shared-namespace.yaml; this file adds ONLY the template.
+#
+# NON-default (default-template: 'false') on purpose: a flagged shared default would change
+# preselection in every namespace. Shared visibility is the cross-namespace reference rule;
+# own-ns default still wins over shared (see resolveDefaultTemplate).
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: shared-template
+  namespace: e2e-shared
+  labels:
+    workspace.jupyter.org/default-template: 'false'
+spec:
+  displayName: Shared Template
+  description: A cluster-shared template visible in every namespace's picker (E2E)
+  appType: jupyterlab
+  defaultImage: nginx:latest
+  allowedImages:
+    - nginx:latest
+    - nginx:1.27
+  defaultResources:
+    requests:
+      cpu: '100m'
+      memory: '128Mi'
+    limits:
+      cpu: '500m'
+      memory: '512Mi'
+  resourceBounds:
+    resources:
+      cpu:
+        min: '100m'
+        max: '2'
+      memory:
+        min: '128Mi'
+        max: '2Gi'
+  primaryStorage:
+    defaultSize: '1Gi'
+    minSize: '1Gi'
+    maxSize: '10Gi'
+    defaultMountPath: '/data'

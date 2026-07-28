@@ -1,0 +1,66 @@
+{{- /*
+Many-namespace E2E fixture. Ranges over labeledCount + unlabeledCount to emit:
+  - LABELED ns  -> Namespace (discovery label + cleanup label). By default it ALSO gets a
+                   Role + RoleBinding granting the e2e-test SA get/list on workspaces (so
+                   it's discoverable AND passes the confused-deputy SSAR → visible).
+                   EXCEPTION: an index in `forbiddenIndices` gets the labeled Namespace ONLY
+                   (no Role/RoleBinding) — a genuine confused-deputy candidate the SA sees
+                   but the per-user SSAR fan-out must DROP from the switcher list.
+  - UNLABELED ns -> Namespace (cleanup label only). No discovery label, no RBAC —
+                    invisible to sa-list AND denied by find-by-name SSAR.
+Index is zero-padded (%02d) so lexical order matches numeric order in the switcher.
+Every object carries the cleanup label so `kubectl delete ns -l <cleanupLabelKey>` sweeps all.
+*/ -}}
+{{- range $i := until (int .Values.labeledCount) }}
+{{- $idx := printf "%02d" $i }}
+{{- $ns := printf "%s-%s" $.Values.labeledPrefix $idx }}
+{{- $forbidden := has $idx $.Values.forbiddenIndices }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $ns }}
+  labels:
+    {{ $.Values.discoveryLabelKey }}: "true"
+    {{ $.Values.cleanupLabelKey }}: "true"
+{{- if not $forbidden }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: e2e-mns-reader
+  namespace: {{ $ns }}
+  labels:
+    {{ $.Values.cleanupLabelKey }}: "true"
+rules:
+  - apiGroups: ["workspace.jupyter.org"]
+    resources: ["workspaces"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: e2e-mns-binding
+  namespace: {{ $ns }}
+  labels:
+    {{ $.Values.cleanupLabelKey }}: "true"
+subjects:
+  - kind: ServiceAccount
+    name: {{ $.Values.subjectServiceAccount }}
+    namespace: {{ $.Values.subjectNamespace }}
+roleRef:
+  kind: Role
+  name: e2e-mns-reader
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+{{- end }}
+{{- range $i := until (int .Values.unlabeledCount) }}
+{{- $ns := printf "%s-%02d" $.Values.unlabeledPrefix $i }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $ns }}
+  labels:
+    {{ $.Values.cleanupLabelKey }}: "true"
+{{- end }}
