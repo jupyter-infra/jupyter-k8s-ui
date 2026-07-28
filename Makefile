@@ -30,6 +30,17 @@ NAMESPACE ?= jupyter-k8s-router
 DEPLOYMENT ?= web-app
 DEV_KIND_CLUSTER ?= jupyter-k8s-dev
 SERVE_HOST_PORT ?= 8090
+
+# `dev-sa-kubeconfig`: which ServiceAccount the local dev server should impersonate for
+# namespace DISCOVERY (the per-pod listNamespace poll). In-cluster the web-app uses its own
+# SA; locally there is none, so we mint a token for this SA and write a standalone kubeconfig
+# the dev server points at via KUBECONFIG. The SA must have cluster-wide `list namespaces`.
+WEBAPP_SA ?= web-app
+WEBAPP_SA_NAMESPACE ?= jupyter-k8s-router
+SA_TOKEN_DURATION ?= 24h
+# Standalone kubeconfig written by `dev-sa-kubeconfig` (kept out of ~/.kube/config so your
+# admin identity is untouched). Point the dev server at it: KUBECONFIG=<this> bun run dev:full
+DEV_SA_KUBECONFIG ?= /tmp/jupyter-k8s-ui-dev-sa.kubeconfig
 # Auto-exit for `serve-host`: it binds 0.0.0.0 with session auth off (anyone who can
 # reach the URL acts as you), so cap the lifetime instead of leaving it up overnight.
 # Override with SERVE_HOST_TIMEOUT=0 to disable, or e.g. SERVE_HOST_TIMEOUT=2h.
@@ -131,6 +142,47 @@ refresh-token: ## Fetch a fresh OIDC token and set up .env for local development
 	TMPENV=$$(mktemp); \
 	sed "s|^DEV_ACCESS_TOKEN=.*|DEV_ACCESS_TOKEN=$$TOKEN|" .env > "$$TMPENV" && mv "$$TMPENV" .env; \
 	echo "DEV_ACCESS_TOKEN updated in .env"
+
+.PHONY: dev-sa-kubeconfig
+dev-sa-kubeconfig: ## Mint a web-app SA token + write a kubeconfig for local namespace DISCOVERY (needs admin kubeconfig).
+	@# Assumes the CURRENT kubeconfig is an ADMIN context on the target cluster (e.g. after
+	@# `jd cluster login`). Mints a token for the web-app SA and writes a standalone kubeconfig
+	@# that authenticates AS that SA, reusing the current context's cluster server + CA. The
+	@# dev server's namespace poll (loadKubeConfigBestEffort) then discovers namespaces with
+	@# the SA — mirroring in-cluster behavior — while per-user requests still use the
+	@# DEV_ACCESS_TOKEN from .env (createKubeConfig overrides only the user, not the cluster).
+	@command -v jq >/dev/null 2>&1 || { echo "ERROR: jq is required."; exit 1; }
+	@echo "Minting token for SA $(WEBAPP_SA_NAMESPACE)/$(WEBAPP_SA) (duration $(SA_TOKEN_DURATION))..."
+	@SA_TOKEN=$$($(KUBECTL) create token $(WEBAPP_SA) -n $(WEBAPP_SA_NAMESPACE) --duration=$(SA_TOKEN_DURATION) 2>/dev/null) || \
+		SA_TOKEN=$$($(KUBECTL) create token $(WEBAPP_SA) -n $(WEBAPP_SA_NAMESPACE)); \
+	if [ -z "$$SA_TOKEN" ]; then \
+		echo "ERROR: failed to mint SA token. Is the current kubeconfig an admin on the cluster, and does SA $(WEBAPP_SA_NAMESPACE)/$(WEBAPP_SA) exist?"; \
+		exit 1; \
+	fi; \
+	CTX=$$($(KUBECTL) config current-context); \
+	CLUSTER=$$($(KUBECTL) config view -o jsonpath="{.contexts[?(@.name==\"$$CTX\")].context.cluster}"); \
+	SERVER=$$($(KUBECTL) config view --raw -o jsonpath="{.clusters[?(@.name==\"$$CLUSTER\")].cluster.server}"); \
+	CA=$$($(KUBECTL) config view --raw -o jsonpath="{.clusters[?(@.name==\"$$CLUSTER\")].cluster.certificate-authority-data}"); \
+	if [ -z "$$SERVER" ] || [ -z "$$CA" ]; then \
+		echo "ERROR: could not read cluster server/CA from the current kubeconfig context ($$CTX)."; \
+		exit 1; \
+	fi; \
+	umask 077; \
+	printf 'apiVersion: v1\nkind: Config\nclusters:\n  - name: dev-sa\n    cluster:\n      server: %s\n      certificate-authority-data: %s\nusers:\n  - name: web-app-sa\n    user:\n      token: %s\ncontexts:\n  - name: web-app-sa@dev-sa\n    context:\n      cluster: dev-sa\n      user: web-app-sa\ncurrent-context: web-app-sa@dev-sa\n' \
+		"$$SERVER" "$$CA" "$$SA_TOKEN" > "$(DEV_SA_KUBECONFIG)"; \
+	echo "Wrote $(DEV_SA_KUBECONFIG)"; \
+	WHO=$$(KUBECONFIG="$(DEV_SA_KUBECONFIG)" $(KUBECTL) auth whoami -o jsonpath='{.status.userInfo.username}' 2>/dev/null); \
+	echo "  authenticates as: $$WHO"; \
+	CANLIST=$$(KUBECONFIG="$(DEV_SA_KUBECONFIG)" $(KUBECTL) auth can-i list namespaces 2>/dev/null); \
+	echo "  can list namespaces: $$CANLIST"; \
+	if [ "$$CANLIST" != "yes" ]; then \
+		echo "  WARNING: this SA cannot cluster-list namespaces — discovery will fall back to WORKSPACE_NAMESPACES."; \
+		echo "  Grant it, e.g.: kubectl create clusterrole web-app-namespace-discovery --verb=get,list,watch --resource=namespaces && \\"; \
+		echo "                  kubectl create clusterrolebinding web-app-namespace-discovery --clusterrole=web-app-namespace-discovery --serviceaccount=$(WEBAPP_SA_NAMESPACE):$(WEBAPP_SA)"; \
+	fi; \
+	echo ""; \
+	echo "Now start the dev server pointed at this kubeconfig (per-user requests still use DEV_ACCESS_TOKEN from .env):"; \
+	echo "  KUBECONFIG=$(DEV_SA_KUBECONFIG) bun run dev:full"
 
 .PHONY: dev
 dev: ## Run the frontend dev server (Vite).
@@ -293,21 +345,30 @@ setup-e2e: ## Create Kind cluster and install cert-manager.
 			--wait --timeout 120s; \
 	fi
 
+# Pull a (possibly multi-arch) image and load it into the Kind node as a SINGLE-platform
+# image. Why the flatten step: the E2E images on GHCR are multi-arch manifest lists, but
+# kind v0.30's node-side import runs `ctr images import --all-platforms`, which demands
+# every referenced platform's blobs — including arm64 ones we never pull on an amd64 host —
+# and fails with "content digest ... not found". `finch save --platform` still embeds the
+# multi-arch index, so it doesn't help. A FROM-only rebuild produces a fresh single-manifest
+# image (no index), which `kind load image-archive` imports cleanly. (jk8s's e2e never hits
+# this because it loads LOCALLY-BUILT single-platform images, not multi-arch pulls.)
+# Args: $(1)=image ref  $(2)=short name for the tar file.
+define load_image_e2e
+	@$(CONTAINER_TOOL) pull --platform linux/amd64 $(1)
+	@mkdir -p /tmp/kind-images/$(2)
+	@printf 'FROM %s\n' "$(1)" > /tmp/kind-images/$(2)/Dockerfile
+	$(CONTAINER_TOOL) build --platform=linux/amd64 -t $(1) -f /tmp/kind-images/$(2)/Dockerfile /tmp/kind-images/$(2)
+	$(CONTAINER_TOOL) save $(1) -o /tmp/kind-images/$(2).tar
+	$(KIND) load image-archive /tmp/kind-images/$(2).tar --name $(E2E_KIND_CLUSTER)
+	@rm -rf /tmp/kind-images/$(2).tar /tmp/kind-images/$(2)
+endef
+
 .PHONY: load-images-e2e
-load-images-e2e: ## Pull and load all E2E images into Kind.
-	@$(CONTAINER_TOOL) pull --platform linux/amd64 $(E2E_CONTROLLER_IMAGE)
-	@$(CONTAINER_TOOL) pull --platform linux/amd64 $(E2E_ROTATOR_IMAGE)
-	@$(CONTAINER_TOOL) pull --platform linux/amd64 $(E2E_WORKSPACE_IMAGE)
-	@mkdir -p /tmp/kind-images
-	$(CONTAINER_TOOL) save $(E2E_CONTROLLER_IMAGE) -o /tmp/kind-images/controller.tar
-	$(KIND) load image-archive /tmp/kind-images/controller.tar --name $(E2E_KIND_CLUSTER)
-	@rm -f /tmp/kind-images/controller.tar
-	$(CONTAINER_TOOL) save $(E2E_ROTATOR_IMAGE) -o /tmp/kind-images/rotator.tar
-	$(KIND) load image-archive /tmp/kind-images/rotator.tar --name $(E2E_KIND_CLUSTER)
-	@rm -f /tmp/kind-images/rotator.tar
-	$(CONTAINER_TOOL) save $(E2E_WORKSPACE_IMAGE) -o /tmp/kind-images/workspace.tar
-	$(KIND) load image-archive /tmp/kind-images/workspace.tar --name $(E2E_KIND_CLUSTER)
-	@rm -f /tmp/kind-images/workspace.tar
+load-images-e2e: ## Pull and load all E2E images into Kind (flattened to single-platform; see load_image_e2e).
+	$(call load_image_e2e,$(E2E_CONTROLLER_IMAGE),controller)
+	$(call load_image_e2e,$(E2E_ROTATOR_IMAGE),rotator)
+	$(call load_image_e2e,$(E2E_WORKSPACE_IMAGE),workspace)
 
 .PHONY: deploy-e2e
 deploy-e2e: ## Install jupyter-k8s Helm chart into Kind cluster.
@@ -348,6 +409,11 @@ _e2e-start-server:
 		NODE_ENV=development \
 		DEV_ACCESS_TOKEN=$$E2E_TOKEN \
 		NAMESPACE=default \
+		WORKSPACE_NAMESPACES=default,e2e-team-b \
+		SHARED_TEMPLATE_NAMESPACE=e2e-shared \
+		NAMESPACE_CANDIDATE_CAP=5 \
+		NAMESPACE_VISIBLE_PERSIST_CAP=8 \
+		NAMESPACE_POLL_INTERVAL_SECS=5 \
 		SESSION_ENABLED=false \
 		PORT=$(E2E_SERVER_PORT) \
 		bun run server/index.ts & echo $$! > $(E2E_SERVER_PID_FILE)

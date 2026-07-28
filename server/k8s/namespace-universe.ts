@@ -1,7 +1,7 @@
 // The namespace "universe" — the set of candidate namespaces the switcher may offer,
 // before any per-user RBAC gate. Refreshed by a periodic SA re-LIST poll (NOT a watch:
 // nothing consumes the universe in real time, so a poll has strictly fewer failure modes
-// than a long-lived cluster-wide watch — see namespace-selection-plan.md).
+// than a long-lived cluster-wide watch).
 //
 // The candidate source is try-then-fall-back, re-evaluated statelessly EVERY poll:
 //   - SA listNamespace (label-selected) succeeds  -> universe = labeled set (+ default)

@@ -87,18 +87,22 @@ src/                       # Frontend (React + Vite)
 
 ## API Endpoints
 
-| Method    | Path                      | Auth | Description                                |
-| --------- | ------------------------- | ---- | ------------------------------------------ |
-| GET       | /api/v1/health            | No   | Health check                               |
-| GET       | /api/v1/me                | No   | Current user info from JWT                 |
-| GET       | /api/v1/workspaces        | Yes  | List user's workspaces                     |
-| POST      | /api/v1/workspaces        | Yes  | Create workspace (`?dryRun=All` validates) |
-| GET       | /api/v1/workspaces/:name  | Yes  | Get workspace details                      |
-| PUT/PATCH | /api/v1/workspaces/:name  | Yes  | Update workspace (`?dryRun=All` validates) |
-| DELETE    | /api/v1/workspaces/:name  | Yes  | Delete workspace                           |
-| GET       | /api/v1/templates         | Yes  | List templates (user ∪ shared ns)          |
-| GET       | /api/v1/access-strategies | Yes  | List access strategies (user ∪ shared ns)  |
-| GET       | /api/v1/crd-schema/:crd   | Yes  | CRD spec JSON Schema for the YAML editor   |
+| Method    | Path                          | Auth | Description                                                                                                |
+| --------- | ----------------------------- | ---- | ---------------------------------------------------------------------------------------------------------- |
+| GET       | /api/v1/health                | No   | Health check                                                                                               |
+| GET       | /api/v1/me                    | No   | Current user info from JWT                                                                                 |
+| GET       | /api/v1/workspaces            | Yes  | List user's workspaces                                                                                     |
+| POST      | /api/v1/workspaces            | Yes  | Create workspace (`?dryRun=All` validates)                                                                 |
+| GET       | /api/v1/workspaces/:name      | Yes  | Get workspace details                                                                                      |
+| PUT/PATCH | /api/v1/workspaces/:name      | Yes  | Update workspace (`?dryRun=All` validates)                                                                 |
+| DELETE    | /api/v1/workspaces/:name      | Yes  | Delete workspace                                                                                           |
+| GET       | /api/v1/templates             | Yes  | List templates (user ∪ shared ns)                                                                          |
+| GET       | /api/v1/access-strategies     | Yes  | List access strategies (user ∪ shared ns)                                                                  |
+| GET       | /api/v1/crd-schema/:crd       | Yes  | CRD spec JSON Schema for the YAML editor                                                                   |
+| GET       | /api/v1/my-namespace          | Yes  | Cheap bootstrap: resolved active ns (no SSAR, no cookie write)                                             |
+| PATCH     | /api/v1/my-namespace          | Yes  | Persist the active-ns switch (writes `activeNs`; no SSAR)                                                  |
+| GET       | /api/v1/namespaces            | Yes  | Switcher list, paged (`?offset=`; SSAR fan-out → `visible` snapshot cookie; `?refresh=1` forces recompute) |
+| GET       | /api/v1/namespaces/:ns/access | Yes  | Find-by-name: one live SSAR `{ namespace, allowed }`                                                       |
 
 The workspace create/update endpoints accept **two body shapes**: the simple form's
 field body, and the advanced editor's `{ name, templateRef?, spec }` raw-spec body
@@ -130,6 +134,13 @@ validation layer.
 - React Query polls workspace list every 60s; detail polls every 3s while transitioning
 - Workspace ownership tracked via `workspace.jupyter.org/created-by` annotation
 - Vite proxies `/api` to `http://localhost:8090` in dev mode
+- **Multi-namespace:** The app presents one namespace at a time but lets the user switch.
+  A `NamespaceContext` holds the active namespace; query keys include it so caches never leak.
+- **Default namespace:** Every namespaced endpoint (workspaces / templates /
+  access-strategies) takes an optional `?namespace=<ns>`. Defaults to the configured web-app default (`NAMESPACE`) without using SSAR.
+- **Other namespace:** The web-app 1/ uses its own SA to retrieve the universe of namespaces flagged as workspace-eligible in the cluster (with a dedicated label), then 2/ uses the user's k8s token to filter namespaces where the user has `list workspaces` RBAC permission using a `SelfSubjectAccessReview`.
+- **Namespace cookie:** The web-app saves the `visible` namespaces in a signed `workspace_console_ns` cookie. It holds two values with different lifecycles: a/ `activeNs` (durable preference, cookie Max-Age), b/ the RBAC-visible set (`visible` list, `checkedUpTo`, `universeFp`, `visibleExp`), a 30-min freshness snapshot. Dedicated server routes update the cookie: A/ `PATCH /my-namespace` writes `activeNs` (no SSAR), B/ `GET /namespaces` writes the visible-set fields (its SSAR fan-out).
+- **Namespace pagination:** `GET /namespaces` is **paged** by `?offset=` over a stable ordering (declared namespaces, then the alphabetical tail). `checkedUpTo` is a high-water mark into that order so each page SSARs only its own slice; `universeFp` invalidates the cache if the ordering changed. The cookie persists at most `NAMESPACE_VISIBLE_PERSIST_CAP` visible names.
 - **Template-aware simple form** — turns a template (or null = no-template) into concrete
   slider bounds/defaults, image mode, idle state, access seed, and a per-resource requests policy.
   - if there is only one template, flagged as default, auto select it
@@ -254,3 +265,16 @@ make cleanup-e2e          # Delete the Kind cluster when done
 3. `bun run dev:full` (starts both Vite on :5173 and Bun server on :8090)
 
 If API calls return 401, the token has expired — re-run `make refresh-token`.
+
+### Testing the namespace switcher locally against a real cluster
+
+Namespace discovery uses a ServiceAccount in-cluster, but there's no SA locally.
+
+- **ask the user to generate a cluster admin token**
+- run `make dev-sa-kubeconfig` to mint a web-app SA token
+- start the server with `KUBECONFIG=/tmp/jupyter-k8s-ui-dev-sa.kubeconfig bun run dev:full`
+
+This ships only the SA (poll) identity; the per-user token can't be minted by the admin kubeconfig.
+
+- **ask the user to generate their token**
+- run `make refresh-token` to populate `DEV_ACCESS_TOKEN`
