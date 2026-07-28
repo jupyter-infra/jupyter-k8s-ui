@@ -1,8 +1,30 @@
-import { describe, test, expect, mock, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect, mock, beforeEach, afterEach, beforeAll, afterAll } from 'bun:test';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
+
+// MUI's Popover (opened by the Menu) calls console.error when it can't measure the anchor's
+// layout — which happy-dom never computes. That's an environment artifact, not a component
+// defect (it never fires in a real browser). Filter ONLY that message so genuine console
+// errors still surface. Restored in afterAll.
+const realConsoleError = console.error;
+const realConsoleWarn = console.warn;
+const isAnchorNoise = (args: unknown[]) => typeof args[0] === 'string' && args[0].includes('anchorEl');
+beforeAll(() => {
+  console.error = (...args: unknown[]) => {
+    if (isAnchorNoise(args)) return;
+    realConsoleError(...args);
+  };
+  console.warn = (...args: unknown[]) => {
+    if (isAnchorNoise(args)) return;
+    realConsoleWarn(...args);
+  };
+});
+afterAll(() => {
+  console.error = realConsoleError;
+  console.warn = realConsoleWarn;
+});
 
 // NamespaceSwitcher unit tests. We cover the component's LOGIC — not the MUI chrome:
 //   a/ filtering: the typeahead narrows the allowed list (case-insensitive) and sorts;

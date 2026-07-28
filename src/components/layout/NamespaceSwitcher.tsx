@@ -163,34 +163,32 @@ export function NamespaceSwitcher() {
           </MenuList>
         )}
 
-        {findCandidate && (
-          <>
-            <Divider />
-            <MenuItem onClick={() => handleFind(findCandidate)} disabled={findState.checking}>
-              <ListItemText
-                primary={findState.checking ? strings.namespace.findChecking : `Find "${findCandidate}"`}
-                secondary={
-                  findState.denied === findCandidate
-                    ? strings.namespace.findNotAllowed(findCandidate)
-                    : findState.errored === findCandidate
-                      ? strings.namespace.findCheckFailed
-                      : undefined
-                }
-              />
-            </MenuItem>
-          </>
-        )}
+        {/* Return arrays (not Fragments) so MUI's Menu can clone/key each child directly —
+            a Fragment child triggers "Menu doesn't accept a Fragment as a child". */}
+        {findCandidate && [
+          <Divider key="find-divider" />,
+          <MenuItem key="find-item" onClick={() => handleFind(findCandidate)} disabled={findState.checking}>
+            <ListItemText
+              primary={findState.checking ? strings.namespace.findChecking : `Find "${findCandidate}"`}
+              secondary={
+                findState.denied === findCandidate
+                  ? strings.namespace.findNotAllowed(findCandidate)
+                  : findState.errored === findCandidate
+                    ? strings.namespace.findCheckFailed
+                    : undefined
+              }
+            />
+          </MenuItem>,
+        ]}
 
-        {hasNextPage && (
-          <>
-            <Divider />
-            <Box sx={{ px: 1.5, py: 1 }}>
-              <Typography variant="caption" color="text.secondary">
-                {strings.namespace.moreHint}
-              </Typography>
-            </Box>
-          </>
-        )}
+        {hasNextPage && [
+          <Divider key="more-divider" />,
+          <Box key="more-hint" sx={{ px: 1.5, py: 1 }}>
+            <Typography variant="caption" color="text.secondary">
+              {strings.namespace.moreHint}
+            </Typography>
+          </Box>,
+        ]}
       </Menu>
     </Box>
   );

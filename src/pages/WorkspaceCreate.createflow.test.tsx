@@ -1,4 +1,4 @@
-import { describe, test, expect, mock, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect, mock, beforeEach, afterEach, beforeAll, afterAll } from 'bun:test';
 import { StrictMode } from 'react';
 import { render, screen, cleanup, fireEvent, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -88,6 +88,27 @@ async function renderCreate() {
   });
   return result;
 }
+
+// MUI's Popover (the template combobox menu) console.warns when it can't measure the anchor's
+// layout — which happy-dom never computes. Environment noise, not a defect (never fires in a
+// real browser). Filter ONLY that message so genuine console output still surfaces.
+const realConsoleWarn = console.warn;
+const realConsoleError = console.error;
+const isAnchorNoise = (args: unknown[]) => typeof args[0] === 'string' && args[0].includes('anchorEl');
+beforeAll(() => {
+  console.warn = (...args: unknown[]) => {
+    if (isAnchorNoise(args)) return;
+    realConsoleWarn(...args);
+  };
+  console.error = (...args: unknown[]) => {
+    if (isAnchorNoise(args)) return;
+    realConsoleError(...args);
+  };
+});
+afterAll(() => {
+  console.warn = realConsoleWarn;
+  console.error = realConsoleError;
+});
 
 describe('create via inline YAML toggle', () => {
   beforeEach(() => {
