@@ -22,6 +22,7 @@ mock.module('../../api/client', () => ({
 
 const { SimpleWorkspaceEditor } = await import('./SimpleWorkspaceEditor');
 const { AuthProvider } = await import('../../context/AuthContext');
+const { NamespaceProvider, namespaceKeys } = await import('../../context/NamespaceContext');
 
 const realFetch = globalThis.fetch;
 
@@ -35,6 +36,9 @@ const flush = () =>
 
 async function renderEditor(workspace: Workspace) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  // Seed the namespace bootstrap so NamespaceProvider resolves synchronously (the client
+  // mock has no getMyNamespace). The workspace's own namespace is the active one.
+  client.setQueryData(namespaceKeys.active, { active: workspace.metadata.namespace });
   let result!: ReturnType<typeof render>;
   // Render AND settle the initial async effects (auth /me, templates query → template
   // resolution + re-seed) inside one act(), so first-mount updates don't land outside act.
@@ -43,12 +47,14 @@ async function renderEditor(workspace: Workspace) {
       <QueryClientProvider client={client}>
         <AuthProvider>
           <MemoryRouter initialEntries={[`/workspace/${workspace.metadata.name}/edit`]}>
-            <SimpleWorkspaceEditor
-              workspace={workspace}
-              displayName={workspace.spec.displayName ?? workspace.metadata.name}
-              onDisplayNameChange={() => {}}
-              onSwitchToYaml={() => {}}
-            />
+            <NamespaceProvider>
+              <SimpleWorkspaceEditor
+                workspace={workspace}
+                displayName={workspace.spec.displayName ?? workspace.metadata.name}
+                onDisplayNameChange={() => {}}
+                onSwitchToYaml={() => {}}
+              />
+            </NamespaceProvider>
           </MemoryRouter>
         </AuthProvider>
       </QueryClientProvider>,

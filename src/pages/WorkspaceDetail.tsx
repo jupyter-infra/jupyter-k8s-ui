@@ -168,6 +168,7 @@ export function WorkspaceDetail() {
             </Typography>
             <Stack gap={1}>
               <InfoRow label="Status" value={<Chip size="small" label={workspaceStatus} color={getStatusChipColor(workspaceStatus)} />} />
+              <InfoRow label={strings.namespace.label} value={<Chip size="small" label={workspace.metadata.namespace} variant="outlined" />} />
               <InfoRow
                 label="Image"
                 value={

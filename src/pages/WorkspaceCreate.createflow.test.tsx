@@ -45,6 +45,7 @@ mock.module('../components/workspace/yaml-editor/YamlEditor', () => ({
 }));
 
 const { WorkspaceCreate } = await import('./WorkspaceCreate');
+const { NamespaceProvider, namespaceKeys } = await import('../context/NamespaceContext');
 
 // Drain pending async state updates (React Query results settling, the post-submit
 // navigate()/isPending flip) inside act(), so a trailing update from a finished test doesn't
@@ -62,6 +63,9 @@ const realFetch = globalThis.fetch;
 
 async function renderCreate() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  // Seed the namespace bootstrap so NamespaceProvider resolves synchronously to user-ns
+  // (the templates fixture's own namespace); global fetch is stubbed only for /me.
+  client.setQueryData(namespaceKeys.active, { active: 'user-ns' });
   let result!: ReturnType<typeof render>;
   // Render AND settle the initial async effects (auth /me fetch, templates query, the
   // resulting picker auto-select + MUI InputBase mount effects) inside one act(), so none
@@ -72,7 +76,9 @@ async function renderCreate() {
         <QueryClientProvider client={client}>
           <AuthProvider>
             <MemoryRouter initialEntries={['/create']}>
-              <WorkspaceCreate />
+              <NamespaceProvider>
+                <WorkspaceCreate />
+              </NamespaceProvider>
             </MemoryRouter>
           </AuthProvider>
         </QueryClientProvider>

@@ -4,6 +4,7 @@ import { Terminal } from '@mui/icons-material';
 import { useAuth } from '../../context';
 import { ThemeSwitcher } from '../ui/ThemeSwitcher';
 import { UserMenu } from './UserMenu';
+import { NamespaceSwitcher } from './NamespaceSwitcher';
 import { strings } from '../../constants';
 import styles from './Layout.module.css';
 
@@ -38,6 +39,7 @@ export function Layout() {
           <Box sx={{ flex: 1 }} />
 
           <Stack direction="row" alignItems="center" gap={1}>
+            <NamespaceSwitcher />
             <Tooltip title={strings.kubectl.navTooltip}>
               <IconButton component={Link} to="/kubectl" size="small" aria-label={strings.kubectl.navAriaLabel}>
                 <Terminal fontSize="small" />

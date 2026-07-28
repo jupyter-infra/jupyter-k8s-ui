@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -17,8 +17,9 @@ import {
 } from '@mui/material';
 import { Add, Search, Refresh, Terminal, Close, ArrowForward } from '@mui/icons-material';
 import { useWorkspaces, useClusterAccess } from '../api';
-import { isAuthError } from '../api/auth-interceptor';
+import { isAuthError, ApiError } from '../api/auth-interceptor';
 import { useAuth } from '../context';
+import { useNamespace } from '../context/NamespaceContext';
 import { isOwner as checkIsOwner, getWorkspaceOwner } from '../utils';
 import { WorkspaceCard } from '../components';
 import { strings } from '../constants';
@@ -30,7 +31,25 @@ const PAGE_SIZE = 12;
 export function WorkspaceList() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { activeNamespace, recoverFromForbidden } = useNamespace();
   const { data: workspaces, isLoading, error, refetch, isFetching } = useWorkspaces();
+
+  // A 403 on the list means "no access to this namespace" (typically the default, for a
+  // user with no remembered non-default namespace). It's an expected user state, not a
+  // failure — prompt them to pick a namespace via the switcher rather than showing an error.
+  const isForbidden = error instanceof ApiError && error.status === 403;
+
+  // On a 403, attempt recovery ONCE per active namespace: force-recompute the visible set
+  // and drop to a usable namespace if the active one was revoked. The ref-guard keyed on
+  // the namespace prevents an infinite refetch loop when the 403 isn't a revocation (quota,
+  // webhook, flake) — in that case recovery is a no-op and we fall through to the prompt.
+  const recoveredFor = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (isForbidden && activeNamespace && recoveredFor.current !== activeNamespace) {
+      recoveredFor.current = activeNamespace;
+      void recoverFromForbidden();
+    }
+  }, [isForbidden, activeNamespace, recoverFromForbidden]);
   const [filter, setFilter] = useState<'all' | 'mine'>('mine');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -170,10 +189,23 @@ export function WorkspaceList() {
             {strings.workspace.signInAgain}
           </Button>
         </Paper>
+      ) : isForbidden ? (
+        <Paper className={styles.emptyState} elevation={0}>
+          <Typography variant="h6" color="text.secondary" gutterBottom>
+            {strings.namespace.selectPromptTitle}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" className={styles.emptyStateDescription}>
+            {strings.namespace.selectPromptDescription}
+          </Typography>
+        </Paper>
       ) : isEmpty ? (
         <Paper className={styles.emptyState} elevation={0}>
           <Typography variant="h6" color="text.secondary" gutterBottom>
-            {search ? strings.workspace.noWorkspacesFound : strings.workspace.noWorkspacesYet}
+            {search
+              ? strings.workspace.noWorkspacesFound
+              : activeNamespace
+                ? strings.namespace.noWorkspacesIn(activeNamespace)
+                : strings.workspace.noWorkspacesYet}
           </Typography>
           <Typography variant="body2" color="text.secondary" className={styles.emptyStateDescription}>
             {search ? strings.workspace.noWorkspacesSearchDescription : strings.workspace.noWorkspacesDescription}

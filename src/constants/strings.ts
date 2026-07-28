@@ -137,7 +137,10 @@ export const strings = {
 
     // Delete dialog
     deleteTitle: 'Delete Workspace',
-    deleteMessage: (name: string) => `Are you sure you want to delete "${name}"? This action cannot be undone.`,
+    deleteMessage: (name: string, namespace?: string) =>
+      namespace
+        ? `Are you sure you want to delete "${name}" in ${namespace}? This action cannot be undone.`
+        : `Are you sure you want to delete "${name}"? This action cannot be undone.`,
 
     // Simple edit page
     editTitle: 'Edit Workspace',
@@ -240,6 +243,32 @@ export const strings = {
     switchToLight: 'Switch to light mode',
     switchToDark: 'Switch to dark mode',
     toggle: 'Toggle theme',
+  },
+
+  namespace: {
+    label: 'Namespace',
+    switcherAriaLabel: 'Select namespace',
+    searchPlaceholder: 'Find a namespace by name…',
+    loadMore: 'Load more',
+    loadingMore: 'Loading…',
+    moreHint: 'More namespaces available — load more or search by name.',
+    refresh: 'Refresh namespaces',
+    // Find-by-name results
+    findNotAllowed: (ns: string) => `You don't have access to "${ns}".`,
+    findChecking: 'Checking access…',
+    // Shown when the access check itself failed (after one retry) — NOT a denial: access is
+    // unknown, so we don't tell the user they lack access when they may well have it.
+    findCheckFailed: "Couldn't check access — please try again.",
+    // "Which namespace am I in" restatements at cost points
+    creatingIn: (ns: string) => `Creating in ${ns}`,
+    // Empty states — two distinct screens (see plan)
+    selectPromptTitle: 'Select a namespace to get started',
+    selectPromptDescription: "You don't have access to the default namespace. Choose one you can use.",
+    selectPromptAction: 'Select a namespace',
+    noneTitle: 'No namespaces available',
+    noneDescription: 'Ask your admin to grant you access to a workspace namespace, or to label one for discovery.',
+    // List/detail scope reinforcers
+    noWorkspacesIn: (ns: string) => `No workspaces in ${ns}`,
   },
 
   a11y: {
