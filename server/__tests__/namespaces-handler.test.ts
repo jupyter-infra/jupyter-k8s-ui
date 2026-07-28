@@ -13,19 +13,34 @@ import { describe, test, expect, mock, beforeEach } from 'bun:test';
 //   - the SSAR: mock the k8s client's auth API (allow all except names starting "deny").
 // Only the preference cookie (this handler's own concern) is module-mocked.
 
+import { randomBytes } from 'crypto';
+import { KEY_LENGTH, deriveKeys, sign } from '../crypto';
+import type { KeyEntry, KeyMap } from '../middleware/session';
 import * as configModule from '../k8s/config';
 
+// We DON'T module-mock ../middleware/namespace-preference: namespace-preference.test.ts tests
+// it directly, and bun's mock.module is process-global — a mock here (even a spread superset)
+// leaks its readNamespacePreference/buildNamespacePreferenceCookie overrides into that file's
+// import under CI's ordering, breaking it. Instead we drive the REAL module: reads via a real
+// signed cookie, writes captured by DECODING the real Set-Cookie the handler emits. Only the
+// signing-key leaf (secret-watcher) is mocked.
+let testKeyMap: KeyMap = { keys: new Map() };
+
 const ssarChecked: string[] = [];
-// Injected preference the readNamespacePreference mock returns.
+// Injected preference, encoded into a real signed request cookie via injectedPrefCookie().
 let prefActive: string | null = null;
 let prefVisible: string[] = [];
 let prefCheckedUpTo = 0;
 let prefUniverseFp = '';
-let prefVisibleFresh = true; // controls isVisibleExpired
-const builtCookies: Array<{ activeNs: string | null; visible: string[]; checkedUpTo: number; universeFp: string; visibleExp: number }> = [];
+let prefVisibleFresh = true; // controls whether the snapshot reads as fresh vs. expired
 let staticNamespaces: string[] = [];
 let candidateCap = 3;
 let visiblePersistCap = 100;
+
+function keyMapWith(kid = 'k1'): KeyMap {
+  const entry: KeyEntry = { kid, key: randomBytes(KEY_LENGTH), addedTime: Date.now() - 120_000 };
+  return { keys: new Map([[kid, entry]]) };
+}
 
 // Re-assert in beforeEach so a sibling file's mock of these shared modules doesn't win.
 function installMocks() {
@@ -48,26 +63,52 @@ function installMocks() {
       },
     }),
   }));
-  mock.module('../middleware/namespace-preference', () => ({
-    readNamespacePreference: () => ({
-      activeNs: prefActive,
-      visible: prefVisible,
-      checkedUpTo: prefCheckedUpTo,
-      universeFp: prefUniverseFp,
-      visibleExp: prefVisibleFresh ? 9_999_999_999 : 0,
-    }),
-    isVisibleExpired: () => !prefVisibleFresh,
-    freshVisible: (pref: { visible: string[] }) => (prefVisibleFresh ? pref.visible : []),
-    buildNamespacePreferenceCookie: (pref: { activeNs: string | null; visible: string[]; checkedUpTo: number; universeFp: string; visibleExp: number }) => {
-      builtCookies.push(pref);
-      return 'workspace_console_ns=signed; Path=/api/';
-    },
-  }));
+  mock.module('../secret-watcher', () => ({ getKeyMap: () => testKeyMap }));
 }
 installMocks();
 
 const { handleListNamespaces, handleGetMyNamespace, handlePatchMyNamespace, orderCandidates, universeFingerprint } = await import('../handlers/namespaces');
 const { initNamespaceUniverse, stopNamespaceUniverse, getNamespaceUniverse } = await import('../k8s/namespace-universe');
+const { NS_PREF_COOKIE_NAME } = await import('../middleware/namespace-preference');
+
+interface PrefPayload {
+  activeNs: string | null;
+  visible: string[];
+  checkedUpTo: number;
+  universeFp: string;
+  visibleExp: number;
+}
+
+/** Sign a preference payload into the module's on-wire cookie value (matches verifyAndParse). */
+function signPref(p: PrefPayload): string {
+  const entry = [...testKeyMap.keys.values()][0];
+  const { signingKey } = deriveKeys(entry.key);
+  const buf = Buffer.from(JSON.stringify(p), 'utf-8');
+  return `${buf.toString('base64url')}.${entry.kid}.${sign(buf, signingKey, entry.kid).toString('base64url')}`;
+}
+
+/** The injected read-side preference as a signed Cookie header value (or '' when empty). */
+function injectedPrefCookie(): string {
+  const hasCache = prefVisible.length > 0 || prefCheckedUpTo > 0 || prefUniverseFp !== '' || prefActive !== null;
+  if (!hasCache) return '';
+  const now = Math.floor(Date.now() / 1000);
+  return signPref({
+    activeNs: prefActive,
+    visible: prefVisible,
+    checkedUpTo: prefCheckedUpTo,
+    universeFp: prefUniverseFp,
+    visibleExp: prefVisibleFresh ? now + 3600 : now - 60,
+  });
+}
+
+/** Decode the preference the handler PERSISTED, from the real Set-Cookie on its response. */
+function decodePersisted(res: Response): PrefPayload | null {
+  const setCookie = res.headers.get('Set-Cookie');
+  if (!setCookie) return null;
+  const value = setCookie.split(';')[0].slice(NS_PREF_COOKIE_NAME.length + 1);
+  const payloadB64 = value.split('.')[0];
+  return JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf-8')) as PrefPayload;
+}
 
 // Seed the REAL universe = withDefault(staticNamespaces). Pass the non-default members;
 // 'default-ns' is always unioned in by the universe module.
@@ -89,15 +130,28 @@ function seedCache(visible: string[], checkedUpTo: number) {
 }
 
 function req(query = ''): Request {
-  return new Request(`http://x/api/v1/namespaces${query}`);
+  const cookie = injectedPrefCookie();
+  const headers: Record<string, string> = cookie ? { Cookie: `${NS_PREF_COOKIE_NAME}=${cookie}` } : {};
+  return new Request(`http://x/api/v1/namespaces${query}`, { headers });
+}
+
+/** GET /my-namespace request carrying the injected preference as a signed cookie. */
+function myNsReq(): Request {
+  const cookie = injectedPrefCookie();
+  const headers: Record<string, string> = cookie ? { Cookie: `${NS_PREF_COOKIE_NAME}=${cookie}` } : {};
+  return new Request('http://x/api/v1/my-namespace', { headers });
 }
 
 function patchReq(namespace: unknown): Request {
-  return new Request('http://x/api/v1/my-namespace', { method: 'PATCH', body: JSON.stringify({ namespace }) });
+  const cookie = injectedPrefCookie();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (cookie) headers.Cookie = `${NS_PREF_COOKIE_NAME}=${cookie}`;
+  return new Request('http://x/api/v1/my-namespace', { method: 'PATCH', headers, body: JSON.stringify({ namespace }) });
 }
 
 beforeEach(() => {
   installMocks();
+  testKeyMap = keyMapWith();
   ssarChecked.length = 0;
   prefActive = null;
   prefVisible = [];
@@ -106,7 +160,6 @@ beforeEach(() => {
   prefVisibleFresh = true;
   candidateCap = 3;
   visiblePersistCap = 100;
-  builtCookies.length = 0;
 });
 
 interface ListBody {
@@ -128,8 +181,9 @@ describe('handleListNamespaces (paged fan-out → visible snapshot)', () => {
     expect(body.offset).toBe(0);
     expect(body.total).toBe(3);
     expect(res.headers.get('Set-Cookie')).toContain('workspace_console_ns=');
-    expect(builtCookies[0].visible.sort()).toEqual(['default-ns', 'team-a']);
-    expect(builtCookies[0].checkedUpTo).toBe(3);
+    const persisted = decodePersisted(res)!;
+    expect(persisted.visible.sort()).toEqual(['default-ns', 'team-a']);
+    expect(persisted.checkedUpTo).toBe(3);
   });
 
   test('fresh, fp-matching snapshot covering the page → served WITHOUT SSAR and WITHOUT rewriting cookie', async () => {
@@ -189,7 +243,7 @@ describe('handleListNamespaces (paged fan-out → visible snapshot)', () => {
     // Only [3,6) is newly scanned — page 0's namespaces are not re-checked.
     expect(ssarChecked.sort()).toEqual(ordered.slice(3, 6).sort());
     expect(body.hasMore).toBe(false); // scanned through the end
-    expect(builtCookies[0].checkedUpTo).toBe(6);
+    expect(decodePersisted(res)!.checkedUpTo).toBe(6);
   });
 
   test('persist cap lowers checkedUpTo WITH visible (invariant: visible == allowed in [0, checkedUpTo))', async () => {
@@ -203,7 +257,7 @@ describe('handleListNamespaces (paged fan-out → visible snapshot)', () => {
     expect(body.items.length).toBe(5);
     // …but the persisted cookie is capped to 2 visible, with checkedUpTo lowered to match:
     // the ordered index just past the 2nd kept visible namespace.
-    const persisted = builtCookies[0];
+    const persisted = decodePersisted(res)!;
     expect(persisted.visible.length).toBe(2);
     const ordered = orderCandidates(getNamespaceUniverse());
     // checkedUpTo points just past the last kept visible ns → slicing [0, checkedUpTo) and
@@ -225,7 +279,7 @@ describe('handleGetMyNamespace (cheap bootstrap, no SSAR, no cookie)', () => {
     prefActive = 'team-a';
     prefVisible = ['default-ns', 'team-a'];
     prefVisibleFresh = true;
-    const res = handleGetMyNamespace(new Request('http://x/api/v1/my-namespace'));
+    const res = handleGetMyNamespace(myNsReq());
     expect((await res.json()) as { active: string }).toEqual({ active: 'team-a' });
   });
 
@@ -233,7 +287,7 @@ describe('handleGetMyNamespace (cheap bootstrap, no SSAR, no cookie)', () => {
     prefActive = 'team-gone';
     prefVisible = ['default-ns', 'team-a'];
     prefVisibleFresh = true;
-    const res = handleGetMyNamespace(new Request('http://x/api/v1/my-namespace'));
+    const res = handleGetMyNamespace(myNsReq());
     expect((await res.json()) as { active: string }).toEqual({ active: 'default-ns' });
   });
 
@@ -241,7 +295,7 @@ describe('handleGetMyNamespace (cheap bootstrap, no SSAR, no cookie)', () => {
     prefActive = 'team-a';
     prefVisible = ['default-ns']; // would exclude team-a, but it's expired → ignored
     prefVisibleFresh = false;
-    const res = handleGetMyNamespace(new Request('http://x/api/v1/my-namespace'));
+    const res = handleGetMyNamespace(myNsReq());
     expect((await res.json()) as { active: string }).toEqual({ active: 'team-a' });
   });
 });
@@ -255,13 +309,20 @@ describe('handlePatchMyNamespace (dumb activeNs write, no SSAR)', () => {
     const res = await handlePatchMyNamespace(patchReq('team-a'));
     expect((await res.json()) as { active: string }).toEqual({ active: 'team-a' });
     expect(ssarChecked).toEqual([]); // dumb — no SSAR
-    expect(builtCookies[0]).toEqual({ activeNs: 'team-a', visible: ['default-ns', 'team-a'], checkedUpTo: 2, universeFp: 'abc', visibleExp: 9_999_999_999 });
+    // activeNs updated to team-a; the scan-cache fields (visible/checkedUpTo/universeFp) are
+    // preserved from the request cookie. visibleExp is re-stamped fresh by the real builder.
+    const persisted = decodePersisted(res)!;
+    expect(persisted.activeNs).toBe('team-a');
+    expect(persisted.visible).toEqual(['default-ns', 'team-a']);
+    expect(persisted.checkedUpTo).toBe(2);
+    expect(persisted.universeFp).toBe('abc');
+    expect(persisted.visibleExp).toBeGreaterThan(Math.floor(Date.now() / 1000));
   });
 
   test('rejects a malformed namespace with 400', async () => {
     const res = await handlePatchMyNamespace(patchReq('Bad_NS'));
     expect(res.status).toBe(400);
-    expect(builtCookies.length).toBe(0);
+    expect(res.headers.get('Set-Cookie')).toBeNull(); // no cookie written on rejection
   });
 
   test('rejects a non-JSON body with 400', async () => {

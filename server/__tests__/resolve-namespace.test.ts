@@ -1,4 +1,7 @@
 import { describe, test, expect, mock, beforeEach } from 'bun:test';
+import { randomBytes } from 'crypto';
+import { KEY_LENGTH, deriveKeys, sign } from '../crypto';
+import type { KeyEntry, KeyMap } from '../middleware/session';
 
 // resolveNamespace's exemption boundary is the key new contract: the configured default
 // (and absent) MUST skip SSAR (back-compat, token-enforced), while a non-default namespace
@@ -11,9 +14,13 @@ import * as configModule from '../k8s/config';
 // for the whole run). Instead we mock the SSAR client it calls, and record the namespaces.
 const ssarCalls: Array<{ jwt: string; ns: string }> = [];
 let ssarVerdict = true;
-// Mock the preference cookie reader: tests set the visible snapshot + its freshness.
-let prefVisible: string[] = [];
-let prefVisibleFresh = true;
+
+// We DON'T module-mock ../middleware/namespace-preference: namespace-preference.test.ts
+// tests it directly, and bun's mock.module is process-global, so a mock here (even a subset)
+// leaks into that file's import under CI's ordering — breaking it. Instead we drive the REAL
+// module via a real signed cookie, mocking only its leaf (secret-watcher's getKeyMap).
+let testKeyMap: KeyMap = { keys: new Map() };
+mock.module('../secret-watcher', () => ({ getKeyMap: () => testKeyMap }));
 
 // bun's mock.module is process-global + import-time; re-assert in beforeEach so a sibling
 // file's mocks of these shared modules don't win during our tests.
@@ -33,26 +40,54 @@ function installMocks() {
       },
     }),
   }));
-  mock.module('../middleware/namespace-preference', () => ({
-    readNamespacePreference: () => ({ activeNs: null, visible: prefVisible, visibleExp: prefVisibleFresh ? 9_999_999_999 : 0 }),
-    freshVisible: (pref: { visible: string[] }) => (prefVisibleFresh ? pref.visible : []),
-  }));
+  mock.module('../secret-watcher', () => ({ getKeyMap: () => testKeyMap }));
 }
 installMocks();
 
 const { resolveNamespace } = await import('../k8s/resolve-namespace');
+const { NS_PREF_COOKIE_NAME } = await import('../middleware/namespace-preference');
 
-function req(ns?: string): Request {
+function keyMapWith(kid = 'k1'): KeyMap {
+  const entry: KeyEntry = { kid, key: randomBytes(KEY_LENGTH), addedTime: Date.now() - 120_000 };
+  return { keys: new Map([[kid, entry]]) };
+}
+
+/**
+ * Sign a preference payload into a cookie value, exactly matching the module's on-wire format
+ * (`base64url(payload).kid.base64url(sig)`) — so the REAL readNamespacePreference parses it.
+ * Unlike buildNamespacePreferenceCookie (which always re-stamps visibleExp to "now + TTL"),
+ * this lets us set an ALREADY-EXPIRED `visibleExp` to exercise the stale-snapshot branch.
+ */
+function signPref(over: { visible?: string[]; visibleExp: number }): string {
+  const entry = [...testKeyMap.keys.values()][0];
+  const { signingKey } = deriveKeys(entry.key);
+  const payload = { activeNs: null, visible: over.visible ?? [], checkedUpTo: (over.visible ?? []).length, universeFp: 'fp', visibleExp: over.visibleExp };
+  const payloadBuf = Buffer.from(JSON.stringify(payload), 'utf-8');
+  const signature = sign(payloadBuf, signingKey, entry.kid);
+  return `${payloadBuf.toString('base64url')}.${entry.kid}.${signature.toString('base64url')}`;
+}
+
+/**
+ * A request whose signed preference cookie carries a `visible` snapshot; the real
+ * readNamespacePreference parses it (no module mock). `fresh: false` stamps an expired
+ * `visibleExp` so freshVisible must ignore the snapshot and fall to the live SSAR.
+ */
+function req(ns?: string, opts: { visible?: string[]; fresh?: boolean } = {}): Request {
   const url = ns ? `http://x/api/v1/workspaces?namespace=${ns}` : 'http://x/api/v1/workspaces';
-  return new Request(url);
+  const headers: Record<string, string> = {};
+  if (opts.visible && opts.visible.length > 0) {
+    const now = Math.floor(Date.now() / 1000);
+    const value = signPref({ visible: opts.visible, visibleExp: opts.fresh === false ? now - 60 : now + 3600 });
+    headers.Cookie = `${NS_PREF_COOKIE_NAME}=${value}`;
+  }
+  return new Request(url, { headers });
 }
 
 beforeEach(() => {
   installMocks();
+  testKeyMap = keyMapWith();
   ssarCalls.length = 0;
   ssarVerdict = true;
-  prefVisible = [];
-  prefVisibleFresh = true;
 });
 
 describe('resolveNamespace exemption boundary', () => {
@@ -69,8 +104,7 @@ describe('resolveNamespace exemption boundary', () => {
   });
 
   test('non-default in fresh visible → used, NO live SSAR', async () => {
-    prefVisible = ['team-a'];
-    const res = await resolveNamespace(req('team-a'), 'jwt');
+    const res = await resolveNamespace(req('team-a', { visible: ['team-a'], fresh: true }), 'jwt');
     expect(res).toEqual({ ok: true, namespace: 'team-a' });
     expect(ssarCalls).toEqual([]);
   });
@@ -91,9 +125,7 @@ describe('resolveNamespace exemption boundary', () => {
   });
 
   test('expired snapshot → visible membership is ignored, live SSAR runs', async () => {
-    prefVisible = ['team-a'];
-    prefVisibleFresh = false;
-    await resolveNamespace(req('team-a'), 'jwt');
+    await resolveNamespace(req('team-a', { visible: ['team-a'], fresh: false }), 'jwt');
     expect(ssarCalls).toEqual([{ jwt: 'jwt', ns: 'team-a' }]);
   });
 
