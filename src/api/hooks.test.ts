@@ -1,9 +1,13 @@
 import { describe, test, expect, beforeEach, mock } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor, act } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
 import type { Workspace } from '../types';
 import { workspaceKeys, useDeleteWorkspace, useStartWorkspace, isWorkspaceSettled } from './hooks';
+import { NamespaceProvider, namespaceKeys } from '../context/NamespaceContext';
+
+const TEST_NS = 'default';
 
 // Mock the API client
 const mockDelete = mock(async (): Promise<void> => undefined);
@@ -25,9 +29,16 @@ function makeWorkspace(name: string, desiredStatus: 'Running' | 'Stopped' = 'Run
   } as Workspace;
 }
 
+// The namespaced hooks read activeNamespace from NamespaceProvider; seed the cheap
+// bootstrap query so it resolves synchronously to TEST_NS (no network).
 function makeWrapper(client: QueryClient) {
-  return ({ children }: { children: React.ReactNode }) => React.createElement(QueryClientProvider, { client }, children);
+  client.setQueryData(namespaceKeys.active, { active: TEST_NS });
+  return ({ children }: { children: React.ReactNode }) =>
+    React.createElement(QueryClientProvider, { client }, React.createElement(MemoryRouter, null, React.createElement(NamespaceProvider, null, children)));
 }
+
+// The list cache key is now namespace-scoped.
+const listKey = workspaceKeys.all(TEST_NS);
 
 describe('useDeleteWorkspace — optimistic update', () => {
   let client: QueryClient;
@@ -39,7 +50,7 @@ describe('useDeleteWorkspace — optimistic update', () => {
 
   test('removes workspace from cache on mutate, keeps it removed on success', async () => {
     const initial = [makeWorkspace('a'), makeWorkspace('b')];
-    client.setQueryData(workspaceKeys.all, initial);
+    client.setQueryData(listKey, initial);
 
     const { result } = renderHook(() => useDeleteWorkspace(), { wrapper: makeWrapper(client) });
 
@@ -47,9 +58,9 @@ describe('useDeleteWorkspace — optimistic update', () => {
       await result.current.mutateAsync('a');
     });
 
-    const finalData = client.getQueryData<Workspace[]>(workspaceKeys.all);
+    const finalData = client.getQueryData<Workspace[]>(listKey);
     expect(finalData?.map((w) => w.metadata.name)).not.toContain('a');
-    expect(mockDelete).toHaveBeenCalledWith('a');
+    expect(mockDelete).toHaveBeenCalledWith('a', 'default');
   });
 
   test('rolls back cache on error', async () => {
@@ -58,7 +69,7 @@ describe('useDeleteWorkspace — optimistic update', () => {
     });
 
     const initial = [makeWorkspace('a'), makeWorkspace('b')];
-    client.setQueryData(workspaceKeys.all, initial);
+    client.setQueryData(listKey, initial);
 
     const { result } = renderHook(() => useDeleteWorkspace(), { wrapper: makeWrapper(client) });
 
@@ -71,7 +82,7 @@ describe('useDeleteWorkspace — optimistic update', () => {
     });
 
     await waitFor(() => {
-      const data = client.getQueryData<Workspace[]>(workspaceKeys.all);
+      const data = client.getQueryData<Workspace[]>(listKey);
       expect(data?.map((w) => w.metadata.name)).toEqual(['a', 'b']);
     });
   });
@@ -87,7 +98,7 @@ describe('useStartWorkspace — optimistic update', () => {
 
   test('sets desiredStatus to Running on mutate', async () => {
     const initial = [makeWorkspace('a', 'Stopped')];
-    client.setQueryData(workspaceKeys.all, initial);
+    client.setQueryData(listKey, initial);
 
     const { result } = renderHook(() => useStartWorkspace(), { wrapper: makeWrapper(client) });
 
@@ -95,7 +106,7 @@ describe('useStartWorkspace — optimistic update', () => {
       await result.current.mutateAsync('a');
     });
 
-    expect(mockStart).toHaveBeenCalledWith('a');
+    expect(mockStart).toHaveBeenCalledWith('a', 'default');
   });
 
   test('rolls back desiredStatus on error', async () => {
@@ -104,7 +115,7 @@ describe('useStartWorkspace — optimistic update', () => {
     });
 
     const initial = [makeWorkspace('a', 'Stopped')];
-    client.setQueryData(workspaceKeys.all, initial);
+    client.setQueryData(listKey, initial);
 
     const { result } = renderHook(() => useStartWorkspace(), { wrapper: makeWrapper(client) });
 
@@ -117,7 +128,7 @@ describe('useStartWorkspace — optimistic update', () => {
     });
 
     await waitFor(() => {
-      const data = client.getQueryData<Workspace[]>(workspaceKeys.all);
+      const data = client.getQueryData<Workspace[]>(listKey);
       expect(data?.[0].spec.desiredStatus).toBe('Stopped');
     });
   });

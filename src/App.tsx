@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CircularProgress, Box } from '@mui/material';
 import { AuthProvider, ThemeProvider } from './context';
+import { NamespaceProvider } from './context/NamespaceContext';
 import { ErrorBoundary, Layout } from './components';
 import { isAuthError } from './api/auth-interceptor';
 
@@ -39,17 +40,19 @@ function AppContent() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <Suspense fallback={<PageLoader />}>
-          <Routes>
-            <Route path="/" element={<Layout />}>
-              <Route index element={<WorkspaceList />} />
-              <Route path="create" element={<WorkspaceCreate />} />
-              <Route path="workspace/:name" element={<WorkspaceDetail />} />
-              <Route path="workspace/:name/edit" element={<WorkspaceAdvancedEditor />} />
-              <Route path="kubectl" element={<KubectlAccess />} />
-            </Route>
-          </Routes>
-        </Suspense>
+        <NamespaceProvider>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route path="/" element={<Layout />}>
+                <Route index element={<WorkspaceList />} />
+                <Route path="create" element={<WorkspaceCreate />} />
+                <Route path="workspace/:name" element={<WorkspaceDetail />} />
+                <Route path="workspace/:name/edit" element={<WorkspaceAdvancedEditor />} />
+                <Route path="kubectl" element={<KubectlAccess />} />
+              </Route>
+            </Routes>
+          </Suspense>
+        </NamespaceProvider>
       </BrowserRouter>
     </AuthProvider>
   );

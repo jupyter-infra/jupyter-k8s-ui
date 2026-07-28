@@ -7,10 +7,22 @@ import type {
   DiscoveryResponse,
   DiscoveredTemplate,
   DiscoveredAccessStrategy,
+  MyNamespaceResponse,
+  NamespaceListResponse,
+  NamespaceAccessResponse,
 } from '../types';
 import { handleUnauthorized, clearAuthReloadFlag, AuthError, ApiError } from './auth-interceptor';
 
 const API_BASE = '/api/v1';
+
+// Append ?namespace=<ns> to a path when a namespace is supplied. Kept in one place so
+// every namespaced call and its React Query key stay in sync (the ns is passed explicitly
+// by hooks — no hidden global state in the client).
+function withNamespace(path: string, ns?: string): string {
+  if (!ns) return path;
+  const sep = path.includes('?') ? '&' : '?';
+  return `${path}${sep}namespace=${encodeURIComponent(ns)}`;
+}
 
 // JSON Schema handed to monaco-yaml — opaque to us, just forwarded to the language
 // service. `unknown`-keyed to avoid pretending we know its internal shape.
@@ -58,34 +70,59 @@ class ApiClient {
     return response.json();
   }
 
-  listWorkspaces = () => this.request<Workspace[]>('/workspaces');
+  // --- Namespace selection ---
 
-  listTemplates = () => this.request<DiscoveryResponse<DiscoveredTemplate>>('/templates');
+  // Cheap bootstrap: the resolved active namespace (no SSAR, no cookie write).
+  getMyNamespace = () => this.request<MyNamespaceResponse>('/my-namespace');
 
-  listAccessStrategies = () => this.request<DiscoveryResponse<DiscoveredAccessStrategy>>('/access-strategies');
+  // Persist the active-namespace switch (writes the activeNs preference cookie). Dumb —
+  // no SSAR; the switcher only PATCHes a namespace already in the visible list.
+  setMyNamespace = (namespace: string) => this.request<MyNamespaceResponse>('/my-namespace', { method: 'PATCH', body: JSON.stringify({ namespace }) });
 
-  getWorkspace = (name: string) => this.request<Workspace>(`/workspaces/${name}`);
+  // One page of the switcher list (SSAR fan-out; refreshes the visible-set cookie).
+  // `offset` pages into the ordered universe; `refresh` forces a server-side recompute
+  // bypassing the cached snapshot (manual refresh / 403 recovery — always page 0).
+  listNamespaces = (opts: { offset?: number; refresh?: boolean } = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.offset) qs.set('offset', String(opts.offset));
+    if (opts.refresh) qs.set('refresh', '1');
+    const q = qs.toString();
+    return this.request<NamespaceListResponse>(q ? `/namespaces?${q}` : '/namespaces');
+  };
 
-  createWorkspace = (data: CreateWorkspaceRequest) => this.request<Workspace>('/workspaces', { method: 'POST', body: JSON.stringify(data) });
+  checkNamespaceAccess = (ns: string) => this.request<NamespaceAccessResponse>(`/namespaces/${encodeURIComponent(ns)}/access`);
+
+  // --- Namespaced resources (ns threaded as ?namespace=) ---
+
+  listWorkspaces = (ns?: string) => this.request<Workspace[]>(withNamespace('/workspaces', ns));
+
+  listTemplates = (ns?: string) => this.request<DiscoveryResponse<DiscoveredTemplate>>(withNamespace('/templates', ns));
+
+  listAccessStrategies = (ns?: string) => this.request<DiscoveryResponse<DiscoveredAccessStrategy>>(withNamespace('/access-strategies', ns));
+
+  getWorkspace = (name: string, ns?: string) => this.request<Workspace>(withNamespace(`/workspaces/${name}`, ns));
+
+  createWorkspace = (data: CreateWorkspaceRequest, ns?: string) =>
+    this.request<Workspace>(withNamespace('/workspaces', ns), { method: 'POST', body: JSON.stringify(data) });
 
   // Field-shaped selective update: the server reads the live spec and overlays only the
   // fields present in the body (`if (body.x !== undefined) spec.x = body.x`), so untouched
   // fields — including stored requests — survive. Used by the simple-edit page. PATCH is
   // the appropriate verb for a partial update; the overlay is driven by the body shape,
   // not the verb (the raw-spec advanced editor uses PUT for a full-spec replace).
-  updateWorkspace = (name: string, data: UpdateWorkspaceRequest) =>
-    this.request<Workspace>(`/workspaces/${name}`, { method: 'PATCH', body: JSON.stringify(data) });
+  updateWorkspace = (name: string, data: UpdateWorkspaceRequest, ns?: string) =>
+    this.request<Workspace>(withNamespace(`/workspaces/${name}`, ns), { method: 'PATCH', body: JSON.stringify(data) });
 
-  deleteWorkspace = (name: string) => this.request<void>(`/workspaces/${name}`, { method: 'DELETE' });
+  deleteWorkspace = (name: string, ns?: string) => this.request<void>(withNamespace(`/workspaces/${name}`, ns), { method: 'DELETE' });
 
-  startWorkspace = (name: string) =>
-    this.request<Workspace>(`/workspaces/${name}`, {
+  startWorkspace = (name: string, ns?: string) =>
+    this.request<Workspace>(withNamespace(`/workspaces/${name}`, ns), {
       method: 'PATCH',
       body: JSON.stringify({ desiredStatus: 'Running' }),
     });
 
-  stopWorkspace = (name: string) =>
-    this.request<Workspace>(`/workspaces/${name}`, {
+  stopWorkspace = (name: string, ns?: string) =>
+    this.request<Workspace>(withNamespace(`/workspaces/${name}`, ns), {
       method: 'PATCH',
       body: JSON.stringify({ desiredStatus: 'Stopped' }),
     });
@@ -98,16 +135,18 @@ class ApiClient {
 
   // Raw create/replace: the advanced editor owns the whole spec (WYSIWYG full-spec
   // replace). Distinct from the simple form's field-shaped create/update.
-  createWorkspaceAdvanced = (data: AdvancedWorkspacePayload) => this.request<Workspace>('/workspaces', { method: 'POST', body: JSON.stringify(data) });
+  createWorkspaceAdvanced = (data: AdvancedWorkspacePayload, ns?: string) =>
+    this.request<Workspace>(withNamespace('/workspaces', ns), { method: 'POST', body: JSON.stringify(data) });
 
-  replaceWorkspaceAdvanced = (name: string, data: AdvancedWorkspacePayload) =>
-    this.request<Workspace>(`/workspaces/${name}`, { method: 'PUT', body: JSON.stringify(data) });
+  replaceWorkspaceAdvanced = (name: string, data: AdvancedWorkspacePayload, ns?: string) =>
+    this.request<Workspace>(withNamespace(`/workspaces/${name}`, ns), { method: 'PUT', body: JSON.stringify(data) });
 
   // Dry-run validate against the cluster. A 422/409/403 is an EXPECTED outcome here,
   // not an exception — return a structured result so the editor can render the
   // webhook's message. Only 401 still throws (handled by the interceptor).
-  validateWorkspace = async (data: AdvancedWorkspacePayload, mode: 'create' | 'edit'): Promise<ValidationResult> => {
-    const path = mode === 'edit' ? `/workspaces/${data.name}?dryRun=All` : `/workspaces?dryRun=All`;
+  validateWorkspace = async (data: AdvancedWorkspacePayload, mode: 'create' | 'edit', ns?: string): Promise<ValidationResult> => {
+    const base = mode === 'edit' ? `/workspaces/${data.name}?dryRun=All` : `/workspaces?dryRun=All`;
+    const path = ns ? `${base}&namespace=${encodeURIComponent(ns)}` : base;
     const method = mode === 'edit' ? 'PUT' : 'POST';
     const response = await fetch(`${API_BASE}${path}`, {
       method,
