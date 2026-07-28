@@ -54,18 +54,13 @@ function installMocks() {
       }),
     }),
   }));
-  // resolveNamespace reads the visible snapshot; keep it empty+fresh so a non-default
-  // namespace always falls through to the live SSAR (the branch we're steering).
-  mock.module('../middleware/namespace-preference', () => ({
-    readNamespacePreference: () => ({ activeNs: null, visible: [], visibleExp: 9_999_999_999 }),
-    freshVisible: () => [],
-    isVisibleExpired: () => false,
-    buildNamespacePreferenceCookie: () => null,
-  }));
-  // NOTE: we module-mock NEITHER ../k8s/namespace-universe NOR ../handlers/* — sibling files
-  // test those directly and a process-global mock would clobber them (breaking the full-suite
-  // run). We drive the REAL router → REAL handlers → mocked ../k8s/client leaf, and the real
-  // universe via the dev short-circuit (isLocalDevelopment → static list), seeded in beforeEach.
+  // NOTE: we module-mock NEITHER ../middleware/namespace-preference, ../k8s/namespace-universe,
+  // NOR ../handlers/* — sibling files test those directly and bun's process-global mock.module
+  // would clobber them (a subset mock even breaks their own imports, e.g. NS_PREF_COOKIE_NAME),
+  // failing under CI's file ordering. We drive the REAL router → REAL resolveNamespace → REAL
+  // preference reader (test requests carry NO cookie → empty preference → the live-SSAR branch
+  // we're steering) → REAL handlers → mocked ../k8s/client leaf; the universe uses the dev
+  // short-circuit (isLocalDevelopment → static list), seeded in beforeEach.
 }
 installMocks();
 
