@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { expectOnPath } from './test-utils';
 import { execFileSync } from 'node:child_process';
 
 // Idle-override DRIFT on edit: a template can flip from permissive (idle optional) to
@@ -79,7 +80,7 @@ test.describe('Idle-override drift on edit', () => {
     await expect(toggle).toBeEnabled();
 
     await page.getByRole('button', { name: /create workspace/i }).click();
-    await expect(page).toHaveURL('/', { timeout: 10_000 });
+    await expectOnPath(page);
     await page.getByRole('button', { name: /all/i }).click();
     await waitForCardStatus(page, WS_NAME, 'Running');
 
@@ -93,7 +94,7 @@ test.describe('Idle-override drift on edit', () => {
     // Stop first — edit requires a Stopped workspace.
     await page.goto(`/workspace/${WS_NAME}`);
     await page.getByRole('button', { name: /stop/i }).click();
-    await expect(page.getByText('Stopped', { exact: true })).toBeVisible({ timeout: 45_000 });
+    await expect(page.locator('.MuiChip-label').getByText('Stopped', { exact: true })).toBeVisible({ timeout: 45_000 });
 
     // Flip the template: idle is now REQUIRED (allow:false) with an enabled default. The
     // workspace's stored idle-off block now violates the operator's structural lock.
@@ -114,7 +115,7 @@ test.describe('Idle-override drift on edit', () => {
     // Save must send the conformed enabled block or the operator's structural lock rejects it.
     // A clean navigation to '/' proves it admitted.
     await page.getByRole('button', { name: /save changes/i }).click();
-    await expect(page).toHaveURL('/', { timeout: 10_000 });
+    await expectOnPath(page);
 
     // Detail confirms idle is now enabled (shows a timeout, not "Disabled").
     await page.goto(`/workspace/${WS_NAME}`);

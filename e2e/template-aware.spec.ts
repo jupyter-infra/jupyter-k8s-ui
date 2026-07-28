@@ -1,4 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
+import { expectOnPath } from './test-utils';
 
 // Template-aware simple create + simple edit, exercised against the real cluster with the
 // e2e template fixtures. The `default` fixture (e2e/fixtures/default-template.yaml) is the
@@ -45,7 +46,7 @@ test.describe('Template-aware simple create + edit', () => {
 
     // Submit — the operator resolves the (auto-used) default template and admits.
     await page.getByRole('button', { name: /create workspace/i }).click();
-    await expect(page).toHaveURL('/', { timeout: 10_000 });
+    await expectOnPath(page);
 
     await page.getByRole('button', { name: /all/i }).click();
     const card = page.getByLabel(new RegExp(`${WS_NAME}.*workspace`, 'i'));
@@ -70,7 +71,7 @@ test.describe('Template-aware simple create + edit', () => {
     await expect(page.getByRole('heading', { name: WS_NAME })).toBeVisible({ timeout: 10_000 });
     await page.getByRole('button', { name: /stop/i }).click();
     // Status renders as a chip on the detail page (not a heading); match its exact text.
-    await expect(page.getByText('Stopped', { exact: true })).toBeVisible({ timeout: 45_000 });
+    await expect(page.locator('.MuiChip-label').getByText('Stopped', { exact: true })).toBeVisible({ timeout: 45_000 });
 
     // Go to the edit page — it defaults to the simple (slider) editor.
     await page.goto(`/workspace/${WS_NAME}/edit`);
@@ -88,7 +89,7 @@ test.describe('Template-aware simple create + edit', () => {
     await page.getByRole('button', { name: /save changes/i }).click();
 
     // Saves via selective PATCH and navigates to the list (no auto-start → stays Stopped).
-    await expect(page).toHaveURL('/', { timeout: 10_000 });
+    await expectOnPath(page);
     await page.getByRole('button', { name: /all/i }).click();
     const card = page.getByLabel(new RegExp(`${WS_NAME}.*workspace`, 'i'));
     await expect(card).toBeVisible({ timeout: 10_000 });

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { expectOnPath } from './test-utils';
 import { execFileSync } from 'node:child_process';
 
 // Template DRIFT on edit: a template's defaultImage can change AFTER a workspace was created,
@@ -74,7 +75,7 @@ test.describe('Template drift on edit', () => {
     await page.getByRole('button', { name: /select Fixed Image Drift Template template/i }).click();
 
     await page.getByRole('button', { name: /create workspace/i }).click();
-    await expect(page).toHaveURL('/', { timeout: 10_000 });
+    await expectOnPath(page);
     await page.getByRole('button', { name: /all/i }).click();
     await waitForCardStatus(page, WS_NAME, 'Running');
   });
@@ -84,7 +85,7 @@ test.describe('Template drift on edit', () => {
     await page.goto(`/workspace/${WS_NAME}`);
     await expect(page.getByRole('heading', { name: WS_NAME })).toBeVisible({ timeout: 10_000 });
     await page.getByRole('button', { name: /stop/i }).click();
-    await expect(page.getByText('Stopped', { exact: true })).toBeVisible({ timeout: 45_000 });
+    await expect(page.locator('.MuiChip-label').getByText('Stopped', { exact: true })).toBeVisible({ timeout: 45_000 });
 
     // Drift the template: its fixed image is now nginx:1.27, so the workspace's stored
     // nginx:latest is no longer permitted.
@@ -100,7 +101,7 @@ test.describe('Template drift on edit', () => {
     // Save must send the conformed image — otherwise the operator's whole-spec revalidation
     // rejects the (stored, now-disallowed) image. A clean navigation to '/' proves it admitted.
     await page.getByRole('button', { name: /save changes/i }).click();
-    await expect(page).toHaveURL('/', { timeout: 10_000 });
+    await expectOnPath(page);
 
     // Detail confirms the conformed image actually persisted.
     await page.goto(`/workspace/${WS_NAME}`);

@@ -1,4 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
+import { expectOnPath } from './test-utils';
 
 // Unique prefix per test run to avoid collisions
 const RUN_ID = `e2e-${Date.now()}`;
@@ -54,7 +55,7 @@ test.describe('Workspace CRUD', () => {
 
     // Navigate to create page
     await page.getByRole('button', { name: /new workspace/i }).click();
-    await expect(page).toHaveURL('/create');
+    await expectOnPath(page, { path: '/create' });
 
     // Fill both name fields using role selectors for MUI TextFields
     await page.getByRole('textbox', { name: /^name$/i }).fill(WS_NAME);
@@ -64,7 +65,7 @@ test.describe('Workspace CRUD', () => {
     await page.getByRole('button', { name: /create workspace/i }).click();
 
     // Should redirect back to list
-    await expect(page).toHaveURL('/', { timeout: 10_000 });
+    await expectOnPath(page);
 
     // Switch to "All" filter so we can see the workspace regardless of owner matching
     await page.getByRole('button', { name: /all/i }).click();
@@ -125,7 +126,7 @@ test.describe('Workspace CRUD', () => {
 
     // Verify workspace info is displayed (use heading to avoid strict mode — name shows twice)
     await expect(page.getByRole('heading', { name: WS_NAME })).toBeVisible();
-    await expect(page.getByText('Running', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator('.MuiChip-label').getByText('Running', { exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText('Conditions')).toBeVisible();
     await expect(page.getByText('Information')).toBeVisible();
   });
@@ -138,11 +139,11 @@ test.describe('Workspace CRUD', () => {
 
     // Stop from detail page
     await page.getByRole('button', { name: /stop/i }).click();
-    await expect(page.getByText('Stopped', { exact: true })).toBeVisible({ timeout: 45_000 });
+    await expect(page.locator('.MuiChip-label').getByText('Stopped', { exact: true })).toBeVisible({ timeout: 45_000 });
 
     // Start from detail page — cold start can take longer in CI
     await page.getByRole('button', { name: /start/i }).click();
-    await expect(page.getByText('Running', { exact: true })).toBeVisible({ timeout: 45_000 });
+    await expect(page.locator('.MuiChip-label').getByText('Running', { exact: true })).toBeVisible({ timeout: 45_000 });
   });
 
   test('deletes a workspace', async ({ page }) => {
@@ -187,7 +188,7 @@ test.describe('Workspace CRUD', () => {
 
     // A 422 from the API server would surface as an inline error alert and keep us
     // on /create. Redirect back to the list is proof the CRD accepted the enum.
-    await expect(page).toHaveURL('/', { timeout: 10_000 });
+    await expectOnPath(page);
 
     await page.getByRole('button', { name: /all/i }).click();
 
