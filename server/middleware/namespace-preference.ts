@@ -132,10 +132,14 @@ export function freshVisible(pref: NamespacePreference): string[] {
  * the same window createSessionCookie degrades in). Also returns null (after eviction) if
  * the payload can't be squeezed under the size cap.
  *
- * `visibleExp` is stamped here (now + the visible TTL). `activeNs` carries no in-payload
- * expiry — it lives for the cookie's Max-Age.
+ * By default `visibleExp` is stamped fresh (now + the visible TTL) — correct for the
+ * GET /namespaces writer, which has just re-verified the set via SSAR. Pass
+ * `preserveVisibleExp` for an activeNs-only write (PATCH /my-namespace): it keeps the
+ * caller-supplied `visibleExp` verbatim, so a namespace switch neither slides the 30-min
+ * revocation window forward nor revives an already-expired snapshot. `activeNs` carries no
+ * in-payload expiry — it lives for the cookie's Max-Age.
  */
-export function buildNamespacePreferenceCookie(pref: NamespacePreference): string | null {
+export function buildNamespacePreferenceCookie(pref: NamespacePreference, opts: { preserveVisibleExp?: boolean } = {}): string | null {
   const signingEntry = getSigningKey(getKeyMap(), serverConfig.session.newKeyUseDelaySecs);
   if (!signingEntry) {
     log('debug', 'No signing key available — skipping namespace preference cookie');
@@ -148,7 +152,7 @@ export function buildNamespacePreferenceCookie(pref: NamespacePreference): strin
     visible: pref.visible,
     checkedUpTo: pref.checkedUpTo,
     universeFp: pref.universeFp,
-    visibleExp: now + NS_PREF_VISIBLE_TTL_SECS,
+    visibleExp: opts.preserveVisibleExp ? pref.visibleExp : now + NS_PREF_VISIBLE_TTL_SECS,
   };
 
   const { signingKey } = deriveKeys(signingEntry.key);

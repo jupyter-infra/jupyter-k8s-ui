@@ -22,7 +22,7 @@ function installClientMock() {
 }
 installClientMock();
 
-const { checkNamespaceAccess, checkNamespacesAccess } = await import('../k8s/access');
+const { checkNamespaceAccess, checkNamespaceAccessVerdict, checkNamespacesAccess } = await import('../k8s/access');
 
 function allow(allowed: boolean) {
   return async (body: V1SelfSubjectAccessReview) => ({ body: { ...body, status: { allowed } } });
@@ -71,6 +71,23 @@ describe('checkNamespaceAccess (confused-deputy primitive)', () => {
   test('missing status → false (defensive)', async () => {
     ssarImpl = async () => ({ body: {} });
     expect(await checkNamespaceAccess('jwt', 'ns')).toBe(false);
+  });
+});
+
+describe('checkNamespaceAccessVerdict (tri-state for the enforcement boundary)', () => {
+  test('allowed:true → "allowed"; allowed:false → "denied" (definitive verdicts)', async () => {
+    ssarImpl = allow(true);
+    expect(await checkNamespaceAccessVerdict('jwt', 'ns')).toBe('allowed');
+    ssarImpl = allow(false);
+    expect(await checkNamespaceAccessVerdict('jwt', 'ns')).toBe('denied');
+  });
+
+  test('SSAR error → "indeterminate" (distinct from a definitive deny; never throws)', async () => {
+    // resolveNamespace relies on this to DEFER to the user token instead of 403ing on a blip.
+    ssarImpl = async () => {
+      throw Object.assign(new Error('boom'), { statusCode: 503 });
+    };
+    expect(await checkNamespaceAccessVerdict('jwt', 'ns')).toBe('indeterminate');
   });
 });
 

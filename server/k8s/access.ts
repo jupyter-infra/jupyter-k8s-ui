@@ -29,11 +29,19 @@ interface SsarStatus {
   status?: { allowed?: boolean };
 }
 
+// A tri-state SSAR verdict. `allowed`/`denied` are DEFINITIVE answers from the API server;
+// `indeterminate` means the SSAR itself could not be evaluated (transport blip, timeout,
+// 5xx). The distinction matters at the enforcement boundary: a display consumer collapses
+// `indeterminate` to "not visible" (fail closed), but resolveNamespace must NOT turn a
+// transient blip into a hard 403 — the user's own token is the real gate downstream.
+export type AccessVerdict = 'allowed' | 'denied' | 'indeterminate';
+
 /**
  * One SelfSubjectAccessReview with the user's token: may this user `list` workspaces in
- * `namespace`? Fails CLOSED (returns false) on any error — see the security note above.
+ * `namespace`? Returns the tri-state verdict — `indeterminate` on any error (never throws),
+ * so callers choose their own fail-closed vs. defer-to-downstream policy.
  */
-export async function checkNamespaceAccess(jwt: string | null, namespace: string): Promise<boolean> {
+export async function checkNamespaceAccessVerdict(jwt: string | null, namespace: string): Promise<AccessVerdict> {
   try {
     const authClient = await reuseOrCreateAuthClient(jwt);
     const res = await authClient.createSelfSubjectAccessReview({
@@ -48,13 +56,19 @@ export async function checkNamespaceAccess(jwt: string | null, namespace: string
         },
       },
     });
-    const allowed = (res.body as SsarStatus)?.status?.allowed === true;
-    return allowed;
+    return (res.body as SsarStatus)?.status?.allowed === true ? 'allowed' : 'denied';
   } catch (error) {
-    // Fail closed: an SSAR we can't run means "not visible", never "visible".
-    log('warn', `SSAR failed for namespace ${namespace} — treating as not visible: ${error instanceof Error ? error.message : String(error)}`);
-    return false;
+    log('warn', `SSAR failed for namespace ${namespace} — verdict indeterminate: ${error instanceof Error ? error.message : String(error)}`);
+    return 'indeterminate';
   }
+}
+
+/**
+ * Boolean, fail-CLOSED form for DISPLAY consumers (the fan-out, find-by-name): an SSAR we
+ * can't run means "not visible", never "visible". See the security note above.
+ */
+export async function checkNamespaceAccess(jwt: string | null, namespace: string): Promise<boolean> {
+  return (await checkNamespaceAccessVerdict(jwt, namespace)) === 'allowed';
 }
 
 /**

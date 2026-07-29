@@ -58,6 +58,13 @@ function resolveActive(pref: NamespacePreference): string {
  * only ever PATCHes a namespace GET /namespaces already validated into `visible`. Writes
  * activeNs into the signed cookie, PRESERVING `visible`/`visibleExp` (whose sole writer is
  * GET /namespaces). Returns the resolved `{ active }`.
+ *
+ * This route owns activeNs ONLY; it must not touch the visible-set freshness window. So it
+ * writes with `preserveVisibleExp`, keeping the snapshot's original `visibleExp` verbatim —
+ * a switch must neither slide the 30-min revocation window forward nor revive an expired
+ * snapshot (both would let a revoked namespace stay marked visible indefinitely by
+ * switching repeatedly, defeating the backstop). An already-expired snapshot is dropped
+ * here so it's never re-persisted as (stale-but-present) state.
  */
 export async function handlePatchMyNamespace(req: Request): Promise<Response> {
   let body: { namespace?: unknown };
@@ -72,16 +79,17 @@ export async function handlePatchMyNamespace(req: Request): Promise<Response> {
   const namespace = body.namespace;
 
   const pref = readNamespacePreference(req);
-  // Preserve the scan cache untouched (this route owns activeNs only). Note the builder
-  // re-stamps visibleExp, so a switch slightly refreshes the (still-valid) snapshot — fine.
+  // Drop an already-stale snapshot rather than carry it forward (GET /namespaces recomputes
+  // it). A fresh snapshot is preserved verbatim, expiry included.
+  const expired = isVisibleExpired(pref);
   const nextPref: NamespacePreference = {
     activeNs: namespace,
-    visible: pref.visible,
-    checkedUpTo: pref.checkedUpTo,
-    universeFp: pref.universeFp,
-    visibleExp: pref.visibleExp,
+    visible: expired ? [] : pref.visible,
+    checkedUpTo: expired ? 0 : pref.checkedUpTo,
+    universeFp: expired ? '' : pref.universeFp,
+    visibleExp: expired ? 0 : pref.visibleExp,
   };
-  return attachPreferenceCookie(jsonResponse({ active: namespace }), nextPref);
+  return attachPreferenceCookie(jsonResponse({ active: namespace }), nextPref, { preserveVisibleExp: true });
 }
 
 /**
@@ -223,8 +231,8 @@ export function orderCandidates(universe: string[]): string[] {
 }
 
 /** Attach the re-signed preference cookie, if a signing key is available. */
-function attachPreferenceCookie(response: Response, pref: NamespacePreference): Response {
-  const cookie = buildNamespacePreferenceCookie(pref);
+function attachPreferenceCookie(response: Response, pref: NamespacePreference, opts: { preserveVisibleExp?: boolean } = {}): Response {
+  const cookie = buildNamespacePreferenceCookie(pref, opts);
   if (!cookie) return response; // signing-key gap: serve correctly, just don't persist
   const withCookie = new Response(response.body, response);
   withCookie.headers.append('Set-Cookie', cookie);

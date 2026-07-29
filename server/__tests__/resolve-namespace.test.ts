@@ -14,6 +14,8 @@ import * as configModule from '../k8s/config';
 // for the whole run). Instead we mock the SSAR client it calls, and record the namespaces.
 const ssarCalls: Array<{ jwt: string; ns: string }> = [];
 let ssarVerdict = true;
+// When set, the mocked SSAR throws instead of returning a verdict (transient failure).
+let ssarThrows = false;
 
 // We DON'T module-mock ../middleware/namespace-preference: namespace-preference.test.ts
 // tests it directly, and bun's mock.module is process-global, so a mock here (even a subset)
@@ -36,6 +38,7 @@ function installMocks() {
     reuseOrCreateAuthClient: async (jwt: string | null) => ({
       createSelfSubjectAccessReview: async (body: { spec: { resourceAttributes?: { namespace?: string } } }) => {
         ssarCalls.push({ jwt: jwt ?? '', ns: body.spec.resourceAttributes?.namespace ?? '' });
+        if (ssarThrows) throw Object.assign(new Error('ssar blip'), { statusCode: 503 });
         return { body: { status: { allowed: ssarVerdict } } };
       },
     }),
@@ -88,6 +91,7 @@ beforeEach(() => {
   testKeyMap = keyMapWith();
   ssarCalls.length = 0;
   ssarVerdict = true;
+  ssarThrows = false;
 });
 
 describe('resolveNamespace exemption boundary', () => {
@@ -122,6 +126,15 @@ describe('resolveNamespace exemption boundary', () => {
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.response.status).toBe(403);
     expect(ssarCalls).toEqual([{ jwt: 'jwt', ns: 'team-c' }]);
+  });
+
+  test('non-default, SSAR errors (transient) → NOT a 403; defer to the user token downstream', async () => {
+    // A blip must not manufacture a 403 the API server wouldn't. The SSAR is a display hint;
+    // an indeterminate verdict lets the request through so the user's own token is the gate.
+    ssarThrows = true;
+    const res = await resolveNamespace(req('team-d'), 'jwt');
+    expect(res).toEqual({ ok: true, namespace: 'team-d' });
+    expect(ssarCalls).toEqual([{ jwt: 'jwt', ns: 'team-d' }]);
   });
 
   test('expired snapshot → visible membership is ignored, live SSAR runs', async () => {

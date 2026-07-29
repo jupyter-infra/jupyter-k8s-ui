@@ -301,22 +301,44 @@ describe('handleGetMyNamespace (cheap bootstrap, no SSAR, no cookie)', () => {
 });
 
 describe('handlePatchMyNamespace (dumb activeNs write, no SSAR)', () => {
-  test('writes activeNs and preserves the scan cache; no SSAR', async () => {
+  test('writes activeNs and preserves a FRESH scan cache verbatim (incl. visibleExp); no SSAR', async () => {
     prefActive = 'default-ns';
     prefVisible = ['default-ns', 'team-a'];
     prefCheckedUpTo = 2;
     prefUniverseFp = 'abc';
+    prefVisibleFresh = true;
     const res = await handlePatchMyNamespace(patchReq('team-a'));
     expect((await res.json()) as { active: string }).toEqual({ active: 'team-a' });
     expect(ssarChecked).toEqual([]); // dumb — no SSAR
     // activeNs updated to team-a; the scan-cache fields (visible/checkedUpTo/universeFp) are
-    // preserved from the request cookie. visibleExp is re-stamped fresh by the real builder.
+    // preserved from the request cookie. visibleExp is PRESERVED (not re-stamped) so a switch
+    // can't slide the 30-min revocation window forward — it stays in the future here because
+    // injectedPrefCookie stamped a fresh snapshot (now + 3600).
     const persisted = decodePersisted(res)!;
     expect(persisted.activeNs).toBe('team-a');
     expect(persisted.visible).toEqual(['default-ns', 'team-a']);
     expect(persisted.checkedUpTo).toBe(2);
     expect(persisted.universeFp).toBe('abc');
     expect(persisted.visibleExp).toBeGreaterThan(Math.floor(Date.now() / 1000));
+  });
+
+  test('an EXPIRED snapshot is dropped, not revived: a switch must not re-stamp a stale visible set', async () => {
+    // The revocation-backstop regression: buildNamespacePreferenceCookie used to re-stamp
+    // visibleExp unconditionally, so repeated switches kept a revoked ns marked fresh-visible
+    // forever. Now PATCH drops an expired snapshot and preserves the (0) expiry.
+    prefActive = 'default-ns';
+    prefVisible = ['default-ns', 'team-a'];
+    prefCheckedUpTo = 2;
+    prefUniverseFp = 'abc';
+    prefVisibleFresh = false; // expired snapshot on the request cookie
+    const res = await handlePatchMyNamespace(patchReq('team-a'));
+    const persisted = decodePersisted(res)!;
+    expect(persisted.activeNs).toBe('team-a'); // the preference still updates
+    // …but the stale scan cache is discarded together, and NOT re-stamped fresh.
+    expect(persisted.visible).toEqual([]);
+    expect(persisted.checkedUpTo).toBe(0);
+    expect(persisted.universeFp).toBe('');
+    expect(persisted.visibleExp).toBeLessThanOrEqual(Math.floor(Date.now() / 1000));
   });
 
   test('rejects a malformed namespace with 400', async () => {
