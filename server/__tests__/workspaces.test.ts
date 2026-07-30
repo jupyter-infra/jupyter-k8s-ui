@@ -347,3 +347,22 @@ describe('advanced update does a full spec replace', () => {
     expect(obj.spec.desiredStatus).toBe('Running'); // preserved from existing
   });
 });
+
+describe('accelerator keys relay verbatim', () => {
+  test('create passes extended-resource limits through untouched', async () => {
+    await handleCreateWorkspace('jwt', 'test-ns', jsonRequest({ name: 'gpu-ws', resources: { limits: { cpu: '1', memory: '2Gi', 'nvidia.com/gpu': '2' } } }));
+    const spec = lastCreated().spec as { resources?: { limits?: Record<string, string> } };
+    expect(spec.resources?.limits?.['nvidia.com/gpu']).toBe('2');
+  });
+
+  test('update passes extended-resource limits through untouched', async () => {
+    await handleUpdateWorkspace(
+      'jwt',
+      'test-ns',
+      'ws-1',
+      jsonRequest({ resources: { limits: { cpu: '1', memory: '2Gi', 'nvidia.com/mig-1g.5gb': '1' } } }, 'PATCH'),
+    );
+    const spec = lastReplaced().spec as { resources?: { limits?: Record<string, string> } };
+    expect(spec.resources?.limits?.['nvidia.com/mig-1g.5gb']).toBe('1');
+  });
+});

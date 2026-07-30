@@ -335,3 +335,81 @@ describe('template-aware simple create', () => {
     expect(lastSimplePayload().templateRef).toEqual({ name: 'default-tmpl', namespace: 'shared-ns' });
   });
 });
+
+describe('accelerator axes in simple create', () => {
+  beforeEach(() => {
+    createSimpleSpy.mockClear();
+    templatesResponse = { items: [], access: { user: 'ok', shared: 'ok' }, namespaces: { own: 'user-ns', shared: 'shared-ns' } };
+    globalThis.fetch = mock(async () => new Response(JSON.stringify({ authenticated: true, username: 'alice' }), { status: 200 })) as typeof fetch;
+  });
+  afterEach(async () => {
+    await flush();
+    cleanup();
+    globalThis.fetch = realFetch;
+  });
+
+  const gpuTemplate = () =>
+    tmplFixture(
+      {
+        defaultImage: 'nginx:1',
+        resourceBounds: { resources: { 'nvidia.com/gpu': { min: '0', max: '2' } } },
+        defaultResources: { limits: { 'nvidia.com/gpu': '1' } },
+      },
+      'gpu-tmpl',
+    );
+
+  const submit = () => fireEvent.click(screen.getByRole('button', { name: /create workspace/i }));
+  const lastSimplePayload = () => createSimpleSpy.mock.calls.at(-1)![0] as unknown as CreateWorkspaceRequest;
+
+  test('gpu template renders the axis and submit emits the default as a limit only', async () => {
+    templatesResponse = { items: [gpuTemplate()], access: { user: 'ok', shared: 'ok' }, namespaces: { own: 'user-ns', shared: 'shared-ns' } };
+    await renderCreate();
+    fireEvent.click(await screen.findByRole('button', { name: /select gpu-tmpl template/i }));
+
+    const slider = screen.getByRole('slider', { name: 'GPU' });
+    expect((slider as HTMLInputElement).value).toBe('1'); // template default
+    submit();
+
+    await waitFor(() => expect(createSimpleSpy).toHaveBeenCalledTimes(1));
+    const p = lastSimplePayload();
+    expect(p.resources?.limits?.['nvidia.com/gpu']).toBe('1');
+    expect(p.resources?.requests && 'nvidia.com/gpu' in p.resources.requests).toBe(false);
+  });
+
+  test('sliding to 0 omits the key from the payload', async () => {
+    templatesResponse = { items: [gpuTemplate()], access: { user: 'ok', shared: 'ok' }, namespaces: { own: 'user-ns', shared: 'shared-ns' } };
+    await renderCreate();
+    fireEvent.click(await screen.findByRole('button', { name: /select gpu-tmpl template/i }));
+    fireEvent.change(screen.getByRole('slider', { name: 'GPU' }), { target: { value: '0' } });
+    submit();
+
+    await waitFor(() => expect(createSimpleSpy).toHaveBeenCalledTimes(1));
+    const p = lastSimplePayload();
+    expect(p.resources?.limits && 'nvidia.com/gpu' in p.resources.limits).toBe(false);
+  });
+
+  test('switching to a template without gpu bounds unmounts the axis and cleans the payload', async () => {
+    templatesResponse = {
+      items: [gpuTemplate(), tmplFixture({ defaultImage: 'nginx:1' }, 'plain-tmpl')],
+      access: { user: 'ok', shared: 'ok' },
+      namespaces: { own: 'user-ns', shared: 'shared-ns' },
+    };
+    await renderCreate();
+    fireEvent.click(await screen.findByRole('button', { name: /select gpu-tmpl template/i }));
+    // Touch the axis so the stale-touch pruning path is what's under test.
+    fireEvent.change(screen.getByRole('slider', { name: 'GPU' }), { target: { value: '2' } });
+    fireEvent.click(screen.getByRole('button', { name: /select plain-tmpl template/i }));
+
+    expect(screen.queryByRole('slider', { name: 'GPU' })).toBeNull();
+    submit();
+    await waitFor(() => expect(createSimpleSpy).toHaveBeenCalledTimes(1));
+    const p = lastSimplePayload();
+    expect(p.resources?.limits && 'nvidia.com/gpu' in p.resources.limits).toBe(false);
+  });
+
+  test('no template renders no accelerator axes', async () => {
+    await renderCreate();
+    await screen.findByText(/^resources$/i);
+    expect(screen.queryByRole('slider', { name: 'GPU' })).toBeNull();
+  });
+});

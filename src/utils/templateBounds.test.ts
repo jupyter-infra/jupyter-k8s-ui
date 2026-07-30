@@ -1,5 +1,13 @@
 import { describe, test, expect } from 'bun:test';
-import { resolveTemplateControls, resolveDefaultTemplate, computeCpuRequest, computeMemoryRequest, conformAxis, conformImage } from './templateBounds';
+import {
+  resolveTemplateControls,
+  resolveDefaultTemplate,
+  computeCpuRequest,
+  computeMemoryRequest,
+  conformAxis,
+  conformImage,
+  buildResourcesBlock,
+} from './templateBounds';
 import type { WorkspaceTemplate, WorkspaceTemplateSpec, DiscoveredTemplate } from '../types';
 import { STATIC_DEFAULTS, resourceBounds, RESOURCE_DEFAULTS, IDLE_SHUTDOWN_DEFAULTS, DEFAULT_TEMPLATE_LABEL } from '../constants';
 
@@ -287,5 +295,83 @@ describe('computeCpuRequest / computeMemoryRequest', () => {
     // tiny limit floored by MIN_CPU_REQUEST
     expect(computeCpuRequest({ source: 'ratio' }, 0.1)).toBe(`${RESOURCE_DEFAULTS.MIN_CPU_REQUEST}`);
     expect(computeMemoryRequest({ source: 'ratio' }, 8)).toBe(`${8 * RESOURCE_DEFAULTS.MEMORY_REQUEST_RATIO}Gi`);
+  });
+});
+
+describe('resolveTemplateControls — accelerator axes', () => {
+  test('no template and no extra keys both yield zero accelerator axes', () => {
+    expect(resolveTemplateControls(null).accelerators).toEqual([]);
+    const r = resolveTemplateControls(tmpl({ resourceBounds: { resources: { cpu: { min: '1', max: '4' }, memory: { min: '1Gi', max: '8Gi' } } } }));
+    expect(r.accelerators).toEqual([]);
+  });
+
+  test('a declared gpu bound becomes an integer axis with the template limit as default', () => {
+    const r = resolveTemplateControls(
+      tmpl({
+        resourceBounds: { resources: { 'nvidia.com/gpu': { min: '0', max: '2' } } },
+        defaultResources: { limits: { 'nvidia.com/gpu': '1' } },
+      }),
+    );
+    expect(r.accelerators).toEqual([{ key: 'nvidia.com/gpu', label: 'GPU', sublabel: 'nvidia.com/gpu', axis: { min: 0, max: 2, default: 1, step: 1 } }]);
+  });
+
+  test('unknown keys keep the raw label with no sublabel; entries sort by key', () => {
+    const r = resolveTemplateControls(
+      tmpl({ resourceBounds: { resources: { 'nvidia.com/mig-1g.5gb': { min: '0', max: '4' }, 'nvidia.com/gpu': { min: '0', max: '2' } } } }),
+    );
+    expect(r.accelerators.map((a) => a.key)).toEqual(['nvidia.com/gpu', 'nvidia.com/mig-1g.5gb']);
+    const mig = r.accelerators[1];
+    expect(mig.label).toBe('nvidia.com/mig-1g.5gb');
+    expect(mig.sublabel).toBeUndefined();
+  });
+
+  test('hugepages-* bounds are excluded (byte quantities, not counts)', () => {
+    const r = resolveTemplateControls(tmpl({ resourceBounds: { resources: { 'hugepages-2Mi': { min: '0', max: '2Gi' } } } }));
+    expect(r.accelerators).toEqual([]);
+  });
+
+  test('min > 0 with no template default pins the default to min', () => {
+    const r = resolveTemplateControls(tmpl({ resourceBounds: { resources: { 'nvidia.com/gpu': { min: '1', max: '4' } } } }));
+    expect(r.accelerators[0].axis).toEqual({ min: 1, max: 4, default: 1, step: 1 });
+  });
+
+  test('fractional template quantities round to integers', () => {
+    const r = resolveTemplateControls(
+      tmpl({
+        resourceBounds: { resources: { 'nvidia.com/gpu': { min: '500m', max: '3' } } },
+        defaultResources: { limits: { 'nvidia.com/gpu': '1500m' } },
+      }),
+    );
+    expect(r.accelerators[0].axis).toEqual({ min: 1, max: 3, default: 2, step: 1 });
+  });
+
+  test('a template default outside its own bounds clamps into them', () => {
+    const r = resolveTemplateControls(
+      tmpl({
+        resourceBounds: { resources: { 'nvidia.com/gpu': { min: '0', max: '2' } } },
+        defaultResources: { limits: { 'nvidia.com/gpu': '8' } },
+      }),
+    );
+    expect(r.accelerators[0].axis.default).toBe(2);
+  });
+});
+
+describe('buildResourcesBlock — accelerator emission', () => {
+  const controls = resolveTemplateControls(tmpl({ resourceBounds: { resources: { cpu: { min: '1', max: '4' }, 'nvidia.com/gpu': { min: '0', max: '2' } } } }));
+
+  test('a positive count emits the limit key as an integer string; requests never gain it', () => {
+    const block = buildResourcesBlock(controls, 2, 4, { 'nvidia.com/gpu': 2 });
+    expect(block.limits['nvidia.com/gpu']).toBe('2');
+    expect(Object.keys(block.requests)).toEqual(['cpu', 'memory']);
+  });
+
+  test('a zero count omits the key entirely', () => {
+    const block = buildResourcesBlock(controls, 2, 4, { 'nvidia.com/gpu': 0 });
+    expect('nvidia.com/gpu' in block.limits).toBe(false);
+  });
+
+  test('a count for a key the template does not declare is ignored', () => {
+    const block = buildResourcesBlock(controls, 2, 4, { 'amd.com/gpu': 3 });
+    expect('amd.com/gpu' in block.limits).toBe(false);
   });
 });

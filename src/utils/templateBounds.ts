@@ -92,7 +92,8 @@ export interface ResolvedTemplateControls {
 // (The operator still receives the exact submitted value; this only shapes slider stops.)
 function ceilToStep(value: number, step: number): number {
   if (step <= 0) return value;
-  return Math.ceil(value / step - 1e-9) * step;
+  const ceiled = Math.ceil(value / step - 1e-9) * step;
+  return ceiled === 0 ? 0 : ceiled; // the epsilon makes ceil(0) land on -0; normalize
 }
 
 // Build one axis (cpu/memory/storage) from a template min/max/default, falling back to the

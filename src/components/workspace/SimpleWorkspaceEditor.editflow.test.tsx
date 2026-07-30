@@ -341,3 +341,76 @@ describe('SimpleWorkspaceEditor', () => {
     expect(lastPayload().image).toBe('nginx:1.27');
   });
 });
+
+describe('SimpleWorkspaceEditor accelerator axes', () => {
+  beforeEach(() => {
+    updateSpy.mockClear();
+    templatesResponse = {
+      items: [
+        tmpl({
+          displayName: 'GPU',
+          resourceBounds: { resources: { 'nvidia.com/gpu': { min: '0', max: '2' } } },
+        }),
+      ],
+      access: { user: 'ok', shared: 'ok' },
+      namespaces: { own: 'user-ns', shared: 'shared-ns' },
+    };
+    globalThis.fetch = mock(async () => new Response(JSON.stringify({ authenticated: true, username: 'alice' }), { status: 200 })) as typeof fetch;
+  });
+  afterEach(async () => {
+    await flush();
+    cleanup();
+    globalThis.fetch = realFetch;
+  });
+
+  const gpuWorkspace = (gpuLimit: string, extra: Partial<Workspace['spec']> = {}) =>
+    baseWorkspace({
+      templateRef: { name: 'eks-oidc', namespace: 'shared-ns' },
+      resources: {
+        limits: { cpu: '2', memory: '4Gi', 'nvidia.com/gpu': gpuLimit },
+        requests: { cpu: '500m', memory: '1Gi', 'nvidia.com/gpu': gpuLimit },
+      },
+      ...extra,
+    });
+
+  test('modeled accelerator: the limit follows the slider and the stored request is dropped', async () => {
+    await renderEditor(gpuWorkspace('2'));
+    await screen.findByText(/^resources$/i);
+    fireEvent.change(screen.getByRole('slider', { name: 'GPU' }), { target: { value: '1' } });
+    save();
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    const p = lastPayload();
+    expect(p.resources?.limits?.['nvidia.com/gpu']).toBe('1');
+    expect(p.resources?.requests && 'nvidia.com/gpu' in p.resources.requests).toBe(false);
+  });
+
+  test('a drifted stored value clamps with a banner and forces a resend untouched', async () => {
+    await renderEditor(gpuWorkspace('8'));
+    expect(await screen.findByText('GPU adjusted from 8 to 2 (template bounds).')).toBeDefined();
+    save();
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    expect(lastPayload().resources?.limits?.['nvidia.com/gpu']).toBe('2');
+  });
+
+  test('sliding to 0 removes the key on save', async () => {
+    await renderEditor(gpuWorkspace('1'));
+    await screen.findByText(/^resources$/i);
+    fireEvent.change(screen.getByRole('slider', { name: 'GPU' }), { target: { value: '0' } });
+    save();
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    const p = lastPayload();
+    expect(p.resources?.limits && 'nvidia.com/gpu' in p.resources.limits).toBe(false);
+    expect(p.resources?.limits?.cpu).toBe('2');
+  });
+
+  test('an in-bounds stored value untouched keeps the untouched-save-omits invariant', async () => {
+    await renderEditor(gpuWorkspace('1'));
+    await screen.findByText(/^resources$/i);
+    save();
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    expect(lastPayload().resources).toBeUndefined();
+  });
+});

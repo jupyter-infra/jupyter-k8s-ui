@@ -114,3 +114,21 @@ describe('WorkspaceCard', () => {
     expect(screen.getByText('My Display')).toBeDefined();
   });
 });
+
+describe('WorkspaceCard accelerator chip', () => {
+  beforeEach(() => cleanup());
+
+  test('renders a count + friendly label chip when an accelerator limit is present', () => {
+    const ws = makeWorkspace({ owner: 'alice' });
+    ws.spec.resources = { limits: { cpu: '2', memory: '4Gi', 'nvidia.com/gpu': '1' } };
+    renderCard(ws);
+    expect(screen.getByText('1 GPU')).toBeDefined();
+  });
+
+  test('renders nothing accelerator-related without such a limit', () => {
+    const ws = makeWorkspace({ owner: 'alice' });
+    ws.spec.resources = { limits: { cpu: '2', memory: '4Gi' } };
+    renderCard(ws);
+    expect(screen.queryByText(/GPU/)).toBeNull();
+  });
+});
