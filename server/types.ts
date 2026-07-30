@@ -31,9 +31,11 @@ export interface K8sMetadata {
 // on edit). So we treat it as an opaque passthrough object.
 export type IdleDetection = Record<string, unknown>;
 
+// Open records: templates may bound and workspaces may carry arbitrary extended-resource
+// keys (nvidia.com/gpu, MIG profiles, hugepages-*); the server relays them verbatim.
 export interface K8sResourceRequirements {
-  limits?: { cpu?: string; memory?: string; 'nvidia.com/gpu'?: string };
-  requests?: { cpu?: string; memory?: string; 'nvidia.com/gpu'?: string };
+  limits?: Record<string, string>;
+  requests?: Record<string, string>;
 }
 
 export interface K8sCondition {
