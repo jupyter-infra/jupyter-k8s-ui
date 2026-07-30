@@ -91,8 +91,8 @@ export function TemplateGuidancePanel({ template }: TemplateGuidancePanelProps) 
       : [spec.defaultImage ?? ws.guidanceDefaultImageOnly];
 
   // Resources: one `label: range` pair per constrained resource — cpu, memory, then every
-  // other declared key (accelerators, MIG profiles, vendor keys) with its friendly label
-  // or the raw key, mirroring the simple form's axes.
+  // other declared key (accelerators, MIG profiles, vendor keys, hugepages) with its
+  // friendly label or the raw key.
   const resourcePairs: Array<{ label: string; value: string }> = [];
   if (cpu) resourcePairs.push({ label: ws.guidanceCpu, value: cpu });
   if (memory) resourcePairs.push({ label: ws.guidanceMemory, value: memory });
