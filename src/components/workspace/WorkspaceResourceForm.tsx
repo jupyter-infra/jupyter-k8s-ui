@@ -28,7 +28,7 @@ import {
   Tooltip,
   Autocomplete,
 } from '@mui/material';
-import { Memory, Storage, LockOutlined } from '@mui/icons-material';
+import { Memory, Storage, DeveloperBoard, LockOutlined } from '@mui/icons-material';
 import { ResourceSlider } from '../ui/ResourceSlider';
 import { strings } from '../../constants';
 import type { ResolvedTemplateControls } from '../../utils';
@@ -37,6 +37,9 @@ export interface WorkspaceFormValues {
   cpu: number;
   memory: number;
   storage: number;
+  // Count per accelerator key the template declares ({} when none). Keys mirror
+  // ResolvedTemplateControls.accelerators; a key's absence and a 0 both mean "not requested".
+  accelerators: Record<string, number>;
   image: string;
   accessType: 'Public' | 'OwnerOnly';
   idleEnabled: boolean;
@@ -145,6 +148,7 @@ export function WorkspaceResourceForm({ controls, values, onChange, storageReadO
             min={controls.cpu.min}
             max={controls.cpu.max}
             step={controls.cpu.step}
+            disabled={controls.cpu.min === controls.cpu.max}
             onChange={(v) => onChange('cpu', v)}
           />
           <ResourceSlider
@@ -155,8 +159,24 @@ export function WorkspaceResourceForm({ controls, values, onChange, storageReadO
             min={controls.memory.min}
             max={controls.memory.max}
             step={controls.memory.step}
+            disabled={controls.memory.min === controls.memory.max}
             onChange={(v) => onChange('memory', v)}
           />
+          {controls.accelerators.map((acc) => (
+            <ResourceSlider
+              key={acc.key}
+              icon={<DeveloperBoard color="action" fontSize="small" />}
+              label={acc.label}
+              sublabel={acc.sublabel}
+              value={values.accelerators[acc.key] ?? 0}
+              unit=""
+              min={acc.axis.min}
+              max={acc.axis.max}
+              step={acc.axis.step}
+              disabled={acc.axis.min === acc.axis.max}
+              onChange={(v) => onChange('accelerators', { ...values.accelerators, [acc.key]: v })}
+            />
+          ))}
           {storageReadOnly ? (
             <Stack direction="row" alignItems="center" justifyContent="space-between">
               <Stack direction="row" alignItems="center" spacing={1}>
@@ -179,6 +199,7 @@ export function WorkspaceResourceForm({ controls, values, onChange, storageReadO
               min={controls.storage.min}
               max={controls.storage.max}
               step={controls.storage.step}
+              disabled={controls.storage.min === controls.storage.max}
               onChange={(v) => onChange('storage', v)}
             />
           )}

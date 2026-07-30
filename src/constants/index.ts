@@ -28,3 +28,15 @@ export const STATIC_DEFAULTS = {
 // ref-less workspace (own namespace first, then shared). The picker's preselection
 // mirrors that precedence.
 export const DEFAULT_TEMPLATE_LABEL = 'workspace.jupyter.org/default-template';
+
+// Accelerator axes: every extended-resource key a template declares in
+// resourceBounds.resources becomes an integer form control, except cpu/memory (their own
+// axes) and hugepages-* (byte quantities, not device counts — left unmodeled and preserved
+// verbatim by the edit carry-over). Friendly display labels for well-known keys; any other
+// key is shown raw.
+export const ACCELERATOR_EXCLUDED_PREFIX = 'hugepages-';
+export const ACCELERATOR_LABELS: Record<string, string> = {
+  'nvidia.com/gpu': 'GPU',
+  'amd.com/gpu': 'GPU (AMD)',
+  'intel.com/gpu': 'GPU (Intel)',
+};

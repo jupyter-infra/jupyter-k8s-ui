@@ -78,16 +78,14 @@ export interface K8sWorkspaceTemplate {
     allowCustomImages?: boolean;
     defaultAccessType?: string;
     defaultOwnershipType?: string;
+    // Keyed by Kubernetes resource name; extended-resource keys (nvidia.com/gpu, MIG
+    // profiles, any vendor.domain/resource) are first-class alongside cpu/memory.
     resourceBounds?: {
-      resources?: {
-        cpu?: { min?: string; max?: string };
-        memory?: { min?: string; max?: string };
-        'nvidia.com/gpu'?: { min?: string; max?: string };
-      };
+      resources?: Record<string, { min?: string; max?: string } | undefined>;
     };
     defaultResources?: {
-      requests?: { cpu?: string; memory?: string };
-      limits?: { cpu?: string; memory?: string };
+      requests?: Record<string, string | undefined>;
+      limits?: Record<string, string | undefined>;
     };
     primaryStorage?: {
       defaultSize?: string;

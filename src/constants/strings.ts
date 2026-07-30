@@ -153,6 +153,7 @@ export const strings = {
     editConformImage: (from: string, to: string) => `Image changed from "${from}" to "${to}" (not allowed by template).`,
     editConformIdleTimeout: (from: string, to: string) => `Idle timeout adjusted from ${from} to ${to} (template bounds).`,
     editConformIdleEnabled: 'Idle shutdown was enabled as required by the template.',
+    editConformAccelerator: (label: string, from: string, to: string) => `${label} adjusted from ${from} to ${to} (template bounds).`,
 
     // Advanced YAML editor
     advancedCreateTitle: 'Create Workspace (Advanced)',

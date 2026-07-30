@@ -27,6 +27,9 @@ interface Touched {
   memory: boolean;
   storage: boolean;
   image: boolean;
+  // Per accelerator key. Entries for keys the current template doesn't declare are pruned
+  // on template switch: the switch force-reset those values, which invalidates the touch.
+  accelerators: Record<string, boolean>;
 }
 
 export function WorkspaceCreate() {
@@ -54,7 +57,7 @@ export function WorkspaceCreate() {
   // Resolver-driven form values + touched tracking.
   const controls = useMemo(() => resolveTemplateControls(selectedTemplate), [selectedTemplate]);
   const [values, setValues] = useState<WorkspaceFormValues>(() => initialValues(resolveTemplateControls(null)));
-  const touched = useRef<Touched>({ cpu: false, memory: false, storage: false, image: false });
+  const touched = useRef<Touched>({ cpu: false, memory: false, storage: false, image: false, accelerators: {} });
 
   const [advanced, setAdvanced] = useState(false);
 
@@ -69,10 +72,22 @@ export function WorkspaceCreate() {
     const key = selectedTemplate ? `${selectedTemplate.metadata.namespace}/${selectedTemplate.metadata.name}` : '<none>';
     if (key === prevControlsKey.current) return;
     prevControlsKey.current = key;
+    // Prune touched entries for accelerator keys the new template doesn't declare — their
+    // values get force-reset below, so a stale touch would wrongly clamp instead of
+    // adopting a later template's default.
+    touched.current.accelerators = Object.fromEntries(
+      Object.entries(touched.current.accelerators).filter(([k]) => controls.accelerators.some((a) => a.key === k)),
+    );
     setValues((prev) => ({
       cpu: touched.current.cpu ? clamp(prev.cpu, controls.cpu.min, controls.cpu.max) : controls.cpu.default,
       memory: touched.current.memory ? clamp(prev.memory, controls.memory.min, controls.memory.max) : controls.memory.default,
       storage: touched.current.storage ? clamp(prev.storage, controls.storage.min, controls.storage.max) : controls.storage.default,
+      accelerators: Object.fromEntries(
+        controls.accelerators.map((acc) => [
+          acc.key,
+          touched.current.accelerators[acc.key] ? clamp(prev.accelerators[acc.key] ?? 0, acc.axis.min, acc.axis.max) : acc.axis.default,
+        ]),
+      ),
       image: controls.image.value,
       accessType: controls.accessType,
       idleEnabled: controls.idle.available ? controls.idle.enabledDefault : false,
@@ -81,8 +96,19 @@ export function WorkspaceCreate() {
   }, [selectedTemplate, controls]);
 
   const handleFieldChange = useCallback(<K extends keyof WorkspaceFormValues>(key: K, value: WorkspaceFormValues[K]) => {
+    if (key === 'accelerators') {
+      // The form hands back the whole record; mark only the keys whose value moved.
+      setValues((prev) => {
+        const next = value as Record<string, number>;
+        for (const k of Object.keys(next)) {
+          if (next[k] !== prev.accelerators[k]) touched.current.accelerators[k] = true;
+        }
+        return { ...prev, accelerators: next };
+      });
+      return;
+    }
     if (key === 'cpu' || key === 'memory' || key === 'storage' || key === 'image') {
-      const touchedKey: keyof Touched = key;
+      const touchedKey: 'cpu' | 'memory' | 'storage' | 'image' = key;
       touched.current[touchedKey] = true;
     }
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -132,7 +158,7 @@ export function WorkspaceCreate() {
     const request: CreateWorkspaceRequest = {
       name,
       displayName: displayName || name,
-      resources: buildResourcesBlock(controls, values.cpu, values.memory),
+      resources: buildResourcesBlock(controls, values.cpu, values.memory, values.accelerators),
       storage: { size: `${values.storage}Gi` },
       accessType: values.accessType,
       ownershipType: controls.ownershipType, // not derived from accessType
@@ -276,6 +302,7 @@ function initialValues(controls: ReturnType<typeof resolveTemplateControls>): Wo
     cpu: controls.cpu.default,
     memory: controls.memory.default,
     storage: controls.storage.default,
+    accelerators: Object.fromEntries(controls.accelerators.map((acc) => [acc.key, acc.axis.default])),
     image: controls.image.value,
     accessType: controls.accessType,
     idleEnabled: controls.idle.available ? controls.idle.enabledDefault : false,
