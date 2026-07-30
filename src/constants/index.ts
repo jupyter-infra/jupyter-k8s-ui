@@ -1,4 +1,4 @@
-export { strings, imageOptions, resourceBounds } from './strings';
+export { strings, imageOptions, resourceBounds, ACCELERATOR_LABELS } from './strings';
 
 // Resource calculation constants
 export const RESOURCE_DEFAULTS = {
@@ -32,11 +32,5 @@ export const DEFAULT_TEMPLATE_LABEL = 'workspace.jupyter.org/default-template';
 // Accelerator axes: every extended-resource key a template declares in
 // resourceBounds.resources becomes an integer form control, except cpu/memory (their own
 // axes) and hugepages-* (byte quantities, not device counts — left unmodeled and preserved
-// verbatim by the edit carry-over). Friendly display labels for well-known keys; any other
-// key is shown raw.
+// verbatim by the edit carry-over). Display labels live in strings.ts (ACCELERATOR_LABELS).
 export const ACCELERATOR_EXCLUDED_PREFIX = 'hugepages-';
-export const ACCELERATOR_LABELS: Record<string, string> = {
-  'nvidia.com/gpu': 'GPU',
-  'amd.com/gpu': 'GPU (AMD)',
-  'intel.com/gpu': 'GPU (Intel)',
-};

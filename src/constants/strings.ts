@@ -302,3 +302,11 @@ export const resourceBounds = {
   memory: { min: 1, max: 16, step: 1, unit: 'GB' },
   storage: { min: 5, max: 100, step: 5, unit: 'GB' },
 } as const;
+
+// Friendly display labels for well-known extended-resource keys; any key not listed
+// here renders raw (the raw key stays visible either way, as slider sublabel or tooltip).
+export const ACCELERATOR_LABELS: Record<string, string> = {
+  'nvidia.com/gpu': 'GPU',
+  'amd.com/gpu': 'GPU (AMD)',
+  'intel.com/gpu': 'GPU (Intel)',
+};
