@@ -20,7 +20,7 @@
 //   Identity: name read-only (immutable); displayName editable.
 //   Save: selective PATCH, no desiredStatus (stay Stopped), navigate to '/'.
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Alert, Box, Button, CircularProgress, Paper, Stack, TextField, Tooltip, Typography } from '@mui/material';
 import { LockOutlined } from '@mui/icons-material';
@@ -75,7 +75,8 @@ function seedFromSpec(
   // template bounds (banner on a real clamp). An ABSENT stored key seeds at
   // clamp(0, min, max) with NO adjustment — absence is not drift, and template defaults
   // are a create-time concept; adopting one here would silently add a device the user
-  // never chose.
+  // never chose. The seeded floor is display-only: save emits an absent key only once
+  // the user touches that slider (see handleSave).
   const accelerators: Record<string, number> = {};
   for (const acc of controls.accelerators) {
     const stored = spec.resources?.limits?.[acc.key];
@@ -179,8 +180,22 @@ export function SimpleWorkspaceEditor({ workspace, displayName, onDisplayNameCha
     setValues(seed.values);
   }
 
+  // Per-key accelerator touches: emission of a key ABSENT from the stored spec is gated on
+  // the user moving that key's own slider (see handleSave).
+  const touchedAccelerators = useRef<Record<string, boolean>>({});
   const handleFieldChange = useCallback(<K extends keyof WorkspaceFormValues>(key: K, value: WorkspaceFormValues[K]) => {
     if (key === 'cpu' || key === 'memory' || key === 'accelerators') setResourcesTouched(true);
+    if (key === 'accelerators') {
+      // The form hands back the whole record; mark only the keys whose value moved.
+      setValues((prev) => {
+        const next = value as Record<string, number>;
+        for (const k of Object.keys(next)) {
+          if (next[k] !== prev.accelerators[k]) touchedAccelerators.current[k] = true;
+        }
+        return { ...prev, accelerators: next };
+      });
+      return;
+    }
     setValues((prev) => ({ ...prev, [key]: value }));
   }, []);
 
@@ -228,8 +243,15 @@ export function SimpleWorkspaceEditor({ workspace, displayName, onDisplayNameCha
       const modeled = ['cpu', 'memory', ...controls.accelerators.map((a) => a.key)];
       const carryUnmodeled = (stored: Record<string, string> | undefined) =>
         Object.fromEntries(Object.entries(stored ?? {}).filter(([key]) => !modeled.includes(key)));
+      // A key absent from the stored spec is emitted only after the user touches its own
+      // slider: under a min>0 template the absent-key seed is a nonzero floor, and an
+      // unrelated slider touch (cpu/memory) must not inject a device the user never chose.
       const acceleratorLimits = Object.fromEntries(
-        controls.accelerators.filter((a) => (values.accelerators[a.key] ?? 0) > 0).map((a) => [a.key, `${Math.round(values.accelerators[a.key])}`]),
+        controls.accelerators
+          .filter(
+            (a) => (values.accelerators[a.key] ?? 0) > 0 && (workspace.spec.resources?.limits?.[a.key] !== undefined || touchedAccelerators.current[a.key]),
+          )
+          .map((a) => [a.key, `${Math.round(values.accelerators[a.key])}`]),
       );
       request.resources = {
         requests: { ...carryUnmodeled(workspace.spec.resources?.requests), cpu: cpuReq, memory: memReq },

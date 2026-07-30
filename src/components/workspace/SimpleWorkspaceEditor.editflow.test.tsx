@@ -413,4 +413,66 @@ describe('SimpleWorkspaceEditor accelerator axes', () => {
     await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
     expect(lastPayload().resources).toBeUndefined();
   });
+
+  test('absent stored accelerator key seeds 0 (not the template default), no banner, untouched save omits', async () => {
+    // Template default is 1 so this fails if absence wrongly adopts the default.
+    templatesResponse = {
+      items: [
+        tmpl({
+          displayName: 'GPU',
+          resourceBounds: { resources: { 'nvidia.com/gpu': { min: '0', max: '2' } } },
+          defaultResources: { limits: { 'nvidia.com/gpu': '1' } },
+        }),
+      ],
+      access: { user: 'ok', shared: 'ok' },
+      namespaces: { own: 'user-ns', shared: 'shared-ns' },
+    };
+    await renderEditor(
+      baseWorkspace({
+        templateRef: { name: 'eks-oidc', namespace: 'shared-ns' },
+        resources: { limits: { cpu: '2', memory: '4Gi' }, requests: { cpu: '500m', memory: '1Gi' } },
+      }),
+    );
+    await screen.findByText(/^resources$/i);
+    expect((screen.getByRole('slider', { name: 'GPU' }) as HTMLInputElement).value).toBe('0');
+    expect(screen.queryByText(/adjusted from/)).toBeNull();
+    save();
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    expect(lastPayload().resources).toBeUndefined();
+  });
+
+  test('min>0 template: touching CPU does not inject an absent accelerator; touching its slider does', async () => {
+    // Absent key seeds to the floor (min 1). That floor is display-only: only the key's
+    // own slider marks it for emission.
+    templatesResponse = {
+      items: [
+        tmpl({
+          displayName: 'GPU',
+          resourceBounds: { resources: { 'nvidia.com/gpu': { min: '1', max: '2' } } },
+        }),
+      ],
+      access: { user: 'ok', shared: 'ok' },
+      namespaces: { own: 'user-ns', shared: 'shared-ns' },
+    };
+    await renderEditor(
+      baseWorkspace({
+        templateRef: { name: 'eks-oidc', namespace: 'shared-ns' },
+        resources: { limits: { cpu: '2', memory: '4Gi' }, requests: { cpu: '500m', memory: '1Gi' } },
+      }),
+    );
+    await screen.findByText(/^resources$/i);
+    expect((screen.getByRole('slider', { name: 'GPU' }) as HTMLInputElement).value).toBe('1');
+
+    fireEvent.change(screen.getByRole('slider', { name: /cpu/i }), { target: { value: '1' } });
+    save();
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    const first = lastPayload();
+    expect(first.resources?.limits?.cpu).toBe('1');
+    expect(first.resources?.limits && 'nvidia.com/gpu' in first.resources.limits).toBe(false);
+
+    fireEvent.change(screen.getByRole('slider', { name: 'GPU' }), { target: { value: '2' } });
+    save();
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(2));
+    expect(lastPayload().resources?.limits?.['nvidia.com/gpu']).toBe('2');
+  });
 });
