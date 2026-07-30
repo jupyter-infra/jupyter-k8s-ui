@@ -56,6 +56,20 @@ async function waitForCardStatus(page: Page, card: Locator, text: string) {
     .toBeTruthy();
 }
 
+// Deletion is finalized asynchronously (the CR lists with a deletionTimestamp until the
+// operator's finalizer runs), so poll with explicit refreshes like workspace-crud does.
+async function waitForCardGone(page: Page, card: Locator) {
+  await expect
+    .poll(
+      async () => {
+        await page.getByRole('button', { name: /refresh/i }).click();
+        return card.isVisible().catch(() => false);
+      },
+      { timeout: 30_000, intervals: [2_000] },
+    )
+    .toBeFalsy();
+}
+
 test.describe('Accelerator axes (gpu-template)', () => {
   test.describe.configure({ mode: 'serial' });
 
@@ -129,7 +143,10 @@ test.describe('Accelerator axes (gpu-template)', () => {
     const card = page.getByLabel(new RegExp(`${WS_NAME}.*workspace`, 'i'));
     await card.getByRole('button', { name: /more options/i }).click();
     await page.getByRole('menuitem', { name: /delete/i }).click();
-    await page.getByRole('dialog').getByRole('button', { name: /^delete$/i }).click();
-    await expect(card).toHaveCount(0, { timeout: 15_000 });
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: /^delete$/i })
+      .click();
+    await waitForCardGone(page, card);
   });
 });
