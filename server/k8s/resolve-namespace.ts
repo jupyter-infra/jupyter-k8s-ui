@@ -51,7 +51,7 @@ export async function resolveNamespace(req: Request, jwt: string): Promise<Names
 
   // Non-default: trust the fresh visible snapshot, else one live SSAR. An expired snapshot
   // returns [] (revocation backstop) — forcing a live re-check.
-  const pref = readNamespacePreference(req);
+  const pref = readNamespacePreference(req, jwt);
   if (freshVisible(pref).includes(requested)) {
     return { ok: true, namespace: requested };
   }

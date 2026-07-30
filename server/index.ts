@@ -22,8 +22,12 @@ console.log(`   STATIC:    ${serverConfig.staticDir}`);
 console.log(`   DEV_TOKEN: ${serverConfig.devAccessToken ? '***set***' : 'not set'}`);
 console.log(`   SESSION:   ${serverConfig.session.enabled ? 'enabled' : 'disabled'}`);
 
-// Initialize session secret watcher
-if (serverConfig.session.enabled) {
+// Initialize the signing keymap. In dev mode we always mint ephemeral keys (independent of
+// session.enabled) so the namespace preference cookie signs/verifies even in sessions-off
+// modes — that's how E2E and `serve-host` run. In prod the keymap is populated only when
+// sessions are enabled; a prod sessions-off install therefore has no signing key and runs
+// the namespace cookie cookieless (bounded, documented — see namespace-preference.ts).
+if (process.env.NODE_ENV === 'development' || serverConfig.session.enabled) {
   initSecretWatcher(serverConfig.session).catch((err) => {
     log('error', `Failed to initialize secret watcher: ${err instanceof Error ? err.message : String(err)}`);
   });

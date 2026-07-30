@@ -12,7 +12,10 @@ const builtWithJwts: Array<string | null> = [];
 // beforeEach so it's active during THIS file's tests.
 function installClientMock() {
   mock.module('../k8s/client', () => ({
-    // Superset (see resolve-namespace.test.ts): satisfy all sibling static imports.
+    // Superset (see resolve-namespace.test.ts): satisfy all sibling static imports — incl.
+    // reuseOrCreateUserK8sClient (handlers/workspaces.ts), else `bun run test:server` fails
+    // on the file that loads after us.
+    reuseOrCreateUserK8sClient: async () => ({}),
     loadKubeConfigBestEffort: () => null,
     reuseOrCreateAuthClient: async (jwt: string | null) => {
       builtWithJwts.push(jwt);

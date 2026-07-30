@@ -19,13 +19,23 @@
 // the client can't extend it via Max-Age.
 //
 // Reuses crypto.sign/verify + the rotating keymap (server/secret-watcher.ts) — no new key
-// material. Separate from the session cookie: survives session rotation, works when
-// SESSION_ENABLED=false.
+// material. Separate from the session cookie: survives session rotation.
+//
+// SIGNING-KEY DEPENDENCY: this cookie needs a signing key, which comes from the same keymap
+// the session layer populates. In dev mode keys are always minted (server/index.ts inits
+// the watcher regardless of session.enabled), so the cookie works in sessions-off dev/E2E/
+// serve-host. In PROD with SESSION_ENABLED=false the keymap is empty, so the cookie is never
+// written (buildNamespacePreferenceCookie returns null) and the app runs cookieless —
+// activeNs memory and the visible-snapshot cache are inert, falling back to URL/default.
+// Whether prod sessions-off should be supported at all is an open question (tracked
+// separately); today it degrades gracefully to cookieless.
 
+import { createHash } from 'crypto';
 import { deriveKeys, sign, verify } from '../crypto';
 import { getKeyMap } from '../secret-watcher';
 import { getSigningKey, parseCookieValue, type KeyMap } from './session';
 import { serverConfig } from '../k8s/config';
+import { decodeJWTPayload } from '../jwt';
 import { log } from '../logger';
 
 export const NS_PREF_COOKIE_NAME = 'workspace_console_ns';
@@ -58,9 +68,32 @@ export interface NamespacePreference {
   // Unix seconds; when passed, the scan cache (visible/checkedUpTo) is stale and must be
   // discarded + recomputed. Does NOT affect activeNs.
   visibleExp: number;
+  // A hash of the user (JWT `sub`) this cookie was minted for — NOT the Kubernetes user UID;
+  // it's an opaque tag we compute (see userTag). Binds the WHOLE payload — activeNs and the
+  // visible snapshot alike — to one identity, so on a shared browser profile user B never
+  // inherits user A's preference or RBAC snapshot. Read-side compares it against the current
+  // request's user and treats a mismatch as a missing cookie (fail-closed: default +
+  // recompute). Managed internally by read/build; handlers pass plain NamespacePreference
+  // objects and never set it.
+  boundUser: string;
 }
 
-const EMPTY_PREFERENCE: NamespacePreference = { activeNs: null, visible: [], checkedUpTo: 0, universeFp: '', visibleExp: 0 };
+const EMPTY_PREFERENCE: NamespacePreference = { activeNs: null, visible: [], checkedUpTo: 0, universeFp: '', visibleExp: 0, boundUser: '' };
+
+/**
+ * A stable, non-reversible tag for the JWT's owner. Hashes the `sub` claim (stable OIDC
+ * subject — unlike preferred_username, it doesn't change) so the cookie carries no raw
+ * identity. '' when the JWT is absent/malformed or carries no `sub` — an empty tag never
+ * matches a non-empty one (readNamespacePreference guards this), so a tokenless request
+ * can't ride a bound cookie.
+ */
+export function userTag(jwt: string | null): string {
+  if (!jwt) return '';
+  const payload = decodeJWTPayload(jwt);
+  const sub = payload && typeof payload.sub === 'string' ? payload.sub : '';
+  if (!sub) return '';
+  return createHash('sha256').update(sub).digest('base64url').slice(0, 16);
+}
 
 function base64urlEncode(buf: Buffer): string {
   return buf.toString('base64url');
@@ -71,11 +104,12 @@ function base64urlDecode(str: string): Buffer {
 }
 
 /**
- * Parse + verify the preference cookie from a request. Returns an empty preference for a
- * missing / malformed / tampered / unverifiable cookie (fail-closed — never trust an
- * unverifiable set). Callers should treat `visible` as stale when `isVisibleExpired()`.
+ * Parse + verify the preference cookie from a request, for the user identified by `jwt`.
+ * Returns an empty preference for a missing / malformed / tampered / unverifiable cookie
+ * OR one minted for a DIFFERENT user (fail-closed — never trust an unverifiable or
+ * cross-user set). Callers should treat `visible` as stale when `isVisibleExpired()`.
  */
-export function readNamespacePreference(req: Request): NamespacePreference {
+export function readNamespacePreference(req: Request, jwt: string | null): NamespacePreference {
   const cookieHeader = req.headers.get('Cookie');
   if (!cookieHeader) return { ...EMPTY_PREFERENCE };
 
@@ -83,7 +117,13 @@ export function readNamespacePreference(req: Request): NamespacePreference {
   if (!cookieValue) return { ...EMPTY_PREFERENCE };
 
   const parsed = verifyAndParse(cookieValue, getKeyMap());
-  return parsed ?? { ...EMPTY_PREFERENCE };
+  if (!parsed) return { ...EMPTY_PREFERENCE };
+
+  // Identity gate: a cookie is only for the user it was minted for. Signed `boundUser` can't
+  // be forged, but a genuine cookie can be REUSED by another user on a shared browser profile
+  // — so bind by comparing tags. Mismatch → treat as absent (default + recompute under B).
+  if (parsed.boundUser !== userTag(jwt)) return { ...EMPTY_PREFERENCE };
+  return parsed;
 }
 
 function verifyAndParse(cookieValue: string, keyMap: KeyMap): NamespacePreference | null {
@@ -102,6 +142,7 @@ function verifyAndParse(cookieValue: string, keyMap: KeyMap): NamespacePreferenc
         const payload = JSON.parse(payloadBuf.toString('utf-8')) as NamespacePreference;
         if (typeof payload.visibleExp !== 'number' || !Array.isArray(payload.visible)) return null;
         if (typeof payload.checkedUpTo !== 'number' || typeof payload.universeFp !== 'string') return null;
+        if (typeof payload.boundUser !== 'string') return null;
         return payload;
       }
     }
@@ -139,7 +180,7 @@ export function freshVisible(pref: NamespacePreference): string[] {
  * revocation window forward nor revives an already-expired snapshot. `activeNs` carries no
  * in-payload expiry — it lives for the cookie's Max-Age.
  */
-export function buildNamespacePreferenceCookie(pref: NamespacePreference, opts: { preserveVisibleExp?: boolean } = {}): string | null {
+export function buildNamespacePreferenceCookie(pref: NamespacePreference, jwt: string | null, opts: { preserveVisibleExp?: boolean } = {}): string | null {
   const signingEntry = getSigningKey(getKeyMap(), serverConfig.session.newKeyUseDelaySecs);
   if (!signingEntry) {
     log('debug', 'No signing key available — skipping namespace preference cookie');
@@ -153,6 +194,8 @@ export function buildNamespacePreferenceCookie(pref: NamespacePreference, opts: 
     checkedUpTo: pref.checkedUpTo,
     universeFp: pref.universeFp,
     visibleExp: opts.preserveVisibleExp ? pref.visibleExp : now + NS_PREF_VISIBLE_TTL_SECS,
+    // Bind to the writing user, always freshly derived (never carried from the input pref).
+    boundUser: userTag(jwt),
   };
 
   const { signingKey } = deriveKeys(signingEntry.key);

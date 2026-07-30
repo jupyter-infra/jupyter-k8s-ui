@@ -251,7 +251,7 @@ export const strings = {
     searchPlaceholder: 'Find a namespace by name…',
     loadMore: 'Load more',
     loadingMore: 'Loading…',
-    moreHint: 'More namespaces available — load more or search by name.',
+    moreHint: 'More namespaces available.',
     refresh: 'Refresh namespaces',
     // Find-by-name results
     findNotAllowed: (ns: string) => `You don't have access to "${ns}".`,

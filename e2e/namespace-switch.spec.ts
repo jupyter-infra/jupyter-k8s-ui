@@ -132,18 +132,34 @@ test.describe('Namespace selection', () => {
     await expect(templateCard(page, 'Alt Template')).toHaveCount(0);
   });
 
-  test('selection survives a reload (persistence)', async ({ page }) => {
+  test('selection survives a reload (URL canonicalization)', async ({ page }) => {
     await page.goto('/');
     await switchNamespace(page, 'e2e-team-b');
     await expectActiveNamespace(page, 'e2e-team-b');
 
     await page.reload();
-    // URL canonicalization + cookie both restore e2e-team-b — assert the label AND the
-    // canonicalized ?namespace= param survived the reload.
+    // reload() keeps the canonicalized ?namespace= param, which takes precedence over the
+    // cookie — so this asserts URL canonicalization survives a reload. The cookie path (bare
+    // base-URL load, no param) is exercised by the next test.
     await expectActiveNamespace(page, 'e2e-team-b', { checkUrl: true });
     await page.getByRole('button', { name: /^all$/i }).click();
     await page.getByRole('textbox', { name: /search workspaces/i }).fill(RUN_ID);
     await expect(page.getByLabel(new RegExp(`${WS_NAME}.*workspace`, 'i'))).toBeVisible({ timeout: 30_000 });
+  });
+
+  test('selection survives a BARE base-URL visit (cookie persistence)', async ({ page }) => {
+    // The genuine activeNs-cookie test: switch, then navigate to the bare base URL with NO
+    // ?namespace= param, so nothing but the persisted cookie can restore the choice. This is
+    // the path the reload test can't reach (its URL still carries the param). Regressed once
+    // when SESSION_ENABLED=false left the cookie unsigned/unwritten — this guards it.
+    await page.goto('/');
+    await switchNamespace(page, 'e2e-team-b');
+    await expectActiveNamespace(page, 'e2e-team-b');
+
+    // Fresh navigation to the bare base URL — GET /my-namespace must read activeNs from the
+    // cookie and the client must canonicalize back to ?namespace=e2e-team-b.
+    await page.goto('/');
+    await expectActiveNamespace(page, 'e2e-team-b', { checkUrl: true });
   });
 
   test('cleanup: delete the test workspace', async ({ page }) => {

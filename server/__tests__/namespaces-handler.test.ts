@@ -54,6 +54,9 @@ function installMocks() {
     },
   }));
   mock.module('../k8s/client', () => ({
+    // Superset: satisfy all sibling static imports — incl. reuseOrCreateUserK8sClient
+    // (handlers/workspaces.ts), else `bun run test:server` fails on the file loading after us.
+    reuseOrCreateUserK8sClient: async () => ({}),
     loadKubeConfigBestEffort: () => null,
     reuseOrCreateAuthClient: async () => ({
       createSelfSubjectAccessReview: async (body: { spec: { resourceAttributes?: { namespace?: string } } }) => {
@@ -77,6 +80,7 @@ interface PrefPayload {
   checkedUpTo: number;
   universeFp: string;
   visibleExp: number;
+  boundUser: string;
 }
 
 /** Sign a preference payload into the module's on-wire cookie value (matches verifyAndParse). */
@@ -87,12 +91,17 @@ function signPref(p: PrefPayload): string {
   return `${buf.toString('base64url')}.${entry.kid}.${sign(buf, signingKey, entry.kid).toString('base64url')}`;
 }
 
-/** The injected read-side preference as a signed Cookie header value (or '' when empty). */
+/**
+ * The injected read-side preference as a signed Cookie header value (or '' when empty).
+ * boundUser is '' to match the handlers' test jwt ('jwt' is unparseable → userTag === '');
+ * readNamespacePreference's identity gate compares boundUser against userTag(jwt).
+ */
 function injectedPrefCookie(): string {
   const hasCache = prefVisible.length > 0 || prefCheckedUpTo > 0 || prefUniverseFp !== '' || prefActive !== null;
   if (!hasCache) return '';
   const now = Math.floor(Date.now() / 1000);
   return signPref({
+    boundUser: '',
     activeNs: prefActive,
     visible: prefVisible,
     checkedUpTo: prefCheckedUpTo,
@@ -270,33 +279,68 @@ describe('handleListNamespaces (paged fan-out → visible snapshot)', () => {
 describe('handleGetMyNamespace (cheap bootstrap, no SSAR, no cookie)', () => {
   test('a/ no cookie → configured default', async () => {
     prefActive = null;
-    const res = handleGetMyNamespace(new Request('http://x/api/v1/my-namespace'));
+    const res = handleGetMyNamespace(new Request('http://x/api/v1/my-namespace'), 'jwt');
     expect((await res.json()) as { active: string }).toEqual({ active: 'default-ns' });
     expect(res.headers.get('Set-Cookie')).toBeNull();
   });
 
-  test('b/ activeNs ∈ fresh visible → activeNs', async () => {
+  test('activeNs ∈ fresh visible → activeNs', async () => {
+    await setUniverse('team-a');
     prefActive = 'team-a';
-    prefVisible = ['default-ns', 'team-a'];
-    prefVisibleFresh = true;
-    const res = handleGetMyNamespace(myNsReq());
+    seedCache(['default-ns', 'team-a'], 2);
+    const res = handleGetMyNamespace(myNsReq(), 'jwt');
     expect((await res.json()) as { active: string }).toEqual({ active: 'team-a' });
   });
 
-  test('c/ activeNs ∉ fresh visible → configured default (stale/revoked)', async () => {
-    prefActive = 'team-gone';
-    prefVisible = ['default-ns', 'team-a'];
-    prefVisibleFresh = true;
-    const res = handleGetMyNamespace(myNsReq());
+  test('activeNs SCANNED & DENIED (within prefix, fp match, not visible) → configured default', async () => {
+    // team-denied is in the ordered universe within checkedUpTo but absent from visible: the
+    // fresh snapshot definitively denied it → don't send the client to a known-bad ns.
+    await setUniverse('team-a', 'team-denied');
+    prefActive = 'team-denied';
+    seedCache(['default-ns', 'team-a'], 3); // scanned all 3, team-denied excluded (denied)
+    const res = handleGetMyNamespace(myNsReq(), 'jwt');
     expect((await res.json()) as { active: string }).toEqual({ active: 'default-ns' });
   });
 
+  test('activeNs adopted via find-by-name (NOT in the universe) → trust activeNs, do NOT bounce', async () => {
+    // The regression Andrii flagged: a find-by-name namespace was never SSAR'd into `visible`
+    // (it's not even in the labeled universe). "Absent from visible" must NOT be read as
+    // "denied" — bouncing it to default on every base-URL load would strand the user.
+    await setUniverse('team-a');
+    prefActive = 'via-find-by-name';
+    seedCache(['default-ns', 'team-a'], 2); // fresh, fp-matching, fully scanned — but no team-x
+    const res = handleGetMyNamespace(myNsReq(), 'jwt');
+    expect((await res.json()) as { active: string }).toEqual({ active: 'via-find-by-name' });
+  });
+
+  test('activeNs past the scanned prefix (checkedUpTo) → trust activeNs (never reached)', async () => {
+    await setUniverse('team-a', 'team-b', 'team-c'); // ordered: default-ns, team-a, team-b, team-c
+    prefActive = 'team-c';
+    seedCache(['default-ns', 'team-a'], 2); // only [0,2) scanned; team-c at index 3 unscanned
+    const res = handleGetMyNamespace(myNsReq(), 'jwt');
+    expect((await res.json()) as { active: string }).toEqual({ active: 'team-c' });
+  });
+
+  test('fp mismatch (universe reordered) → checkedUpTo meaningless → trust activeNs', async () => {
+    await setUniverse('team-a', 'team-denied');
+    prefActive = 'team-denied';
+    prefVisible = ['default-ns', 'team-a'];
+    prefCheckedUpTo = 3;
+    prefUniverseFp = 'stale-fp-does-not-match';
+    prefVisibleFresh = true;
+    const res = handleGetMyNamespace(myNsReq(), 'jwt');
+    expect((await res.json()) as { active: string }).toEqual({ active: 'team-denied' });
+  });
+
   test('expired snapshot → trust activeNs (unknown freshness, not a known-bad)', async () => {
-    prefActive = 'team-a';
-    prefVisible = ['default-ns']; // would exclude team-a, but it's expired → ignored
+    await setUniverse('team-a');
+    prefActive = 'team-denied';
+    prefVisible = ['default-ns', 'team-a']; // would exclude team-denied, but it's expired → ignored
+    prefCheckedUpTo = 3;
+    prefUniverseFp = universeFingerprint(orderCandidates(getNamespaceUniverse()));
     prefVisibleFresh = false;
-    const res = handleGetMyNamespace(myNsReq());
-    expect((await res.json()) as { active: string }).toEqual({ active: 'team-a' });
+    const res = handleGetMyNamespace(myNsReq(), 'jwt');
+    expect((await res.json()) as { active: string }).toEqual({ active: 'team-denied' });
   });
 });
 
@@ -307,7 +351,7 @@ describe('handlePatchMyNamespace (dumb activeNs write, no SSAR)', () => {
     prefCheckedUpTo = 2;
     prefUniverseFp = 'abc';
     prefVisibleFresh = true;
-    const res = await handlePatchMyNamespace(patchReq('team-a'));
+    const res = await handlePatchMyNamespace(patchReq('team-a'), 'jwt');
     expect((await res.json()) as { active: string }).toEqual({ active: 'team-a' });
     expect(ssarChecked).toEqual([]); // dumb — no SSAR
     // activeNs updated to team-a; the scan-cache fields (visible/checkedUpTo/universeFp) are
@@ -331,7 +375,7 @@ describe('handlePatchMyNamespace (dumb activeNs write, no SSAR)', () => {
     prefCheckedUpTo = 2;
     prefUniverseFp = 'abc';
     prefVisibleFresh = false; // expired snapshot on the request cookie
-    const res = await handlePatchMyNamespace(patchReq('team-a'));
+    const res = await handlePatchMyNamespace(patchReq('team-a'), 'jwt');
     const persisted = decodePersisted(res)!;
     expect(persisted.activeNs).toBe('team-a'); // the preference still updates
     // …but the stale scan cache is discarded together, and NOT re-stamped fresh.
@@ -342,13 +386,13 @@ describe('handlePatchMyNamespace (dumb activeNs write, no SSAR)', () => {
   });
 
   test('rejects a malformed namespace with 400', async () => {
-    const res = await handlePatchMyNamespace(patchReq('Bad_NS'));
+    const res = await handlePatchMyNamespace(patchReq('Bad_NS'), 'jwt');
     expect(res.status).toBe(400);
     expect(res.headers.get('Set-Cookie')).toBeNull(); // no cookie written on rejection
   });
 
   test('rejects a non-JSON body with 400', async () => {
-    const res = await handlePatchMyNamespace(new Request('http://x/api/v1/my-namespace', { method: 'PATCH', body: 'not json' }));
+    const res = await handlePatchMyNamespace(new Request('http://x/api/v1/my-namespace', { method: 'PATCH', body: 'not json' }), 'jwt');
     expect(res.status).toBe(400);
   });
 });

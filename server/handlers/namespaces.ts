@@ -27,26 +27,45 @@ import {
  * GET /api/v1/my-namespace — the cheap bootstrap. NO SSAR, NO Set-Cookie, no cluster calls.
  *
  * Returns the namespace the client should attempt now:
- *   a/ no cookie            → configured default
- *   b/ activeNs ∈ visible   → activeNs (remembered choice still looks usable)
- *   c/ activeNs ∉ visible   → configured default (remembered ns is stale/revoked per our
- *                             own fresh snapshot; don't send the client to a known-bad ns)
- * `active` is an unvalidated hint — if it turns out inaccessible, the list request 403s and
- * the client shows the "Select a namespace" prompt. Case (c) only uses a still-fresh
- * `visible` snapshot; an expired snapshot is treated as "unknown" (→ trust activeNs).
+ *   a/ no cookie                     → configured default
+ *   b/ activeNs was SCANNED & DENIED → configured default (revoked per our own fresh
+ *                                      snapshot; don't send the client to a known-bad ns)
+ *   c/ otherwise                     → activeNs (remembered choice — trust the preference)
+ *
+ * "Scanned & denied" is precise on purpose: activeNs must sit inside the scanned prefix of
+ * the CURRENT ordered universe (index < checkedUpTo, fp matching) yet be absent from
+ * `visible`. Merely being absent from `visible` is NOT enough — a namespace adopted via
+ * find-by-name (or one past the scanned prefix) was never SSAR'd into the snapshot, so
+ * treating "absent" as "denied" would bounce a perfectly accessible namespace back to
+ * default on every bare base-URL load. `active` is an unvalidated hint anyway: if it turns
+ * out inaccessible, the list request 403s and the client shows the "Select a namespace"
+ * prompt. An expired snapshot is "unknown" (freshVisible → []) → trust activeNs.
  */
-export function handleGetMyNamespace(req: Request): Response {
-  const pref = readNamespacePreference(req);
+export function handleGetMyNamespace(req: Request, jwt: string | null): Response {
+  const pref = readNamespacePreference(req, jwt);
   const active = resolveActive(pref);
   return jsonResponse({ active });
 }
 
 function resolveActive(pref: NamespacePreference): string {
   if (!pref.activeNs) return serverConfig.namespace; // case a
-  // If we have a FRESH visible snapshot and activeNs isn't in it, it's stale/revoked → default.
+  return wasScannedAndDenied(pref, pref.activeNs) ? serverConfig.namespace : pref.activeNs; // case b : c
+}
+
+/**
+ * True iff `ns` was inside the FRESH snapshot's scanned prefix and came back denied — the
+ * only signal strong enough to override the durable preference. Requires a matching
+ * universeFp (else `checkedUpTo` indexes a different ordering and means nothing) and an
+ * index strictly below `checkedUpTo` (else `ns` was never reached by the scan).
+ */
+function wasScannedAndDenied(pref: NamespacePreference, ns: string): boolean {
   const visible = freshVisible(pref);
-  if (visible.length > 0 && !visible.includes(pref.activeNs)) return serverConfig.namespace; // case c
-  return pref.activeNs; // case b (or unknown-freshness → trust the preference)
+  if (visible.length === 0) return false; // no fresh snapshot → unknown, not denied
+  if (visible.includes(ns)) return false; // scanned & allowed
+  const ordered = orderCandidates(getNamespaceUniverse());
+  if (universeFingerprint(ordered) !== pref.universeFp) return false; // index meaningless
+  const idx = ordered.indexOf(ns);
+  return idx >= 0 && idx < pref.checkedUpTo; // within the scanned prefix but not visible → denied
 }
 
 /**
@@ -66,7 +85,7 @@ function resolveActive(pref: NamespacePreference): string {
  * switching repeatedly, defeating the backstop). An already-expired snapshot is dropped
  * here so it's never re-persisted as (stale-but-present) state.
  */
-export async function handlePatchMyNamespace(req: Request): Promise<Response> {
+export async function handlePatchMyNamespace(req: Request, jwt: string | null): Promise<Response> {
   let body: { namespace?: unknown };
   try {
     body = (await req.json()) as { namespace?: unknown };
@@ -78,7 +97,7 @@ export async function handlePatchMyNamespace(req: Request): Promise<Response> {
   }
   const namespace = body.namespace;
 
-  const pref = readNamespacePreference(req);
+  const pref = readNamespacePreference(req, jwt);
   // Drop an already-stale snapshot rather than carry it forward (GET /namespaces recomputes
   // it). A fresh snapshot is preserved verbatim, expiry included.
   const expired = isVisibleExpired(pref);
@@ -88,8 +107,9 @@ export async function handlePatchMyNamespace(req: Request): Promise<Response> {
     checkedUpTo: expired ? 0 : pref.checkedUpTo,
     universeFp: expired ? '' : pref.universeFp,
     visibleExp: expired ? 0 : pref.visibleExp,
+    boundUser: pref.boundUser, // re-derived by the builder from jwt; value here is irrelevant
   };
-  return attachPreferenceCookie(jsonResponse({ active: namespace }), nextPref, { preserveVisibleExp: true });
+  return attachPreferenceCookie(jsonResponse({ active: namespace }), nextPref, jwt, { preserveVisibleExp: true });
 }
 
 /**
@@ -119,7 +139,7 @@ export async function handleListNamespaces(req: Request, jwt: string): Promise<R
   const offset = clampOffset(params.get('offset'), ordered.length);
   const pageSize = serverConfig.namespaceSelection.candidateCap;
 
-  const pref = readNamespacePreference(req);
+  const pref = readNamespacePreference(req, jwt);
   // The persisted scan cache is usable only if fresh AND computed against the current
   // universe order (fp match). A mismatch means indices shifted → discard and rescan from 0.
   const cacheValid = !forceRefresh && !isVisibleExpired(pref) && pref.universeFp === fp;
@@ -169,8 +189,9 @@ export async function handleListNamespaces(req: Request, jwt: string): Promise<R
     checkedUpTo: persistCheckedUpTo,
     universeFp: fp,
     visibleExp: 0,
+    boundUser: pref.boundUser, // re-derived by the builder from jwt; value here is irrelevant
   };
-  return attachPreferenceCookie(response, nextPref);
+  return attachPreferenceCookie(response, nextPref, jwt);
 }
 
 /** Parse + clamp the offset query param to [0, length]. Invalid → 0. */
@@ -231,8 +252,8 @@ export function orderCandidates(universe: string[]): string[] {
 }
 
 /** Attach the re-signed preference cookie, if a signing key is available. */
-function attachPreferenceCookie(response: Response, pref: NamespacePreference, opts: { preserveVisibleExp?: boolean } = {}): Response {
-  const cookie = buildNamespacePreferenceCookie(pref, opts);
+function attachPreferenceCookie(response: Response, pref: NamespacePreference, jwt: string | null, opts: { preserveVisibleExp?: boolean } = {}): Response {
+  const cookie = buildNamespacePreferenceCookie(pref, jwt, opts);
   if (!cookie) return response; // signing-key gap: serve correctly, just don't persist
   const withCookie = new Response(response.body, response);
   withCookie.headers.append('Set-Cookie', cookie);

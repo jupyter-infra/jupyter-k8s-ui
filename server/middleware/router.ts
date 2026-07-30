@@ -131,8 +131,8 @@ async function routeRequest(req: Request): Promise<Response> {
       return dispatch(
         method,
         {
-          GET: () => Promise.resolve(handleGetMyNamespace(req)),
-          PATCH: () => handlePatchMyNamespace(req),
+          GET: () => Promise.resolve(handleGetMyNamespace(req, jwt)),
+          PATCH: () => handlePatchMyNamespace(req, jwt),
         },
         jwt,
         source,

@@ -24,6 +24,10 @@ function installMocks() {
   }));
   mock.module('../k8s/client', () => ({
     // Superset (see resolve-namespace.test.ts): satisfy all sibling static imports.
+    // mock.module is process-global, so this must export EVERY name any sibling test's
+    // statically-imported module needs — incl. reuseOrCreateUserK8sClient (handlers/
+    // workspaces.ts), or `bun run test:server` fails on whichever file loads after us.
+    reuseOrCreateUserK8sClient: async () => ({}),
     reuseOrCreateAuthClient: async () => ({ createSelfSubjectAccessReview: async () => ({ body: { status: { allowed: true } } }) }),
     loadKubeConfigBestEffort: () => ({
       makeApiClient: () => ({ listNamespace: () => listImpl() }),

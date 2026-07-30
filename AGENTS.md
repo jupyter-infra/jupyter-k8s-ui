@@ -233,6 +233,9 @@ make test-e2e             # Sets up cluster (if needed), starts server, runs Pla
 make cleanup-e2e          # Delete the Kind cluster when done
 ```
 
+**Stale-cluster gotcha:** `test-e2e` reuses an existing Kind cluster, and `setup-e2e`
+no-ops when one is already running. A cluster that has been up for a long time may return 401s on all calls. Recreate the cluster first: `make cleanup-e2e && make test-e2e`.
+
 ### Writing E2E tests
 
 - Files go in `e2e/` with `.spec.ts` suffix

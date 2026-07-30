@@ -33,7 +33,10 @@ function installMocks() {
   }));
   mock.module('../k8s/client', () => ({
     // Superset: sibling test files statically import different exports from ../k8s/client,
-    // and whichever mock wins at import time must satisfy all of them.
+    // and whichever mock wins at import time must satisfy all of them — incl.
+    // reuseOrCreateUserK8sClient (handlers/workspaces.ts), else `bun run test:server` fails
+    // on the file that loads after us.
+    reuseOrCreateUserK8sClient: async () => ({}),
     loadKubeConfigBestEffort: () => null,
     reuseOrCreateAuthClient: async (jwt: string | null) => ({
       createSelfSubjectAccessReview: async (body: { spec: { resourceAttributes?: { namespace?: string } } }) => {
@@ -64,7 +67,16 @@ function keyMapWith(kid = 'k1'): KeyMap {
 function signPref(over: { visible?: string[]; visibleExp: number }): string {
   const entry = [...testKeyMap.keys.values()][0];
   const { signingKey } = deriveKeys(entry.key);
-  const payload = { activeNs: null, visible: over.visible ?? [], checkedUpTo: (over.visible ?? []).length, universeFp: 'fp', visibleExp: over.visibleExp };
+  // boundUser: '' matches userTag('jwt') (the test jwt is unparseable → '') so the identity
+  // gate in readNamespacePreference honors this cookie for resolveNamespace's 'jwt' caller.
+  const payload = {
+    activeNs: null,
+    visible: over.visible ?? [],
+    checkedUpTo: (over.visible ?? []).length,
+    universeFp: 'fp',
+    visibleExp: over.visibleExp,
+    boundUser: '',
+  };
   const payloadBuf = Buffer.from(JSON.stringify(payload), 'utf-8');
   const signature = sign(payloadBuf, signingKey, entry.kid);
   return `${payloadBuf.toString('base64url')}.${entry.kid}.${signature.toString('base64url')}`;
