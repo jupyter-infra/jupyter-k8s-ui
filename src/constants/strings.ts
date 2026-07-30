@@ -199,7 +199,6 @@ export const strings = {
     guidanceResources: 'Resources',
     guidanceCpu: 'CPU',
     guidanceMemory: 'Memory',
-    guidanceGpu: 'GPU',
     guidanceStorage: 'Storage',
     guidanceStorageSize: 'Size',
     guidanceIdleShutdown: 'Idle shutdown',
