@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Typography, TextField, Button, Stack, Container, Paper, Alert, CircularProgress } from '@mui/material';
 import { useCreateWorkspace, useWorkspaces, useTemplates } from '../api';
 import { useAuth } from '../context/AuthContext';
+import { useNamespace } from '../context/NamespaceContext';
 import { TemplatePicker } from '../components';
 import { AdvancedBox } from '../components/workspace/AdvancedBox';
 import { LockedTemplateField } from '../components/workspace/LockedTemplateField';
@@ -32,6 +33,7 @@ export function WorkspaceCreate() {
   const navigate = useNavigate();
   const createMutation = useCreateWorkspace();
   const { user } = useAuth();
+  const { activeNamespace } = useNamespace();
   const { data: workspaces } = useWorkspaces();
   const templatesQuery = useTemplates();
 
@@ -207,9 +209,16 @@ export function WorkspaceCreate() {
   return (
     <Container maxWidth="md">
       <Stack spacing={3} paddingBottom={8}>
-        <Typography variant="h4" fontWeight={600}>
-          {advanced ? ws.advancedCreateTitle : ws.createTitle}
-        </Typography>
+        <Stack spacing={0.5}>
+          <Typography variant="h4" fontWeight={600}>
+            {advanced ? ws.advancedCreateTitle : ws.createTitle}
+          </Typography>
+          {activeNamespace && (
+            <Typography variant="body2" color="text.secondary">
+              {strings.namespace.creatingIn(activeNamespace)}
+            </Typography>
+          )}
+        </Stack>
 
         {!advanced && createMutation.error && <Alert severity="error">{createMutation.error.message}</Alert>}
 

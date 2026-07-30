@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { expectOnPath } from './test-utils';
 
 // Template SELECTION behaviors, exercised against the real cluster with TWO template
 // fixtures: `default` (flagged default, appType jupyterlab) and `alt-template` (non-default,
@@ -104,7 +105,7 @@ test.describe('Template selection', () => {
     await page.getByRole('button', { name: /select Alt Template template/i }).click();
 
     await page.getByRole('button', { name: /create workspace/i }).click();
-    await expect(page).toHaveURL('/', { timeout: 10_000 });
+    await expectOnPath(page);
 
     await page.getByRole('button', { name: /all/i }).click();
     await waitForCardStatus(page, ALT_WS, 'Running');
@@ -142,7 +143,9 @@ test.describe('Template selection', () => {
     await page.goto(`/workspace/${ALT_WS}`);
     await expect(page.getByRole('heading', { name: ALT_WS })).toBeVisible({ timeout: 10_000 });
     await page.getByRole('button', { name: /stop/i }).click();
-    await expect(page.getByText('Stopped', { exact: true })).toBeVisible({ timeout: 45_000 });
+    // The status chip (specifically, not a subtitle/label — those also render "Stopped"
+    // and would trigger a strict-mode multi-match).
+    await expect(page.locator('.MuiChip-label').getByText('Stopped', { exact: true })).toBeVisible({ timeout: 45_000 });
 
     // Simple edit: the template is shown read-only (no combobox to change it). The locked
     // field displays the template's DISPLAY NAME ("Alt Template"), not the ref name.
@@ -201,7 +204,7 @@ test.describe('Template selection', () => {
     await createToggle.uncheck();
 
     await page.getByRole('button', { name: /create workspace/i }).click();
-    await expect(page).toHaveURL('/', { timeout: 10_000 });
+    await expectOnPath(page);
     await page.getByRole('button', { name: /all/i }).click();
     await waitForCardStatus(page, IDLE_WS, 'Running');
 
@@ -213,7 +216,9 @@ test.describe('Template selection', () => {
     // --- (b) Edit: toggle idle back ON ---
     // Stop first — edit requires a Stopped workspace.
     await page.getByRole('button', { name: /stop/i }).click();
-    await expect(page.getByText('Stopped', { exact: true })).toBeVisible({ timeout: 45_000 });
+    // The status chip (specifically, not a subtitle/label — those also render "Stopped"
+    // and would trigger a strict-mode multi-match).
+    await expect(page.locator('.MuiChip-label').getByText('Stopped', { exact: true })).toBeVisible({ timeout: 45_000 });
 
     await page.goto(`/workspace/${IDLE_WS}/edit`);
     await expect(page.getByRole('heading', { name: /edit workspace/i })).toBeVisible({ timeout: 10_000 });
@@ -225,7 +230,7 @@ test.describe('Template selection', () => {
     await expect(editToggle).not.toBeChecked();
     await editToggle.check();
     await page.getByRole('button', { name: /save changes/i }).click();
-    await expect(page).toHaveURL('/', { timeout: 10_000 });
+    await expectOnPath(page);
 
     // Detail confirms idle is now enabled again — shows a timeout, not "Disabled".
     await page.goto(`/workspace/${IDLE_WS}`);

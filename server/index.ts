@@ -4,6 +4,7 @@ import { log } from './logger';
 import { handleRequest } from './middleware/router';
 import { initSecretWatcher, stopSecretWatcher } from './secret-watcher';
 import { initSchemaStore } from './schema/store';
+import { initNamespaceUniverse, stopNamespaceUniverse } from './k8s/namespace-universe';
 
 // --- Initialize ---
 
@@ -21,8 +22,12 @@ console.log(`   STATIC:    ${serverConfig.staticDir}`);
 console.log(`   DEV_TOKEN: ${serverConfig.devAccessToken ? '***set***' : 'not set'}`);
 console.log(`   SESSION:   ${serverConfig.session.enabled ? 'enabled' : 'disabled'}`);
 
-// Initialize session secret watcher
-if (serverConfig.session.enabled) {
+// Initialize the signing keymap. In dev mode we always mint ephemeral keys (independent of
+// session.enabled) so the namespace preference cookie signs/verifies even in sessions-off
+// modes — that's how E2E and `serve-host` run. In prod the keymap is populated only when
+// sessions are enabled; a prod sessions-off install therefore has no signing key and runs
+// the namespace cookie cookieless (bounded, documented — see namespace-preference.ts).
+if (process.env.NODE_ENV === 'development' || serverConfig.session.enabled) {
   initSecretWatcher(serverConfig.session).catch((err) => {
     log('error', `Failed to initialize secret watcher: ${err instanceof Error ? err.message : String(err)}`);
   });
@@ -32,6 +37,12 @@ if (serverConfig.session.enabled) {
 // degrades to vendored schemas, and the editor falls back further to plain YAML.
 initSchemaStore().catch((err) => {
   log('error', `Failed to initialize CRD schema store: ${err instanceof Error ? err.message : String(err)}`);
+});
+
+// Start the namespace-universe poll (SA label-list, static fallback). Non-fatal: on
+// failure it seeds the static list so discovery still serves the default namespace.
+initNamespaceUniverse().catch((err) => {
+  log('error', `Failed to initialize namespace universe: ${err instanceof Error ? err.message : String(err)}`);
 });
 
 const server = serve({
@@ -46,6 +57,7 @@ log('info', `Server running at http://localhost:${server.port}`);
 async function shutdown() {
   log('info', 'Shutting down server...');
   await stopSecretWatcher();
+  stopNamespaceUniverse();
   server.stop();
   process.exit(0);
 }

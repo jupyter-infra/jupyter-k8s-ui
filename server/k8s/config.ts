@@ -3,7 +3,8 @@ import { homedir } from 'os';
 import { join } from 'path';
 import type { ServerConfig } from '../types';
 
-function parseIntSafe(value: string | undefined, fallback: number): number {
+/** Parse a non-negative int from an env value; fall back on undefined/blank/NaN/negative. */
+export function parseIntSafe(value: string | undefined, fallback: number): number {
   const n = parseInt(value || String(fallback), 10);
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
@@ -42,7 +43,50 @@ export const serverConfig: ServerConfig = {
     oidcClientSecret: '',
     oidcCallbackPort: 9800,
   },
+  namespaceSelection: {
+    labelSelector: 'workspace.jupyter.org/workspaces-enabled=true',
+    staticNamespaces: ['default'],
+    candidateCap: 20,
+    visiblePersistCap: 100,
+    pollIntervalSecs: 60,
+  },
 };
+
+/** Split a comma-separated env value into a trimmed, de-duplicated, non-empty list. */
+export function parseCsv(value: string | undefined): string[] {
+  if (!value) return [];
+  const seen = new Set<string>();
+  for (const part of value.split(',')) {
+    const trimmed = part.trim();
+    if (trimmed) seen.add(trimmed);
+  }
+  return [...seen];
+}
+
+/**
+ * The admin-declared namespaces, in their stable front-of-list order:
+ *   1. `defaultNamespace` (the configured NAMESPACE) — always first, always present.
+ *   2. `knownNamespaces` (WORKSPACE_NAMESPACES) in declared order, with the default and any
+ *      duplicates filtered out.
+ * These pin to the front of the candidate ordering; being config-derived they are
+ * drift-proof (unlike the alphabetical tail of discovered namespaces), which keeps a
+ * paginated `checkedUpTo` index stable across universe changes.
+ *
+ * Pure — no serverConfig access — so it's trivially testable. Ignores empty/blank entries
+ * defensively (callers may pass unsanitized lists).
+ */
+export function declaredNamespaces(defaultNamespace: string, knownNamespaces: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const ns of [defaultNamespace, ...knownNamespaces]) {
+    const trimmed = ns?.trim();
+    if (trimmed && !seen.has(trimmed)) {
+      seen.add(trimmed);
+      out.push(trimmed);
+    }
+  }
+  return out;
+}
 
 export function initializeConfig(): void {
   const isDev = process.env.NODE_ENV === 'development';
@@ -71,6 +115,19 @@ export function initializeConfig(): void {
   serverConfig.session.keyPrefix = process.env.SESSION_KEY_PREFIX || 'session-key-';
   serverConfig.session.newKeyUseDelaySecs = parseIntSafe(process.env.SESSION_NEW_KEY_USE_DELAY_SECS, 60);
   serverConfig.session.expectedDomain = process.env.SESSION_EXPECTED_DOMAIN || '';
+
+  // Namespace-selection config. The label selector is either given verbatim
+  // (WORKSPACE_NAMESPACE_LABEL_SELECTOR) or derived from a single key
+  // (WORKSPACE_NAMESPACE_LABEL, matched against "true"); the default marks
+  // workspace-enabled namespaces. The static list always unions in the configured
+  // `namespace`, so the universe (and thus the switcher) is never empty.
+  const nsLabelKey = process.env.WORKSPACE_NAMESPACE_LABEL || 'workspace.jupyter.org/workspaces-enabled';
+  serverConfig.namespaceSelection.labelSelector = process.env.WORKSPACE_NAMESPACE_LABEL_SELECTOR || `${nsLabelKey}=true`;
+  const staticNs = parseCsv(process.env.WORKSPACE_NAMESPACES);
+  serverConfig.namespaceSelection.staticNamespaces = staticNs.length > 0 ? staticNs : [serverConfig.namespace];
+  serverConfig.namespaceSelection.candidateCap = parseIntSafe(process.env.NAMESPACE_CANDIDATE_CAP, 20);
+  serverConfig.namespaceSelection.visiblePersistCap = parseIntSafe(process.env.NAMESPACE_VISIBLE_PERSIST_CAP, 100);
+  serverConfig.namespaceSelection.pollIntervalSecs = parseIntSafe(process.env.NAMESPACE_POLL_INTERVAL_SECS, 60);
 
   // Cluster access config (for kubectl access page)
   serverConfig.clusterAccess.clusterName = process.env.CLUSTER_NAME || '';

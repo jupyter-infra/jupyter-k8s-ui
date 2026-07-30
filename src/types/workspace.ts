@@ -178,6 +178,36 @@ export interface DiscoveryResponse<T> {
   namespaces?: { own: string; shared: string };
 }
 
+// --- Namespace selection ---
+
+// Cheap bootstrap (GET /api/v1/my-namespace): the fully-resolved active namespace
+// (cookie-remembered else configured default), no RBAC check. Never null.
+export interface MyNamespaceResponse {
+  active: string;
+}
+
+// Expensive fan-out (GET /api/v1/namespaces?offset=): one page of the RBAC-gated switcher
+// list. Paged over a stable ordering; each page SSARs its own slice.
+export interface NamespaceListResponse {
+  items: Array<{ namespace: string }>;
+  // Configured default, only if the user can see it (SSAR-confirmed); else null.
+  default: string | null;
+  // Echoed page offset into the ordered universe.
+  offset: number;
+  // Page size (candidates SSAR'd per page).
+  limit: number;
+  // Ordered-universe size (total candidates, pre-RBAC).
+  total: number;
+  // True when there are more candidates past what's been scanned — fetch the next page.
+  hasMore: boolean;
+}
+
+// Find-by-name escape hatch (GET /api/v1/namespaces/:ns/access).
+export interface NamespaceAccessResponse {
+  namespace: string;
+  allowed: boolean;
+}
+
 export interface ClusterAccessInfo {
   clusterName: string;
   apiServer: string;

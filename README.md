@@ -106,6 +106,53 @@ jupyter-k8s-ui/
 └── .env.example          # Environment template
 ```
 
+## RBAC
+
+**The user's K8s token is the sole access enforcement**: every list/read/write runs under it and is rejected by the K8s API server if RBAC doesn't allow it.
+
+However for namespace _discovery_, the web-app i/ attempts to decide which namespaces to _offer_ using it own SA, then ii/ filters them down by performing a `SelfSubjectAccessReview` with the user's K8s token. This SSAR verifies that the user has RBAC permission to `list workspaces` in such a namespace. If i/ above fails because the web-app SA does not have RBAC permission to list namespaces cluster-wide, the web-app falls back to a static list.
+
+Either way, the web-app only offers a namespace to a user **only if** such user has permission to `list` on `workspaces` for such a namespace.
+
+### ServiceAccount RBAC
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: jupyter-k8s-ui-namespace-lister
+rules:
+  - apiGroups: ['']
+    resources: ['namespaces']
+    verbs: ['list', 'watch']
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jupyter-k8s-ui-namespace-lister
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: jupyter-k8s-ui-namespace-lister
+subjects:
+  - kind: ServiceAccount
+    name: <web-app-service-account>
+    namespace: <web-app-namespace>
+```
+
+## Web-App configuration
+
+| Env var                              | Default                                    | Purpose                                                                                         |
+| ------------------------------------ | ------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `NAMESPACE`                          | `default`                                  | The default namespace; SSAR-exempt                                                              |
+| `SHARED_TEMPLATE_NAMESPACE`          | `jupyter-k8s-shared`                       | Cross-namespace template / access-strategy source                                               |
+| `WORKSPACE_NAMESPACES`               | `["default"]`                              | Static candidate list (fallback)                                                                |
+| `WORKSPACE_NAMESPACE_LABEL`          | `workspace.jupyter.org/workspaces-enabled` | Label key marking discoverable namespaces                                                       |
+| `WORKSPACE_NAMESPACE_LABEL_SELECTOR` | _(derived `<label>=true`)_                 | Full label selector override                                                                    |
+| `NAMESPACE_CANDIDATE_CAP`            | `20`                                       | SSAR fan-out page size (candidates checked per `/namespaces` page)                              |
+| `NAMESPACE_VISIBLE_PERSIST_CAP`      | `100`                                      | Max visible namespaces stored in the preference cookie (further pages served live, client-only) |
+| `NAMESPACE_POLL_INTERVAL_SECS`       | `60`                                       | Universe re-LIST poll interval                                                                  |
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines. Pull requests get an automated AI code review, and you can run the same review locally before pushing with `make review`.

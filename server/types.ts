@@ -239,6 +239,23 @@ export interface ClusterAccessConfig {
   oidcCallbackPort: number;
 }
 
+export interface NamespaceConfig {
+  // Label selector used by the SA candidate list (sa-list source). The response is
+  // filtered server-side by this selector — RBAC cannot scope list by label, so this
+  // only trims what comes back, it is not authorization.
+  labelSelector: string;
+  // Explicit candidate list for the `static` fallback source (comma-split env). The
+  // configured `namespace` is always unioned in, so this is never truly empty.
+  staticNamespaces: string[];
+  // Page size for the SSAR fan-out: how many candidates are SSAR'd per /namespaces page.
+  candidateCap: number;
+  // Max visible namespaces persisted in the preference cookie. Pages past this are served
+  // live and kept client-side only (never written to the cookie), bounding cookie size.
+  visiblePersistCap: number;
+  // Universe re-LIST poll interval (seconds).
+  pollIntervalSecs: number;
+}
+
 export interface ServerConfig {
   namespace: string;
   // Shared namespace where admins publish cluster-wide templates / access
@@ -251,4 +268,5 @@ export interface ServerConfig {
   logLevel: LogLevel;
   session: SessionConfig;
   clusterAccess: ClusterAccessConfig;
+  namespaceSelection: NamespaceConfig;
 }

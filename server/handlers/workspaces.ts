@@ -1,5 +1,4 @@
-import { serverConfig } from '../k8s/config';
-import { createUserK8sClient } from '../k8s/client';
+import { reuseOrCreateUserK8sClient } from '../k8s/client';
 import { workspaceToResponse } from '../k8s/mappers';
 import { CRD_GROUP, CRD_VERSION, CRD_API_VERSION, WORKSPACE_PLURAL } from '../k8s/constants';
 import { isValidK8sName, validateWorkspaceEnums, isAdvancedCreateOrEditWorkspaceBody } from '../guards';
@@ -15,11 +14,11 @@ function wantsDryRun(req: Request): boolean {
   return new URL(req.url).searchParams.get('dryRun') === DRY_RUN_ALL;
 }
 
-export async function handleListWorkspaces(jwt: string): Promise<Response> {
+export async function handleListWorkspaces(jwt: string, namespace: string): Promise<Response> {
   const startTime = Date.now();
   try {
-    const k8sClient = await createUserK8sClient(jwt);
-    const response = await k8sClient.listNamespacedCustomObject(CRD_GROUP, CRD_VERSION, serverConfig.namespace, WORKSPACE_PLURAL);
+    const k8sClient = await reuseOrCreateUserK8sClient(jwt);
+    const response = await k8sClient.listNamespacedCustomObject(CRD_GROUP, CRD_VERSION, namespace, WORKSPACE_PLURAL);
     const body = response.body as K8sListResponse<K8sWorkspace>;
     const workspaces = body.items.map(workspaceToResponse);
     log('info', `Listed ${workspaces.length} workspaces in ${Date.now() - startTime}ms`);
@@ -29,10 +28,10 @@ export async function handleListWorkspaces(jwt: string): Promise<Response> {
   }
 }
 
-export async function handleGetWorkspace(jwt: string, workspaceName: string): Promise<Response> {
+export async function handleGetWorkspace(jwt: string, namespace: string, workspaceName: string): Promise<Response> {
   try {
-    const k8sClient = await createUserK8sClient(jwt);
-    const response = await k8sClient.getNamespacedCustomObject(CRD_GROUP, CRD_VERSION, serverConfig.namespace, WORKSPACE_PLURAL, workspaceName);
+    const k8sClient = await reuseOrCreateUserK8sClient(jwt);
+    const response = await k8sClient.getNamespacedCustomObject(CRD_GROUP, CRD_VERSION, namespace, WORKSPACE_PLURAL, workspaceName);
     const workspace = workspaceToResponse(response.body as K8sWorkspace);
     log('info', `Retrieved workspace: ${workspaceName}`);
     return jsonResponse(workspace);
@@ -41,7 +40,7 @@ export async function handleGetWorkspace(jwt: string, workspaceName: string): Pr
   }
 }
 
-export async function handleCreateWorkspace(jwt: string, req: Request): Promise<Response> {
+export async function handleCreateWorkspace(jwt: string, namespace: string, req: Request): Promise<Response> {
   let body: CreateWorkspaceBody;
   let rawBody: unknown;
   try {
@@ -93,24 +92,16 @@ export async function handleCreateWorkspace(jwt: string, req: Request): Promise<
   }
 
   try {
-    const k8sClient = await createUserK8sClient(jwt);
+    const k8sClient = await reuseOrCreateUserK8sClient(jwt);
 
     const workspace = {
       apiVersion: CRD_API_VERSION,
       kind: 'Workspace',
-      metadata: { name, namespace: serverConfig.namespace },
+      metadata: { name, namespace },
       spec,
     };
 
-    const response = await k8sClient.createNamespacedCustomObject(
-      CRD_GROUP,
-      CRD_VERSION,
-      serverConfig.namespace,
-      WORKSPACE_PLURAL,
-      workspace,
-      undefined,
-      dryRun,
-    );
+    const response = await k8sClient.createNamespacedCustomObject(CRD_GROUP, CRD_VERSION, namespace, WORKSPACE_PLURAL, workspace, undefined, dryRun);
 
     // On dry-run success we don't persist — return a lightweight ok, not a resource.
     if (dryRun) {
@@ -126,7 +117,7 @@ export async function handleCreateWorkspace(jwt: string, req: Request): Promise<
   }
 }
 
-export async function handleUpdateWorkspace(jwt: string, workspaceName: string, req: Request): Promise<Response> {
+export async function handleUpdateWorkspace(jwt: string, namespace: string, workspaceName: string, req: Request): Promise<Response> {
   let rawBody: unknown;
   try {
     rawBody = await req.json();
@@ -142,12 +133,12 @@ export async function handleUpdateWorkspace(jwt: string, workspaceName: string, 
   }
 
   try {
-    const k8sClient = await createUserK8sClient(jwt);
+    const k8sClient = await reuseOrCreateUserK8sClient(jwt);
 
     // Always fetch the live object first: we need its fresh metadata +
     // resourceVersion for the replace, and (for the simple form) its current spec to
     // overlay onto.
-    const existing = await k8sClient.getNamespacedCustomObject(CRD_GROUP, CRD_VERSION, serverConfig.namespace, WORKSPACE_PLURAL, workspaceName);
+    const existing = await k8sClient.getNamespacedCustomObject(CRD_GROUP, CRD_VERSION, namespace, WORKSPACE_PLURAL, workspaceName);
     const updated = JSON.parse(JSON.stringify(existing.body)) as K8sWorkspace;
 
     if (isAdvancedCreateOrEditWorkspaceBody(rawBody)) {
@@ -183,15 +174,7 @@ export async function handleUpdateWorkspace(jwt: string, workspaceName: string, 
       }
     }
 
-    const response = await k8sClient.replaceNamespacedCustomObject(
-      CRD_GROUP,
-      CRD_VERSION,
-      serverConfig.namespace,
-      WORKSPACE_PLURAL,
-      workspaceName,
-      updated,
-      dryRun,
-    );
+    const response = await k8sClient.replaceNamespacedCustomObject(CRD_GROUP, CRD_VERSION, namespace, WORKSPACE_PLURAL, workspaceName, updated, dryRun);
 
     if (dryRun) {
       log('info', `Validated (dry-run) workspace: ${workspaceName}`);
@@ -206,10 +189,10 @@ export async function handleUpdateWorkspace(jwt: string, workspaceName: string, 
   }
 }
 
-export async function handleDeleteWorkspace(jwt: string, workspaceName: string): Promise<Response> {
+export async function handleDeleteWorkspace(jwt: string, namespace: string, workspaceName: string): Promise<Response> {
   try {
-    const k8sClient = await createUserK8sClient(jwt);
-    await k8sClient.deleteNamespacedCustomObject(CRD_GROUP, CRD_VERSION, serverConfig.namespace, WORKSPACE_PLURAL, workspaceName);
+    const k8sClient = await reuseOrCreateUserK8sClient(jwt);
+    await k8sClient.deleteNamespacedCustomObject(CRD_GROUP, CRD_VERSION, namespace, WORKSPACE_PLURAL, workspaceName);
     log('info', `Deleted workspace: ${workspaceName}`);
     return jsonResponse({ message: 'Workspace deleted successfully' });
   } catch (error) {

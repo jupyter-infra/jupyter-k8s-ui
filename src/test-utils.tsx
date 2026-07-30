@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import type { Workspace } from './types';
 import { OWNER_ANNOTATION } from './utils/workspace';
+import { NamespaceProvider, namespaceKeys } from './context/NamespaceContext';
 
 export function makeQueryClient() {
   return new QueryClient({
@@ -17,12 +18,24 @@ export function makeQueryClient() {
 export interface TestProvidersOptions {
   queryClient?: QueryClient;
   initialEntries?: string[];
+  // Seeds the active namespace so namespaced hooks resolve without a network bootstrap.
+  namespace?: string;
 }
 
-export function TestProviders({ children, queryClient = makeQueryClient(), initialEntries = ['/'] }: TestProvidersOptions & { children: ReactNode }) {
+export function TestProviders({
+  children,
+  queryClient = makeQueryClient(),
+  initialEntries = ['/'],
+  namespace = 'default',
+}: TestProvidersOptions & { children: ReactNode }) {
+  // Pre-seed the cheap bootstrap query so NamespaceProvider resolves activeNamespace
+  // synchronously (no fetch to /api/v1/my-namespace in unit tests).
+  queryClient.setQueryData(namespaceKeys.active, { active: namespace });
   return (
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
+      <MemoryRouter initialEntries={initialEntries}>
+        <NamespaceProvider>{children}</NamespaceProvider>
+      </MemoryRouter>
     </QueryClientProvider>
   );
 }

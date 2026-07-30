@@ -1,4 +1,4 @@
-import { describe, test, expect, mock, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect, mock, beforeEach, afterEach, beforeAll, afterAll } from 'bun:test';
 import { StrictMode } from 'react';
 import { render, screen, cleanup, fireEvent, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -45,6 +45,7 @@ mock.module('../components/workspace/yaml-editor/YamlEditor', () => ({
 }));
 
 const { WorkspaceCreate } = await import('./WorkspaceCreate');
+const { NamespaceProvider, namespaceKeys } = await import('../context/NamespaceContext');
 
 // Drain pending async state updates (React Query results settling, the post-submit
 // navigate()/isPending flip) inside act(), so a trailing update from a finished test doesn't
@@ -62,6 +63,9 @@ const realFetch = globalThis.fetch;
 
 async function renderCreate() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  // Seed the namespace bootstrap so NamespaceProvider resolves synchronously to user-ns
+  // (the templates fixture's own namespace); global fetch is stubbed only for /me.
+  client.setQueryData(namespaceKeys.active, { active: 'user-ns' });
   let result!: ReturnType<typeof render>;
   // Render AND settle the initial async effects (auth /me fetch, templates query, the
   // resulting picker auto-select + MUI InputBase mount effects) inside one act(), so none
@@ -72,7 +76,9 @@ async function renderCreate() {
         <QueryClientProvider client={client}>
           <AuthProvider>
             <MemoryRouter initialEntries={['/create']}>
-              <WorkspaceCreate />
+              <NamespaceProvider>
+                <WorkspaceCreate />
+              </NamespaceProvider>
             </MemoryRouter>
           </AuthProvider>
         </QueryClientProvider>
@@ -82,6 +88,27 @@ async function renderCreate() {
   });
   return result;
 }
+
+// MUI's Popover (the template combobox menu) console.warns when it can't measure the anchor's
+// layout — which happy-dom never computes. Environment noise, not a defect (never fires in a
+// real browser). Filter ONLY that message so genuine console output still surfaces.
+const realConsoleWarn = console.warn;
+const realConsoleError = console.error;
+const isAnchorNoise = (args: unknown[]) => typeof args[0] === 'string' && args[0].includes('anchorEl');
+beforeAll(() => {
+  console.warn = (...args: unknown[]) => {
+    if (isAnchorNoise(args)) return;
+    realConsoleWarn(...args);
+  };
+  console.error = (...args: unknown[]) => {
+    if (isAnchorNoise(args)) return;
+    realConsoleError(...args);
+  };
+});
+afterAll(() => {
+  console.warn = realConsoleWarn;
+  console.error = realConsoleError;
+});
 
 describe('create via inline YAML toggle', () => {
   beforeEach(() => {
@@ -130,6 +157,22 @@ describe('create via inline YAML toggle', () => {
 
     // The thrown error is caught and rendered in the status panel, not swallowed.
     expect(await screen.findByText(/failed to fetch/i)).toBeDefined();
+  });
+
+  test('Validate dry-runs against the ACTIVE namespace, not the default', async () => {
+    // The dry-run must target the same namespace Save writes to (NamespaceProvider resolves
+    // to user-ns here). A missing 3rd arg regresses this: the server falls back to the
+    // configured default and validates the wrong namespace's bounds/name-collision.
+    await renderCreate();
+
+    fireEvent.click(screen.getByRole('button', { name: /^yaml editor$/i }));
+    await screen.findByTestId('yaml-editor');
+
+    fireEvent.click(screen.getByRole('button', { name: /^validate$/i }));
+
+    await waitFor(() => expect(validateSpy).toHaveBeenCalledTimes(1));
+    // validateWorkspace(payload, mode, ns) — the active namespace rides as the 3rd arg.
+    expect(validateSpy.mock.calls[0][2]).toBe('user-ns');
   });
 });
 

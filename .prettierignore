@@ -2,3 +2,7 @@ dist
 node_modules
 *.lock
 coverage
+
+# Helm chart templates are Go templates, not valid YAML — prettier can't parse the
+# {{ ... }} directives. The rendered output is validated by `helm template` instead.
+e2e/fixtures/**/templates/*.yaml

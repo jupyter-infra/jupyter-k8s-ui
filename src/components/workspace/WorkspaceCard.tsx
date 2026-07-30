@@ -180,7 +180,7 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
         <ConfirmDialog
           open={deleteDialogOpen}
           title={strings.workspace.deleteTitle}
-          message={strings.workspace.deleteMessage(spec.displayName ?? metadata.name)}
+          message={strings.workspace.deleteMessage(spec.displayName ?? metadata.name, metadata.namespace)}
           confirmLabel={strings.common.delete}
           onConfirm={handleDeleteConfirm}
           onCancel={handleCancelDelete}

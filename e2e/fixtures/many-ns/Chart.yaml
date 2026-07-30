@@ -1,0 +1,10 @@
+apiVersion: v2
+name: e2e-many-ns
+description: >-
+  Many-namespace E2E fixture: N labeled (discoverable) + M unlabeled (invisible)
+  namespaces for exercising sa-list discovery, the paginated switcher, and cookie
+  memory at scale. Rendered with `helm template` and applied with kubectl; every
+  object carries the e2e-many-test cleanup label so teardown deletes by label.
+type: application
+version: 0.1.0
+appVersion: '1.0'

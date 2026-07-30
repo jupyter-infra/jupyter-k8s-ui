@@ -19,7 +19,7 @@ mock.module('../k8s/config', () => ({
 }));
 
 mock.module('../k8s/client', () => ({
-  createUserK8sClient: async () => ({
+  reuseOrCreateUserK8sClient: async () => ({
     listNamespacedCustomObject: mockedK8s.list,
     getNamespacedCustomObject: mockedK8s.get,
     createNamespacedCustomObject: mockedK8s.create,
@@ -69,13 +69,13 @@ beforeEach(() => {
 
 describe('handleCreateWorkspace', () => {
   test('rejects invalid workspace names with 400 before calling K8s', async () => {
-    const res = await handleCreateWorkspace('jwt', jsonRequest({ name: 'Invalid_Name' }));
+    const res = await handleCreateWorkspace('jwt', 'test-ns', jsonRequest({ name: 'Invalid_Name' }));
     expect(res.status).toBe(400);
     expect(mockedK8s.create).not.toHaveBeenCalled();
   });
 
   test('defaults missing spec fields to Running/Public/OwnerOnly and uses name as displayName fallback', async () => {
-    await handleCreateWorkspace('jwt', jsonRequest({ name: 'my-ws' }));
+    await handleCreateWorkspace('jwt', 'test-ns', jsonRequest({ name: 'my-ws' }));
 
     const obj = lastCreated();
     expect(obj.spec.displayName).toBe('my-ws');
@@ -87,6 +87,7 @@ describe('handleCreateWorkspace', () => {
   test('only includes optional spec fields when provided', async () => {
     await handleCreateWorkspace(
       'jwt',
+      'test-ns',
       jsonRequest({
         name: 'ws',
         resources: { limits: { cpu: '2' } },
@@ -106,6 +107,7 @@ describe('handleCreateWorkspace', () => {
   test('renames idleShutdown.timeoutInMinutes to idleTimeoutInMinutes', async () => {
     await handleCreateWorkspace(
       'jwt',
+      'test-ns',
       jsonRequest({
         name: 'ws',
         idleShutdown: { enabled: true, timeoutInMinutes: 30 },
@@ -117,7 +119,7 @@ describe('handleCreateWorkspace', () => {
   });
 
   test('sends workspace into configured namespace', async () => {
-    await handleCreateWorkspace('jwt', jsonRequest({ name: 'ws' }));
+    await handleCreateWorkspace('jwt', 'test-ns', jsonRequest({ name: 'ws' }));
     const obj = lastCreated();
     expect(obj.metadata.namespace).toBe('test-ns');
   });
@@ -125,14 +127,14 @@ describe('handleCreateWorkspace', () => {
   // The simple-create branch must spread templateRef + image into the spec (it
   // previously spread templateRef on the advanced branch only).
   test('spreads templateRef and image from the simple-form body into the spec', async () => {
-    await handleCreateWorkspace('jwt', jsonRequest({ name: 'ws', templateRef: { name: 'gpu', namespace: 'shared' }, image: 'custom:2' }));
+    await handleCreateWorkspace('jwt', 'test-ns', jsonRequest({ name: 'ws', templateRef: { name: 'gpu', namespace: 'shared' }, image: 'custom:2' }));
     const obj = lastCreated();
     expect(obj.spec.templateRef).toEqual({ name: 'gpu', namespace: 'shared' });
     expect(obj.spec.image).toBe('custom:2');
   });
 
   test('omits templateRef and image when the simple-form body lacks them', async () => {
-    await handleCreateWorkspace('jwt', jsonRequest({ name: 'ws' }));
+    await handleCreateWorkspace('jwt', 'test-ns', jsonRequest({ name: 'ws' }));
     const obj = lastCreated();
     expect(obj.spec).not.toHaveProperty('templateRef');
     expect(obj.spec).not.toHaveProperty('image');
@@ -142,13 +144,13 @@ describe('handleCreateWorkspace', () => {
   // create — the CRD requires detection whenever idleShutdown is present.
   test('passes idleShutdown.detection through create verbatim', async () => {
     const detection = { httpGet: { path: '/api/status', port: 8888, transport: 'network' } };
-    await handleCreateWorkspace('jwt', jsonRequest({ name: 'ws', idleShutdown: { enabled: true, timeoutInMinutes: 30, detection } }));
+    await handleCreateWorkspace('jwt', 'test-ns', jsonRequest({ name: 'ws', idleShutdown: { enabled: true, timeoutInMinutes: 30, detection } }));
     const obj = lastCreated();
     expect(obj.spec.idleShutdown).toEqual({ enabled: true, idleTimeoutInMinutes: 30, detection });
   });
 
   test('returns 201 on success', async () => {
-    const res = await handleCreateWorkspace('jwt', jsonRequest({ name: 'ws' }));
+    const res = await handleCreateWorkspace('jwt', 'test-ns', jsonRequest({ name: 'ws' }));
     expect(res.status).toBe(201);
   });
 
@@ -156,19 +158,19 @@ describe('handleCreateWorkspace', () => {
   // CRD rejects with a 422. We now reject invalid enums with a 400 at our boundary
   // and never forward them to K8s.
   test('rejects invalid accessType with 400 before calling K8s', async () => {
-    const res = await handleCreateWorkspace('jwt', jsonRequest({ name: 'ws', accessType: 'Private' }));
+    const res = await handleCreateWorkspace('jwt', 'test-ns', jsonRequest({ name: 'ws', accessType: 'Private' }));
     expect(res.status).toBe(400);
     expect(mockedK8s.create).not.toHaveBeenCalled();
   });
 
   test('rejects invalid ownershipType with 400 before calling K8s', async () => {
-    const res = await handleCreateWorkspace('jwt', jsonRequest({ name: 'ws', ownershipType: 'Everyone' }));
+    const res = await handleCreateWorkspace('jwt', 'test-ns', jsonRequest({ name: 'ws', ownershipType: 'Everyone' }));
     expect(res.status).toBe(400);
     expect(mockedK8s.create).not.toHaveBeenCalled();
   });
 
   test('accepts the valid OwnerOnly accessType', async () => {
-    const res = await handleCreateWorkspace('jwt', jsonRequest({ name: 'ws', accessType: 'OwnerOnly' }));
+    const res = await handleCreateWorkspace('jwt', 'test-ns', jsonRequest({ name: 'ws', accessType: 'OwnerOnly' }));
     expect(res.status).toBe(201);
     expect(lastCreated().spec.accessType).toBe('OwnerOnly');
   });
@@ -177,7 +179,7 @@ describe('handleCreateWorkspace', () => {
     mockedK8s.create.mockImplementationOnce(async () => {
       throw Object.assign(new Error('conflict'), { statusCode: 409 });
     });
-    const res = await handleCreateWorkspace('jwt', jsonRequest({ name: 'ws' }));
+    const res = await handleCreateWorkspace('jwt', 'test-ns', jsonRequest({ name: 'ws' }));
     expect(res.status).toBe(409);
   });
 });
@@ -193,7 +195,7 @@ describe('handleUpdateWorkspace', () => {
       },
     }));
 
-    await handleUpdateWorkspace('jwt', 'ws', jsonRequest({ displayName: 'new' }, 'PUT'));
+    await handleUpdateWorkspace('jwt', 'test-ns', 'ws', jsonRequest({ displayName: 'new' }, 'PUT'));
 
     const updated = lastReplaced();
     expect(updated.spec.displayName).toBe('new');
@@ -204,7 +206,7 @@ describe('handleUpdateWorkspace', () => {
   test('renames idleShutdown.timeoutInMinutes on update too', async () => {
     mockedK8s.get.mockImplementationOnce(async () => ({ body: buildK8sWorkspace('ws') }));
 
-    await handleUpdateWorkspace('jwt', 'ws', jsonRequest({ idleShutdown: { enabled: true, timeoutInMinutes: 45 } }, 'PATCH'));
+    await handleUpdateWorkspace('jwt', 'test-ns', 'ws', jsonRequest({ idleShutdown: { enabled: true, timeoutInMinutes: 45 } }, 'PATCH'));
 
     const updated = lastReplaced();
     expect(updated.spec.idleShutdown).toEqual({ enabled: true, idleTimeoutInMinutes: 45 });
@@ -216,14 +218,14 @@ describe('handleUpdateWorkspace', () => {
     mockedK8s.get.mockImplementationOnce(async () => ({ body: buildK8sWorkspace('ws') }));
     const detection = { httpGet: { path: '/api/status', port: 8888 } };
 
-    await handleUpdateWorkspace('jwt', 'ws', jsonRequest({ idleShutdown: { enabled: true, timeoutInMinutes: 45, detection } }, 'PATCH'));
+    await handleUpdateWorkspace('jwt', 'test-ns', 'ws', jsonRequest({ idleShutdown: { enabled: true, timeoutInMinutes: 45, detection } }, 'PATCH'));
 
     const updated = lastReplaced();
     expect(updated.spec.idleShutdown).toEqual({ enabled: true, idleTimeoutInMinutes: 45, detection });
   });
 
   test('rejects invalid accessType with 400 before touching K8s', async () => {
-    const res = await handleUpdateWorkspace('jwt', 'ws', jsonRequest({ accessType: 'Private' }, 'PATCH'));
+    const res = await handleUpdateWorkspace('jwt', 'test-ns', 'ws', jsonRequest({ accessType: 'Private' }, 'PATCH'));
     expect(res.status).toBe(400);
     expect(mockedK8s.get).not.toHaveBeenCalled();
     expect(mockedK8s.replace).not.toHaveBeenCalled();
@@ -233,7 +235,7 @@ describe('handleUpdateWorkspace', () => {
     mockedK8s.get.mockImplementationOnce(async () => {
       throw Object.assign(new Error('not found'), { statusCode: 404 });
     });
-    const res = await handleUpdateWorkspace('jwt', 'missing', jsonRequest({ displayName: 'x' }, 'PUT'));
+    const res = await handleUpdateWorkspace('jwt', 'test-ns', 'missing', jsonRequest({ displayName: 'x' }, 'PUT'));
     expect(res.status).toBe(404);
     expect(mockedK8s.replace).not.toHaveBeenCalled();
   });
@@ -245,7 +247,7 @@ describe('handleListWorkspaces / handleGetWorkspace / handleDeleteWorkspace', ()
       body: { items: [buildK8sWorkspace('a'), buildK8sWorkspace('b')] },
     }));
 
-    const res = await handleListWorkspaces('jwt');
+    const res = await handleListWorkspaces('jwt', 'test-ns');
     expect(res.status).toBe(200);
     const body = (await res.json()) as Array<{ metadata: { name: string } }>;
     expect(body.map((w) => w.metadata.name)).toEqual(['a', 'b']);
@@ -255,12 +257,12 @@ describe('handleListWorkspaces / handleGetWorkspace / handleDeleteWorkspace', ()
     mockedK8s.get.mockImplementationOnce(async () => {
       throw Object.assign(new Error('nf'), { statusCode: 404 });
     });
-    const res = await handleGetWorkspace('jwt', 'ghost');
+    const res = await handleGetWorkspace('jwt', 'test-ns', 'ghost');
     expect(res.status).toBe(404);
   });
 
   test('delete returns 200 with success message', async () => {
-    const res = await handleDeleteWorkspace('jwt', 'ws');
+    const res = await handleDeleteWorkspace('jwt', 'test-ns', 'ws');
     expect(res.status).toBe(200);
     expect(mockedK8s.del).toHaveBeenCalled();
   });
@@ -281,7 +283,11 @@ const lastReplaceDryRun = (): unknown => (mockedK8s.replace.mock.calls.at(-1) as
 
 describe('advanced create (raw spec)', () => {
   test('uses the raw spec verbatim instead of building from form fields', async () => {
-    await handleCreateWorkspace('jwt', advancedRequest({ name: 'adv-ws', spec: { displayName: 'Adv', image: 'custom:1', env: [{ name: 'X', value: 'y' }] } }));
+    await handleCreateWorkspace(
+      'jwt',
+      'test-ns',
+      advancedRequest({ name: 'adv-ws', spec: { displayName: 'Adv', image: 'custom:1', env: [{ name: 'X', value: 'y' }] } }),
+    );
     const obj = lastCreated();
     expect(obj.spec.image).toBe('custom:1');
     expect(obj.spec.env).toEqual([{ name: 'X', value: 'y' }]);
@@ -290,13 +296,13 @@ describe('advanced create (raw spec)', () => {
   });
 
   test('merges the hoisted templateRef into the spec', async () => {
-    await handleCreateWorkspace('jwt', advancedRequest({ name: 'adv-ws', templateRef: { name: 'gpu-small' }, spec: { displayName: 'Adv' } }));
+    await handleCreateWorkspace('jwt', 'test-ns', advancedRequest({ name: 'adv-ws', templateRef: { name: 'gpu-small' }, spec: { displayName: 'Adv' } }));
     const obj = lastCreated();
     expect(obj.spec.templateRef).toEqual({ name: 'gpu-small' });
   });
 
   test('still validates the workspace name', async () => {
-    const res = await handleCreateWorkspace('jwt', advancedRequest({ name: 'Bad_Name', spec: { displayName: 'x' } }));
+    const res = await handleCreateWorkspace('jwt', 'test-ns', advancedRequest({ name: 'Bad_Name', spec: { displayName: 'x' } }));
     expect(res.status).toBe(400);
     expect(mockedK8s.create).not.toHaveBeenCalled();
   });
@@ -304,20 +310,20 @@ describe('advanced create (raw spec)', () => {
 
 describe('dry-run threading', () => {
   test('create passes dryRun=All to the client and returns {valid:true} without a resource', async () => {
-    const res = await handleCreateWorkspace('jwt', advancedRequest({ name: 'adv-ws', spec: { displayName: 'x' } }, 'POST', true));
+    const res = await handleCreateWorkspace('jwt', 'test-ns', advancedRequest({ name: 'adv-ws', spec: { displayName: 'x' } }, 'POST', true));
     expect(lastCreateDryRun()).toBe('All');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ valid: true });
   });
 
   test('create without dryRun passes undefined and returns the created resource (201)', async () => {
-    const res = await handleCreateWorkspace('jwt', advancedRequest({ name: 'adv-ws', spec: { displayName: 'x' } }));
+    const res = await handleCreateWorkspace('jwt', 'test-ns', advancedRequest({ name: 'adv-ws', spec: { displayName: 'x' } }));
     expect(lastCreateDryRun()).toBeUndefined();
     expect(res.status).toBe(201);
   });
 
   test('update passes dryRun=All and returns {valid:true}', async () => {
-    const res = await handleUpdateWorkspace('jwt', 'ws-1', advancedRequest({ name: 'ws-1', spec: { displayName: 'x' } }, 'PUT', true));
+    const res = await handleUpdateWorkspace('jwt', 'test-ns', 'ws-1', advancedRequest({ name: 'ws-1', spec: { displayName: 'x' } }, 'PUT', true));
     expect(lastReplaceDryRun()).toBe('All');
     expect(await res.json()).toEqual({ valid: true });
   });
@@ -327,7 +333,7 @@ describe('advanced update does a full spec replace', () => {
   test('replaces the whole spec so removed fields disappear', async () => {
     // Existing ws-1 has { displayName, desiredStatus }. Advanced update sends only
     // displayName — desiredStatus must NOT survive (WYSIWYG replace, not merge).
-    await handleUpdateWorkspace('jwt', 'ws-1', advancedRequest({ name: 'ws-1', spec: { displayName: 'only-this' } }, 'PUT'));
+    await handleUpdateWorkspace('jwt', 'test-ns', 'ws-1', advancedRequest({ name: 'ws-1', spec: { displayName: 'only-this' } }, 'PUT'));
     const obj = lastReplaced();
     expect(obj.spec).toEqual({ displayName: 'only-this' });
     expect(obj.spec).not.toHaveProperty('desiredStatus');
@@ -335,7 +341,7 @@ describe('advanced update does a full spec replace', () => {
 
   test('simple-form update still merges (desiredStatus preserved)', async () => {
     // Contrast: the field-shaped body overlays onto the existing spec.
-    await handleUpdateWorkspace('jwt', 'ws-1', jsonRequest({ displayName: 'merged' }, 'PUT'));
+    await handleUpdateWorkspace('jwt', 'test-ns', 'ws-1', jsonRequest({ displayName: 'merged' }, 'PUT'));
     const obj = lastReplaced();
     expect(obj.spec.displayName).toBe('merged');
     expect(obj.spec.desiredStatus).toBe('Running'); // preserved from existing

@@ -34,19 +34,25 @@ mock.module('./YamlEditor', () => ({
 }));
 
 const { WorkspaceAdvancedEditor } = await import('../../../pages/WorkspaceAdvancedEditor');
+const { NamespaceProvider, namespaceKeys } = await import('../../../context/NamespaceContext');
 
 // AuthProvider fetches /api/v1/me; stub global fetch to report `alice` (the WS owner).
 const realFetch = globalThis.fetch;
 
 function editPageTree(client: QueryClient) {
+  // Seed the namespace bootstrap so NamespaceProvider resolves synchronously (global fetch
+  // is stubbed for /me, not for the namespace endpoint).
+  client.setQueryData(namespaceKeys.active, { active: 'default' });
   return (
     <StrictMode>
       <QueryClientProvider client={client}>
         <AuthProvider>
           <MemoryRouter initialEntries={['/workspace/my-ws/edit']}>
-            <Routes>
-              <Route path="/workspace/:name/edit" element={<WorkspaceAdvancedEditor />} />
-            </Routes>
+            <NamespaceProvider>
+              <Routes>
+                <Route path="/workspace/:name/edit" element={<WorkspaceAdvancedEditor />} />
+              </Routes>
+            </NamespaceProvider>
           </MemoryRouter>
         </AuthProvider>
       </QueryClientProvider>

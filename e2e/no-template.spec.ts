@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { expectOnPath } from './test-utils';
 import { execFileSync } from 'node:child_process';
 
 // No-template create flow: when NO WorkspaceTemplate is flagged the default, the picker
@@ -107,7 +108,7 @@ test.describe('No-template create', () => {
     await page.getByRole('combobox', { name: /image/i }).fill('nginx:latest');
 
     await page.getByRole('button', { name: /create workspace/i }).click();
-    await expect(page).toHaveURL('/', { timeout: 10_000 });
+    await expectOnPath(page);
 
     await page.getByRole('button', { name: /all/i }).click();
     await waitForCardStatus(page, WS_NAME, 'Running');

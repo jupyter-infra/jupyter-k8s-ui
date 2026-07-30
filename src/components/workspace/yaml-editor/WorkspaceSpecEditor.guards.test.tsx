@@ -37,19 +37,23 @@ mock.module('./YamlEditor', () => ({
 }));
 
 const { WorkspaceAdvancedEditor } = await import('../../../pages/WorkspaceAdvancedEditor');
+const { NamespaceProvider, namespaceKeys } = await import('../../../context/NamespaceContext');
 
 const realFetch = globalThis.fetch;
 
 function renderEditPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  client.setQueryData(namespaceKeys.active, { active: 'default' });
   return render(
     <StrictMode>
       <QueryClientProvider client={client}>
         <AuthProvider>
           <MemoryRouter initialEntries={['/workspace/my-ws/edit']}>
-            <Routes>
-              <Route path="/workspace/:name/edit" element={<WorkspaceAdvancedEditor />} />
-            </Routes>
+            <NamespaceProvider>
+              <Routes>
+                <Route path="/workspace/:name/edit" element={<WorkspaceAdvancedEditor />} />
+              </Routes>
+            </NamespaceProvider>
           </MemoryRouter>
         </AuthProvider>
       </QueryClientProvider>

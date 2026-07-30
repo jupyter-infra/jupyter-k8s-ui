@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { expectOnPath } from './test-utils';
 
 // Free-solo image path: a template with allowCustomImages:true AND a curated allowedImages
 // list (e2e/fixtures/custom-image-template.yaml). The image control must be an editable
@@ -75,7 +76,7 @@ test.describe('Custom-image (free-solo) template', () => {
     await imageField.fill('nginx:1.27');
 
     await page.getByRole('button', { name: /create workspace/i }).click();
-    await expect(page).toHaveURL('/', { timeout: 10_000 });
+    await expectOnPath(page);
 
     await page.getByRole('button', { name: /all/i }).click();
     await waitForCardStatus(page, WS_NAME, 'Running');

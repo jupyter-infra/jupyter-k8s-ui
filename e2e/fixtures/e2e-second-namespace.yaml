@@ -1,0 +1,80 @@
+# A second workspace-enabled namespace for the namespace-switcher E2E tests. The e2e-test
+# SA gets the same workspace RBAC here as in `default`, so the switcher can list/create in
+# both. The namespace also carries the discovery label so a cluster that DOES grant the SA
+# cluster-wide namespace list would surface it via sa-list too (E2E uses the static list).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: e2e-team-b
+  labels:
+    workspace.jupyter.org/workspaces-enabled: 'true'
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: e2e-workspace-user
+  namespace: e2e-team-b
+rules:
+  - apiGroups: ['workspace.jupyter.org']
+    resources: ['workspaces']
+    verbs: ['get', 'list', 'create', 'update', 'patch', 'delete']
+  - apiGroups: ['workspace.jupyter.org']
+    resources: ['workspacetemplates']
+    verbs: ['get', 'list']
+  - apiGroups: ['workspace.jupyter.org']
+    resources: ['workspaceaccessstrategies']
+    verbs: ['get', 'list']
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: e2e-test-binding
+  namespace: e2e-team-b
+subjects:
+  - kind: ServiceAccount
+    name: e2e-test
+    namespace: default
+roleRef:
+  kind: Role
+  name: e2e-workspace-user
+  apiGroup: rbac.authorization.k8s.io
+---
+# An own-namespace template for e2e-team-b, so its picker shows a namespace-scoped template
+# (team-b-template) that is ABSENT from `default`'s picker. Combined with the shared
+# template (visible everywhere), this proves the own-ns ∪ shared merge is namespace-scoped.
+# Flagged default so it preselects in e2e-team-b (own-ns default wins over shared).
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: team-b-template
+  namespace: e2e-team-b
+  labels:
+    workspace.jupyter.org/default-template: 'true'
+spec:
+  displayName: Team B Template
+  description: An own-namespace template scoped to e2e-team-b (E2E)
+  appType: jupyterlab
+  defaultImage: nginx:latest
+  allowedImages:
+    - nginx:latest
+    - nginx:1.27
+  defaultResources:
+    requests:
+      cpu: '100m'
+      memory: '128Mi'
+    limits:
+      cpu: '500m'
+      memory: '512Mi'
+  resourceBounds:
+    resources:
+      cpu:
+        min: '100m'
+        max: '2'
+      memory:
+        min: '128Mi'
+        max: '2Gi'
+  primaryStorage:
+    defaultSize: '1Gi'
+    minSize: '1Gi'
+    maxSize: '10Gi'
+    defaultMountPath: '/data'

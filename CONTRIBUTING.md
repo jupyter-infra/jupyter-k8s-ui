@@ -60,6 +60,14 @@ Thank you for your interest in contributing! This guide will help you get starte
 
 > **Token expiry:** If API calls return 401, re-run `make refresh-token`.
 
+**Testing the namespace switcher:** discovery needs a ServiceAccount that can list namespaces, which the local server lacks.
+
+- generate a cluster admin `kubeconfig`
+- run `make dev-sa-kubeconfig` to mint a web-app SA token
+- start the server with `KUBECONFIG=/tmp/jupyter-k8s-ui-dev-sa.kubeconfig make dev-full`
+
+Then generate a user's K8s token as described above and run `make refresh-token` to save it.
+
 To let a collaborator reach your local build over the network, run `make serve-host`. It builds and serves the whole app (UI + API) on all interfaces. However, in dev mode every request uses **your** token, so only share the URL with someone you trust and don't leave it running.
 
 Run `make help` to see all available targets.

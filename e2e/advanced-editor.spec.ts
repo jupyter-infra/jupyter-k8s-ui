@@ -1,4 +1,5 @@
 import { test, expect, request as playwrightRequest, type Page } from '@playwright/test';
+import { expectOnPath } from './test-utils';
 
 // Unique prefix per run to avoid collisions with other specs / prior runs.
 const RUN_ID = `e2e-adv-${Date.now()}`;
@@ -148,7 +149,7 @@ test.describe('Advanced YAML editor', () => {
     await setEditorYaml(page, 'desiredStatus: Running\n');
 
     await page.getByRole('button', { name: /create workspace/i }).click();
-    await expect(page).toHaveURL('/', { timeout: 10_000 });
+    await expectOnPath(page);
 
     await page.getByRole('button', { name: /all/i }).click();
     await expect(page.getByLabel(new RegExp(`${name}.*workspace`, 'i'))).toBeVisible({ timeout: 10_000 });
@@ -202,7 +203,7 @@ test.describe('Advanced YAML editor', () => {
     // displayName is edited via its field now, not the YAML buffer.
     await page.getByRole('textbox', { name: /display name/i }).fill('Renamed Adv');
     await page.getByRole('button', { name: /save changes/i }).click();
-    await expect(page).toHaveURL('/', { timeout: 10_000 });
+    await expectOnPath(page);
 
     // Detail page reflects the new displayName after refetch.
     await page.goto(`/workspace/${name}`);
@@ -403,7 +404,7 @@ test.describe('Advanced editor — entry points', () => {
     const createBtn = page.getByRole('button', { name: /create workspace/i });
     await expect(createBtn).toBeEnabled();
     await createBtn.click();
-    await expect(page).toHaveURL('/', { timeout: 10_000 });
+    await expectOnPath(page);
     await page.getByRole('button', { name: /all/i }).click();
     await waitForCardStatus(page, STOPPED_WS, 'Stopped');
     await page.close();
@@ -449,8 +450,9 @@ test.describe('Advanced editor — entry points', () => {
   test('create-page YAML editor button reveals the advanced create editor inline', async ({ page }) => {
     await page.goto('/create');
     await page.getByRole('button', { name: /^yaml editor$/i }).click();
-    // No route change — the editor replaces the sliders in place.
-    await expect(page).toHaveURL(/\/create$/);
+    // No route change — the editor replaces the sliders in place. The URL may carry a
+    // ?namespace= param (canonicalized by NamespaceContext); assert only the pathname.
+    await expectOnPath(page, { path: '/create' });
     await waitForEditor(page);
   });
 
@@ -460,7 +462,7 @@ test.describe('Advanced editor — entry points', () => {
     // Scope to the advanced box's "use kubectl" link — the layout nav also links to
     // /kubectl, so an unscoped /kubectl/i match would be ambiguous.
     await page.getByRole('link', { name: /use kubectl/i }).click();
-    await expect(page).toHaveURL(/\/kubectl$/);
+    await expectOnPath(page, { path: '/kubectl' });
     await expect(page.getByRole('heading', { name: /kubectl access/i })).toBeVisible({ timeout: 10_000 });
   });
 
