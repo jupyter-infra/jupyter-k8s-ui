@@ -23,6 +23,9 @@ interface WorkspaceCardProps {
   workspace: Workspace;
 }
 
+// Stored quantities need not be step-clean (e.g. "1G" parses to 0.9313… Gi); round for display.
+const round2 = (v: number) => Math.round(v * 100) / 100;
+
 export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -114,12 +117,12 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
           <Stack direction="row" gap={2} sx={{ color: 'text.secondary', flexWrap: 'wrap' }}>
             <Stack direction="row" alignItems="center" gap={0.5}>
               <Speed sx={{ fontSize: 16 }} />
-              <Typography variant="caption">{spec.resources?.limits?.cpu ? `${parseCpuCores(spec.resources.limits.cpu, 0)} CPU` : '— CPU'}</Typography>
+              <Typography variant="caption">{spec.resources?.limits?.cpu ? `${round2(parseCpuCores(spec.resources.limits.cpu, 0))} CPU` : '— CPU'}</Typography>
             </Stack>
             <Stack direction="row" alignItems="center" gap={0.5}>
               <Memory sx={{ fontSize: 16 }} />
               <Typography variant="caption">
-                {spec.resources?.limits?.memory ? `${parseMemoryGi(spec.resources.limits.memory, 0)} ${strings.common.gb}` : '—'}
+                {spec.resources?.limits?.memory ? `${round2(parseMemoryGi(spec.resources.limits.memory, 0))} ${strings.common.gb}` : '—'}
               </Typography>
             </Stack>
             {acceleratorLimits(spec.resources?.limits).map(([key, count]) => (
@@ -132,7 +135,7 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
             ))}
             <Stack direction="row" alignItems="center" gap={0.5}>
               <Storage sx={{ fontSize: 16 }} />
-              <Typography variant="caption">{spec.storage?.size ? `${parseMemoryGi(spec.storage.size, 0)} ${strings.common.gb}` : '—'}</Typography>
+              <Typography variant="caption">{spec.storage?.size ? `${round2(parseMemoryGi(spec.storage.size, 0))} ${strings.common.gb}` : '—'}</Typography>
             </Stack>
           </Stack>
         </CardContent>
