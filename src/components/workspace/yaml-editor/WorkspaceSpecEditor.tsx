@@ -6,6 +6,7 @@ import { useWorkspace, useCrdSchema, useCreateWorkspaceAdvanced, useReplaceWorks
 import { apiClient, type ValidationResult } from '../../../api/client';
 import { ApiError } from '../../../api/auth-interceptor';
 import { useAuth } from '../../../context';
+import { useNamespace } from '../../../context/NamespaceContext';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import { TemplateSelect } from './TemplateSelect';
 import { TemplateGuidancePanel } from './TemplateGuidancePanel';
@@ -134,6 +135,11 @@ export function WorkspaceSpecEditor({
   const { user } = useAuth();
   const createMutation = useCreateWorkspaceAdvanced();
   const replaceMutation = useReplaceWorkspaceAdvanced();
+  // Validate must dry-run against the SAME namespace Save writes to (the advanced Save hooks
+  // thread activeNamespace). Omitting it makes the server fall back to the configured default,
+  // so admission webhooks / name-collision run against the wrong namespace — a misleading
+  // "valid" on create, or a spurious 404 on edit where the object doesn't exist there.
+  const { activeNamespace } = useNamespace();
 
   // `templateRef` lives outside the buffer as a structured control: keeping it here
   // lets a template change be a discrete event we react to (guidance panel + scaffold
@@ -298,7 +304,7 @@ export function WorkspaceSpecEditor({
     setValidating(true);
     setDryRun(null);
     try {
-      const result = await apiClient.validateWorkspace(payload, mode);
+      const result = await apiClient.validateWorkspace(payload, mode, activeNamespace);
       setDryRun(result);
     } catch (err) {
       // validateWorkspace turns HTTP error *responses* into a result, but a failed
@@ -308,7 +314,7 @@ export function WorkspaceSpecEditor({
     } finally {
       setValidating(false);
     }
-  }, [buildPayload, mode, ws.advancedValidateRequestFailed]);
+  }, [buildPayload, mode, activeNamespace, ws.advancedValidateRequestFailed]);
 
   // Save is the real create/replace. On edit it's a full-spec REPLACE (buffer is the
   // desired spec, so removed fields are actually removed). A server validation failure

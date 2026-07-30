@@ -158,6 +158,22 @@ describe('create via inline YAML toggle', () => {
     // The thrown error is caught and rendered in the status panel, not swallowed.
     expect(await screen.findByText(/failed to fetch/i)).toBeDefined();
   });
+
+  test('Validate dry-runs against the ACTIVE namespace, not the default', async () => {
+    // The dry-run must target the same namespace Save writes to (NamespaceProvider resolves
+    // to user-ns here). A missing 3rd arg regresses this: the server falls back to the
+    // configured default and validates the wrong namespace's bounds/name-collision.
+    await renderCreate();
+
+    fireEvent.click(screen.getByRole('button', { name: /^yaml editor$/i }));
+    await screen.findByTestId('yaml-editor');
+
+    fireEvent.click(screen.getByRole('button', { name: /^validate$/i }));
+
+    await waitFor(() => expect(validateSpy).toHaveBeenCalledTimes(1));
+    // validateWorkspace(payload, mode, ns) — the active namespace rides as the 3rd arg.
+    expect(validateSpy.mock.calls[0][2]).toBe('user-ns');
+  });
 });
 
 describe('template-aware simple create', () => {
