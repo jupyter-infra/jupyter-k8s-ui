@@ -388,7 +388,7 @@ describe('accelerator axes in simple create', () => {
     expect(p.resources?.limits && 'nvidia.com/gpu' in p.resources.limits).toBe(false);
   });
 
-  test('switching to a template without gpu bounds unmounts the axis and cleans the payload', async () => {
+  test('switching templates unmounts the axis, cleans the payload, and re-selecting re-adopts the default', async () => {
     templatesResponse = {
       items: [gpuTemplate(), tmplFixture({ defaultImage: 'nginx:1' }, 'plain-tmpl')],
       access: { user: 'ok', shared: 'ok' },
@@ -396,7 +396,6 @@ describe('accelerator axes in simple create', () => {
     };
     await renderCreate();
     fireEvent.click(await screen.findByRole('button', { name: /select gpu-tmpl template/i }));
-    // Touch the axis so the stale-touch pruning path is what's under test.
     fireEvent.change(screen.getByRole('slider', { name: 'GPU' }), { target: { value: '2' } });
     fireEvent.click(screen.getByRole('button', { name: /select plain-tmpl template/i }));
 
@@ -405,6 +404,11 @@ describe('accelerator axes in simple create', () => {
     await waitFor(() => expect(createSimpleSpy).toHaveBeenCalledTimes(1));
     const p = lastSimplePayload();
     expect(p.resources?.limits && 'nvidia.com/gpu' in p.resources.limits).toBe(false);
+
+    // The touch from before the switch must not survive the unmount: re-selecting the gpu
+    // template re-adopts its default (1); a stale touch would clamp the dropped value to 0.
+    fireEvent.click(screen.getByRole('button', { name: /select gpu-tmpl template/i }));
+    expect((screen.getByRole('slider', { name: 'GPU' }) as HTMLInputElement).value).toBe('1');
   });
 
   test('no template renders no accelerator axes', async () => {
