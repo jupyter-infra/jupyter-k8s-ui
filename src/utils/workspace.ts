@@ -1,4 +1,5 @@
 import type { Workspace } from '../types';
+import { ACCELERATOR_EXCLUDED_PREFIX } from '../constants';
 
 // Workspace status helpers
 
@@ -87,6 +88,18 @@ export function parseQuantity(value: string): number | null {
  * Memory values are returned as Gi (e.g. "2Gi" → 2, "512Mi" → 0.5).
  * For GPU or unknown resources, returns the plain numeric value.
  */
+// Accelerator entries ([key, count]) present in a limits map: every key that isn't
+// cpu/memory or a hugepages-* byte quantity. Display helper for cards/details; sorted by
+// key for a stable render order.
+export function acceleratorLimits(limits: Record<string, string | undefined> | undefined): Array<[string, string]> {
+  return Object.entries(limits ?? {})
+    .filter((entry): entry is [string, string] => {
+      const [key, value] = entry;
+      return value !== undefined && key !== 'cpu' && key !== 'memory' && !key.startsWith(ACCELERATOR_EXCLUDED_PREFIX);
+    })
+    .sort(([a], [b]) => a.localeCompare(b));
+}
+
 export function parseResourceValue(value: string | undefined, fallback: number): number {
   if (!value) return fallback;
   const base = parseQuantity(value);

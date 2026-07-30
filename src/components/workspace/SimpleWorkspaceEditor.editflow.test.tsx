@@ -127,6 +127,30 @@ describe('SimpleWorkspaceEditor', () => {
     expect(p.resources?.requests?.memory).toBe('1Gi');
   });
 
+  test('resource keys the form does not model survive a slider save (limits and requests)', async () => {
+    // Extended resources set outside the form (advanced editor) are invisible to it when
+    // the template declares no such axis; the server replaces spec.resources wholesale,
+    // so the rebuilt block must carry them verbatim (#55).
+    await renderEditor(
+      baseWorkspace({
+        resources: {
+          limits: { cpu: '2', memory: '4Gi', 'nvidia.com/gpu': '1' },
+          requests: { cpu: '500m', memory: '1Gi', 'nvidia.com/gpu': '1' },
+        },
+      }),
+    );
+    await screen.findByText(/^resources$/i);
+    const cpuSlider = screen.getByRole('slider', { name: /cpu/i });
+    fireEvent.change(cpuSlider, { target: { value: '3' } });
+    save();
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    const p = lastPayload();
+    expect(p.resources?.limits?.['nvidia.com/gpu']).toBe('1');
+    expect(p.resources?.requests?.['nvidia.com/gpu']).toBe('1');
+    expect(p.resources?.limits?.cpu).toBe('3'); // modeled keys still rebuilt from the sliders
+  });
+
   test('storage is read-only on edit (no storage slider, storage never in payload)', async () => {
     await renderEditor(baseWorkspace());
     await screen.findByText(/^resources$/i);

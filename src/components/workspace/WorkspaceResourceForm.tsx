@@ -28,7 +28,7 @@ import {
   Tooltip,
   Autocomplete,
 } from '@mui/material';
-import { Memory, Storage, DeveloperBoard, LockOutlined } from '@mui/icons-material';
+import { Speed, Memory, Storage, DeveloperBoard, LockOutlined } from '@mui/icons-material';
 import { ResourceSlider } from '../ui/ResourceSlider';
 import { strings } from '../../constants';
 import type { ResolvedTemplateControls } from '../../utils';
@@ -141,7 +141,7 @@ export function WorkspaceResourceForm({ controls, values, onChange, storageReadO
         <Stack spacing={2} padding={3}>
           <Typography variant="subtitle2">{ws.sectionResources}</Typography>
           <ResourceSlider
-            icon={<Memory color="action" fontSize="small" />}
+            icon={<Speed color="action" fontSize="small" />}
             label={ws.resourceCpu}
             value={values.cpu}
             unit={common.cores}
@@ -152,7 +152,7 @@ export function WorkspaceResourceForm({ controls, values, onChange, storageReadO
             onChange={(v) => onChange('cpu', v)}
           />
           <ResourceSlider
-            icon={<Storage color="action" fontSize="small" />}
+            icon={<Memory color="action" fontSize="small" />}
             label={ws.resourceMemory}
             value={values.memory}
             unit={common.gb}
