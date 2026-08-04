@@ -140,4 +140,18 @@ describe('WorkspaceCard accelerator chip', () => {
     expect(screen.getByText('1.5 CPU')).toBeDefined();
     expect(screen.getByText(/^0\.93 GB$/)).toBeDefined();
   });
+
+  test('ephemeral-storage limits never render as accelerator chips (unprefixed keys are built-ins)', () => {
+    const ws = makeWorkspace({ owner: 'alice' });
+    ws.spec.resources = { limits: { cpu: '2', memory: '4Gi', 'ephemeral-storage': '1073741824' } };
+    renderCard(ws);
+    expect(screen.queryByText(/ephemeral-storage/)).toBeNull();
+  });
+
+  test('a tiny nonzero quantity renders as <0.01, never as 0', () => {
+    const ws = makeWorkspace({ owner: 'alice' });
+    ws.spec.resources = { limits: { cpu: '1m', memory: '4Gi' } };
+    renderCard(ws);
+    expect(screen.getByText('<0.01 CPU')).toBeDefined();
+  });
 });

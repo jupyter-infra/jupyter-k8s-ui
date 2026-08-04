@@ -23,8 +23,12 @@ interface WorkspaceCardProps {
   workspace: Workspace;
 }
 
-// Stored quantities need not be step-clean (e.g. "1G" parses to 0.9313… Gi); round for display.
-const round2 = (v: number) => Math.round(v * 100) / 100;
+// Stored quantities need not be step-clean (e.g. "1G" parses to 0.9313… Gi); round for
+// display, but never collapse a nonzero quantity to 0 (a 1m CPU is not "0 CPU").
+const round2 = (v: number): string => {
+  const r = Math.round(v * 100) / 100;
+  return r === 0 && v > 0 ? '<0.01' : `${r}`;
+};
 
 export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
   const { user } = useAuth();
