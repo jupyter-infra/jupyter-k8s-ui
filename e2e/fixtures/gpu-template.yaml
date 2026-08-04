@@ -2,6 +2,9 @@
 # Declares TWO extended-resource keys so the generic per-key loop is what gets tested,
 # not one vendor: nvidia.com/gpu (friendly label + non-zero default → emission needs no
 # slider interaction) and a MIG profile key (raw-label path, default 0 → omitted).
+# Also declares ephemeral-storage, an unprefixed built-in: the classifier must NOT
+# turn it into an accelerator axis (extended resources are exactly the <domain>/<name>
+# keys), and a stored ephemeral-storage limit must survive form saves unmodeled.
 # The spec advertises matching fake node capacity (node-status patch, no hardware
 # needed), so workspaces created from this template schedule and reach Running.
 apiVersion: workspace.jupyter.org/v1alpha1
@@ -29,6 +32,9 @@ spec:
       nvidia.com/mig-1g.5gb:
         min: '0'
         max: '4'
+      ephemeral-storage:
+        min: '0'
+        max: 2Gi
   defaultResources:
     requests:
       cpu: 100m
