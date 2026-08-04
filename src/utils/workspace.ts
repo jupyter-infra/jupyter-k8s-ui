@@ -1,5 +1,4 @@
 import type { Workspace } from '../types';
-import { ACCELERATOR_EXCLUDED_PREFIX } from '../constants';
 
 // Workspace status helpers
 
@@ -95,14 +94,15 @@ export function parseResourceValue(value: string | undefined, fallback: number):
   return base;
 }
 
-// Accelerator entries ([key, count]) present in a limits map: every key that isn't
-// cpu/memory or a hugepages-* byte quantity. Display helper for cards/details; sorted by
-// key for a stable render order.
+// Accelerator entries ([key, count]) present in a limits map: exactly the domain-prefixed
+// keys (<vendor>/<resource>, the K8s extended-resource naming contract). Built-ins
+// (cpu, memory, ephemeral-storage, hugepages-*) are never prefixed. Display helper for
+// cards/details; sorted by key for a stable render order.
 export function acceleratorLimits(limits: Record<string, string | undefined> | undefined): Array<[string, string]> {
   return Object.entries(limits ?? {})
     .filter((entry): entry is [string, string] => {
       const [key, value] = entry;
-      return value !== undefined && key !== 'cpu' && key !== 'memory' && !key.startsWith(ACCELERATOR_EXCLUDED_PREFIX);
+      return value !== undefined && key.includes('/');
     })
     .sort(([a], [b]) => a.localeCompare(b));
 }

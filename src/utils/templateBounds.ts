@@ -15,15 +15,7 @@
 //   Idle: three states (Unavailable / Structure-locked / Interactive).
 
 import type { AccessType, OwnershipType, WorkspaceTemplate, DiscoveredTemplate, IdleDetection } from '../types';
-import {
-  RESOURCE_DEFAULTS,
-  IDLE_SHUTDOWN_DEFAULTS,
-  STATIC_DEFAULTS,
-  resourceBounds,
-  DEFAULT_TEMPLATE_LABEL,
-  ACCELERATOR_LABELS,
-  ACCELERATOR_EXCLUDED_PREFIX,
-} from '../constants';
+import { RESOURCE_DEFAULTS, IDLE_SHUTDOWN_DEFAULTS, STATIC_DEFAULTS, resourceBounds, DEFAULT_TEMPLATE_LABEL, ACCELERATOR_LABELS } from '../constants';
 import { parseCpuCores, parseMemoryGi, parseResourceValue, clamp } from './workspace';
 
 export interface AxisControl {
@@ -133,7 +125,7 @@ function buildAcceleratorControls(spec: WorkspaceTemplate['spec']): AcceleratorC
   const bounds = spec.resourceBounds?.resources ?? {};
   const parseCount = (value: string | undefined, fallback: number) => Math.round(parseResourceValue(value, fallback));
   return Object.entries(bounds)
-    .filter(([key]) => key !== 'cpu' && key !== 'memory' && !key.startsWith(ACCELERATOR_EXCLUDED_PREFIX))
+    .filter(([key]) => key.includes('/'))
     .map(([key, range]) => {
       const label = ACCELERATOR_LABELS[key] ?? key;
       return {

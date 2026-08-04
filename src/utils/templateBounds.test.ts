@@ -330,6 +330,11 @@ describe('resolveTemplateControls — accelerator axes', () => {
     expect(r.accelerators).toEqual([]);
   });
 
+  test('ephemeral-storage bounds are excluded (unprefixed keys are built-ins, not accelerators)', () => {
+    const r = resolveTemplateControls(tmpl({ resourceBounds: { resources: { 'ephemeral-storage': { min: '0', max: '2Gi' } } } }));
+    expect(r.accelerators).toEqual([]);
+  });
+
   test('min > 0 with no template default pins the default to min', () => {
     const r = resolveTemplateControls(tmpl({ resourceBounds: { resources: { 'nvidia.com/gpu': { min: '1', max: '4' } } } }));
     expect(r.accelerators[0].axis).toEqual({ min: 1, max: 4, default: 1, step: 1 });
