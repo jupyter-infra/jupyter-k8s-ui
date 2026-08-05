@@ -128,6 +128,14 @@ export function parseCpuCores(value: string | undefined, fallback: number): numb
   return base;
 }
 
+// Round a parsed quantity for display: stored quantities need not be step-clean (e.g.
+// "1G" parses to 0.9313… Gi), so round to 2 decimals, but never collapse a nonzero
+// quantity to 0 (a 1m CPU is not "0 CPU").
+export const round2 = (v: number): string => {
+  const r = Math.round(v * 100) / 100;
+  return r === 0 && v > 0 ? '<0.01' : `${r}`;
+};
+
 /**
  * Check if the given owner annotation matches the current username.
  * Handles various OIDC provider formats (plain, github:user, provider/user, etc.)
