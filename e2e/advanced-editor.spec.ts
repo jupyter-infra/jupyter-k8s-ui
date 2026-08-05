@@ -126,7 +126,13 @@ async function fillIdentity(page: Page, name: string) {
 async function deleteWorkspace(page: Page, name: string) {
   await page.goto('/');
   await page.getByRole('button', { name: /all/i }).click();
-  const card = page.getByLabel(new RegExp(`${name}.*workspace`, 'i'));
+  // Look the card up by the resource name it displays, not by aria-label: the label is
+  // built from displayName, which the rename test changes, so a label lookup misses the
+  // renamed card and silently leaks the workspace into the cluster.
+  const card = page
+    .getByLabel(/workspace,/i)
+    .filter({ hasText: name })
+    .first();
   if (!(await card.isVisible().catch(() => false))) return;
   await card.getByRole('button', { name: /more options/i }).click();
   await page.getByRole('menuitem', { name: /delete/i }).click();
