@@ -313,7 +313,7 @@ test.describe('Advanced YAML editor', () => {
 
   test('template guidance panel lists every declared accelerator bound', async ({ page }) => {
     await openAdvancedCreate(page);
-    await ensureTemplateSelected(page, 'GPU Template');
+    await ensureTemplateSelected(page, 'gpu-template');
 
     // The Resources pairs list every declared bounds key: a friendly-labeled vendor key,
     // a raw vendor key, and an unprefixed built-in, each with its declared range.
