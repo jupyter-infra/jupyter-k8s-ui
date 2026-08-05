@@ -234,7 +234,7 @@ test.describe('Advanced YAML editor', () => {
     await expect(caution).toHaveCount(0);
   });
 
-  test('editing the YAML buffer and saving persists the spec change (full-spec replace)', async ({ page }) => {
+  test('editing the YAML buffer and saving persists the spec change', async ({ page }) => {
     const name = `${RUN_ID}-create`;
     await page.goto(`/workspace/${name}/edit`);
     await waitForEditor(page);
@@ -250,7 +250,7 @@ test.describe('Advanced YAML editor', () => {
     await page.getByRole('button', { name: /save changes/i }).click();
     await expectOnPath(page);
 
-    // The replaced spec landed: detail shows the new image, and the workspace stayed
+    // The saved spec landed: detail shows the new image, and the workspace stayed
     // Stopped (desiredStatus rode through the buffer unchanged).
     await page.goto(`/workspace/${name}`);
     await expect(page.getByText('nginx:1.27', { exact: true })).toBeVisible({ timeout: 10_000 });
@@ -263,9 +263,9 @@ test.describe('Advanced YAML editor', () => {
     await waitForEditor(page);
 
     // Raise memory (limit and request) beyond the default template's 2Gi cap; the
-    // operator's dry-run must reject it without persisting anything. Poll for the async
-    // buffer seed first, and assert the mutation took so a partial buffer fails loudly
-    // instead of validating unchanged YAML.
+    // operator's dry-run must reject it. Poll for the async buffer seed first, and
+    // assert the mutation took so a partial buffer fails loudly instead of validating
+    // unchanged YAML.
     await expect.poll(async () => getEditorYaml(page), { timeout: 10_000 }).toContain('memory:');
     const yaml = await getEditorYaml(page);
     const mutated = yaml.replace(/memory: [^\n]+/g, 'memory: 999Gi');
