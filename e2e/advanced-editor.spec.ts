@@ -311,6 +311,20 @@ test.describe('Advanced YAML editor', () => {
     await expect(page.getByText('[100m, 2]', { exact: true })).toBeVisible();
   });
 
+  test('template guidance panel lists every declared accelerator bound', async ({ page }) => {
+    await openAdvancedCreate(page);
+    await ensureTemplateSelected(page, 'GPU Template');
+
+    // The Resources pairs list every declared bounds key: a friendly-labeled vendor key,
+    // a raw vendor key, and an unprefixed built-in, each with its declared range.
+    await expect(page.getByText('GPU:', { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('[0, 2]', { exact: true })).toBeVisible();
+    await expect(page.getByText('nvidia.com/mig-1g.5gb:', { exact: true })).toBeVisible();
+    await expect(page.getByText('[0, 4]', { exact: true })).toBeVisible();
+    await expect(page.getByText('ephemeral-storage:', { exact: true })).toBeVisible();
+    await expect(page.getByText('[0, 2Gi]', { exact: true })).toBeVisible();
+  });
+
   test('image-not-allowed shows an advisory warning but does not block save', async ({ page }) => {
     await openAdvancedCreate(page);
     await fillIdentity(page, `${RUN_ID}-warn`);
