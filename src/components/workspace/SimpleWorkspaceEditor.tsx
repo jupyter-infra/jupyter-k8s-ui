@@ -194,9 +194,9 @@ export function SimpleWorkspaceEditor({ workspace, displayName, onDisplayNameCha
         }
         return { ...prev, accelerators: next };
       });
-      return;
+    } else {
+      setValues((prev) => ({ ...prev, [key]: value }));
     }
-    setValues((prev) => ({ ...prev, [key]: value }));
   }, []);
 
   const templateLabel = storedRef
