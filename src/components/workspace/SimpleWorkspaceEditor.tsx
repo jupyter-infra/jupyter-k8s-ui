@@ -64,7 +64,7 @@ function seedFromSpec(
   const storedStorage = parseMemoryGi(spec.storage?.size, controls.storage.default);
 
   const cpu = conformAxis('cpu', storedCpu, controls.cpu, 'cores');
-  const memory = conformAxis('memory', storedMem, controls.memory, 'GB');
+  const memory = conformAxis('memory', storedMem, controls.memory, strings.common.gb);
   // Storage is read-only on edit — we don't clamp/conform it, just display the stored
   // value. (Any drift there is the operator's / #439's concern, surfaced by dry-run on save.)
   const image = conformImage(spec.image ?? '', controls.image);

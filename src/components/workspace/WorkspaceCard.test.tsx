@@ -138,7 +138,7 @@ describe('WorkspaceCard accelerator chip', () => {
     ws.spec.resources = { limits: { cpu: '1500m', memory: '1G' } };
     renderCard(ws);
     expect(screen.getByText('1.5 CPU')).toBeDefined();
-    expect(screen.getByText(/^0\.93 GB$/)).toBeDefined();
+    expect(screen.getByText(/^0\.93 GiB$/)).toBeDefined();
   });
 
   test('ephemeral-storage limits never render as accelerator chips (unprefixed keys are built-ins)', () => {
