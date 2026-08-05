@@ -240,9 +240,11 @@ test.describe('Advanced YAML editor', () => {
     await waitForEditor(page);
 
     // Swap the image inside the buffer for another template-allowed one. The buffer is the
-    // only editing surface exercised here — the structured fields stay untouched.
+    // only editing surface exercised here — the structured fields stay untouched. The
+    // buffer seeds from the fetched spec asynchronously (after Monaco lazy-loads), so poll
+    // until it holds the stored image before reading it.
+    await expect.poll(async () => getEditorYaml(page), { timeout: 10_000 }).toContain('nginx:latest');
     const yaml = await getEditorYaml(page);
-    expect(yaml).toContain('nginx:latest');
     await setEditorYaml(page, yaml.replace('nginx:latest', 'nginx:1.27'));
 
     await page.getByRole('button', { name: /save changes/i }).click();
@@ -261,9 +263,14 @@ test.describe('Advanced YAML editor', () => {
     await waitForEditor(page);
 
     // Raise memory (limit and request) beyond the default template's 2Gi cap; the
-    // operator's dry-run must reject it without persisting anything.
+    // operator's dry-run must reject it without persisting anything. Poll for the async
+    // buffer seed first, and assert the mutation took so a partial buffer fails loudly
+    // instead of validating unchanged YAML.
+    await expect.poll(async () => getEditorYaml(page), { timeout: 10_000 }).toContain('memory:');
     const yaml = await getEditorYaml(page);
-    await setEditorYaml(page, yaml.replace(/memory: [^\n]+/g, 'memory: 999Gi'));
+    const mutated = yaml.replace(/memory: [^\n]+/g, 'memory: 999Gi');
+    expect(mutated).toContain('999Gi');
+    await setEditorYaml(page, mutated);
 
     await page.getByRole('button', { name: /^validate$/i }).click();
     await expect(page.getByText(/exceeds|denied|admission webhook/i).first()).toBeVisible({ timeout: 15_000 });
