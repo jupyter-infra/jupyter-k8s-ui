@@ -462,7 +462,7 @@ describe('SimpleWorkspaceEditor accelerator axes', () => {
   test('min>0 template: an absent key seeds the floor, discloses drift, and an untouched save force-sends it', async () => {
     // Absent means 0, and 0 is out of bounds on a min>0 axis: the workspace no longer
     // satisfies the template, so the seed conforms to the floor and the save must carry
-    // the key (the resources block replaces the spec wholesale).
+    // the key (the sent block replaces spec.resources wholesale).
     templatesResponse = {
       items: [
         tmpl({
