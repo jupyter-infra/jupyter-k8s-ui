@@ -1,6 +1,6 @@
 import { Paper, Stack, Typography, Chip, Box, Divider } from '@mui/material';
 import type { DiscoveredTemplate } from '../../../types';
-import { strings } from '../../../constants';
+import { strings, ACCELERATOR_LABELS } from '../../../constants';
 
 export interface TemplateGuidancePanelProps {
   template: DiscoveredTemplate | null;
@@ -56,7 +56,6 @@ export function TemplateGuidancePanel({ template }: TemplateGuidancePanelProps) 
 
   const cpu = range(bounds?.cpu?.min, bounds?.cpu?.max);
   const memory = range(bounds?.memory?.min, bounds?.memory?.max);
-  const gpu = range(bounds?.['nvidia.com/gpu']?.min, bounds?.['nvidia.com/gpu']?.max);
   const storageRange = range(storage?.minSize, storage?.maxSize, storage?.defaultSize);
   const idleRange =
     idle && (idle.minIdleTimeoutInMinutes != null || idle.maxIdleTimeoutInMinutes != null)
@@ -91,11 +90,17 @@ export function TemplateGuidancePanel({ template }: TemplateGuidancePanelProps) 
       ? spec.allowedImages!
       : [spec.defaultImage ?? ws.guidanceDefaultImageOnly];
 
-  // Resources: one `label: range` pair per constrained resource (CPU / Memory / GPU).
+  // Resources: one `label: range` pair per constrained resource — cpu, memory, then every
+  // other declared key (accelerators, MIG profiles, vendor keys, hugepages) with its
+  // friendly label or the raw key.
   const resourcePairs: Array<{ label: string; value: string }> = [];
   if (cpu) resourcePairs.push({ label: ws.guidanceCpu, value: cpu });
   if (memory) resourcePairs.push({ label: ws.guidanceMemory, value: memory });
-  if (gpu) resourcePairs.push({ label: ws.guidanceGpu, value: gpu });
+  for (const [key, bound] of Object.entries(bounds ?? {}).sort(([a], [b]) => a.localeCompare(b))) {
+    if (key === 'cpu' || key === 'memory') continue;
+    const value = range(bound?.min, bound?.max);
+    if (value) resourcePairs.push({ label: ACCELERATOR_LABELS[key] ?? key, value });
+  }
 
   return (
     <Paper variant="outlined">

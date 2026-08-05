@@ -94,6 +94,19 @@ export function parseResourceValue(value: string | undefined, fallback: number):
   return base;
 }
 
+// Accelerator entries ([key, count]) present in a limits map: exactly the domain-prefixed
+// keys (<vendor>/<resource>, the K8s extended-resource naming contract). Built-ins
+// (cpu, memory, ephemeral-storage, hugepages-*) are never prefixed. Display helper for
+// cards/details; sorted by key for a stable render order.
+export function acceleratorLimits(limits: Record<string, string | undefined> | undefined): Array<[string, string]> {
+  return Object.entries(limits ?? {})
+    .filter((entry): entry is [string, string] => {
+      const [key, value] = entry;
+      return value !== undefined && key.includes('/');
+    })
+    .sort(([a], [b]) => a.localeCompare(b));
+}
+
 /**
  * Parse a memory value and return it in GiB for display.
  */
@@ -114,6 +127,14 @@ export function parseCpuCores(value: string | undefined, fallback: number): numb
   if (base === null) return fallback;
   return base;
 }
+
+// Round a parsed quantity for display: stored quantities need not be step-clean (e.g.
+// "1G" parses to 0.9313… Gi), so round to 2 decimals, but never collapse a nonzero
+// quantity to 0 (a 1m CPU is not "0 CPU").
+export const round2 = (v: number): string => {
+  const r = Math.round(v * 100) / 100;
+  return r === 0 && v > 0 ? '<0.01' : `${r}`;
+};
 
 /**
  * Check if the given owner annotation matches the current username.

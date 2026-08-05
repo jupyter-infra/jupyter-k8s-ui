@@ -153,6 +153,7 @@ export const strings = {
     editConformImage: (from: string, to: string) => `Image changed from "${from}" to "${to}" (not allowed by template).`,
     editConformIdleTimeout: (from: string, to: string) => `Idle timeout adjusted from ${from} to ${to} (template bounds).`,
     editConformIdleEnabled: 'Idle shutdown was enabled as required by the template.',
+    editConformAccelerator: (label: string, from: string, to: string) => `${label} adjusted from ${from} to ${to} (template bounds).`,
 
     // Advanced YAML editor
     advancedCreateTitle: 'Create Workspace (Advanced)',
@@ -198,7 +199,6 @@ export const strings = {
     guidanceResources: 'Resources',
     guidanceCpu: 'CPU',
     guidanceMemory: 'Memory',
-    guidanceGpu: 'GPU',
     guidanceStorage: 'Storage',
     guidanceStorageSize: 'Size',
     guidanceIdleShutdown: 'Idle shutdown',
@@ -302,3 +302,11 @@ export const resourceBounds = {
   memory: { min: 1, max: 16, step: 1, unit: 'GB' },
   storage: { min: 5, max: 100, step: 5, unit: 'GB' },
 } as const;
+
+// Friendly display labels for well-known extended-resource keys; any key not listed
+// here renders raw (the raw key stays visible either way, as slider sublabel or tooltip).
+export const ACCELERATOR_LABELS: Record<string, string> = {
+  'nvidia.com/gpu': 'GPU',
+  'amd.com/gpu': 'GPU (AMD)',
+  'intel.com/gpu': 'GPU (Intel)',
+};

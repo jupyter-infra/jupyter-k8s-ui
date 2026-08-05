@@ -114,3 +114,44 @@ describe('WorkspaceCard', () => {
     expect(screen.getByText('My Display')).toBeDefined();
   });
 });
+
+describe('WorkspaceCard accelerator chip', () => {
+  beforeEach(() => cleanup());
+
+  test('renders a count + friendly label chip when an accelerator limit is present', () => {
+    const ws = makeWorkspace({ owner: 'alice' });
+    ws.spec.resources = { limits: { cpu: '2', memory: '4Gi', 'nvidia.com/gpu': '1' } };
+    renderCard(ws);
+    expect(screen.getByText('1 GPU')).toBeDefined();
+  });
+
+  test('renders nothing accelerator-related without such a limit', () => {
+    const ws = makeWorkspace({ owner: 'alice' });
+    ws.spec.resources = { limits: { cpu: '2', memory: '4Gi' } };
+    renderCard(ws);
+    expect(screen.queryByText(/GPU/)).toBeNull();
+  });
+
+  test('non-step-clean stored quantities round to 2 decimals for display', () => {
+    const ws = makeWorkspace({ owner: 'alice' });
+    // "1G" is 10^9 bytes = 0.9313… Gi; "1500m" is 1.5 cores — both must not render raw floats.
+    ws.spec.resources = { limits: { cpu: '1500m', memory: '1G' } };
+    renderCard(ws);
+    expect(screen.getByText('1.5 CPU')).toBeDefined();
+    expect(screen.getByText(/^0\.93 GB$/)).toBeDefined();
+  });
+
+  test('ephemeral-storage limits never render as accelerator chips (unprefixed keys are built-ins)', () => {
+    const ws = makeWorkspace({ owner: 'alice' });
+    ws.spec.resources = { limits: { cpu: '2', memory: '4Gi', 'ephemeral-storage': '1073741824' } };
+    renderCard(ws);
+    expect(screen.queryByText(/ephemeral-storage/)).toBeNull();
+  });
+
+  test('a tiny nonzero quantity renders as <0.01, never as 0', () => {
+    const ws = makeWorkspace({ owner: 'alice' });
+    ws.spec.resources = { limits: { cpu: '1m', memory: '4Gi' } };
+    renderCard(ws);
+    expect(screen.getByText('<0.01 CPU')).toBeDefined();
+  });
+});

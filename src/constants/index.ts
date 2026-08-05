@@ -1,4 +1,4 @@
-export { strings, imageOptions, resourceBounds } from './strings';
+export { strings, imageOptions, resourceBounds, ACCELERATOR_LABELS } from './strings';
 
 // Resource calculation constants
 export const RESOURCE_DEFAULTS = {

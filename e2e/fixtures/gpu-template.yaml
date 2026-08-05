@@ -1,0 +1,45 @@
+# Template with accelerator bounds for the GPU e2e (e2e/gpu-template.spec.ts).
+# Declares TWO extended-resource keys so the generic per-key loop is what gets tested,
+# not one vendor: nvidia.com/gpu (friendly label + non-zero default → emission needs no
+# slider interaction) and a MIG profile key (raw-label path, default 0 → omitted).
+# Also declares ephemeral-storage, an unprefixed built-in: the classifier must NOT
+# turn it into an accelerator axis (extended resources are exactly the <domain>/<name>
+# keys), and a stored ephemeral-storage limit must survive form saves unmodeled.
+# The spec advertises matching fake node capacity (node-status patch, no hardware
+# needed), so workspaces created from this template schedule and reach Running.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: gpu-template
+  namespace: default
+  labels:
+    workspace.jupyter.org/default-template: 'false'
+spec:
+  displayName: GPU Template
+  description: Accelerator-bounded template for e2e
+  defaultImage: nginx:latest
+  resourceBounds:
+    resources:
+      cpu:
+        min: 100m
+        max: '2'
+      memory:
+        min: 128Mi
+        max: 2Gi
+      nvidia.com/gpu:
+        min: '0'
+        max: '2'
+      nvidia.com/mig-1g.5gb:
+        min: '0'
+        max: '4'
+      ephemeral-storage:
+        min: '0'
+        max: 2Gi
+  defaultResources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+      nvidia.com/gpu: '1'

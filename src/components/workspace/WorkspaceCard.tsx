@@ -1,14 +1,23 @@
 import { Card, CardContent, Typography, IconButton, Chip, Button, Menu, MenuItem, ListItemIcon, Stack, Box, Divider } from '@mui/material';
-import { PlayArrow, Stop, OpenInNew, MoreVert, Delete, Circle, Memory, DeveloperBoard, Storage, Info, Edit } from '@mui/icons-material';
+import { PlayArrow, Stop, OpenInNew, MoreVert, Delete, Circle, Speed, Memory, DeveloperBoard, Storage, Info, Edit } from '@mui/icons-material';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Workspace } from '../../types';
 import { useStartWorkspace, useStopWorkspace, useDeleteWorkspace } from '../../api';
 import { useAuth } from '../../context';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { getWorkspaceStatus, getStatusChipColor, isOwner as checkIsOwner, getWorkspaceOwner } from '../../utils';
+import {
+  getWorkspaceStatus,
+  getStatusChipColor,
+  isOwner as checkIsOwner,
+  getWorkspaceOwner,
+  parseCpuCores,
+  parseMemoryGi,
+  acceleratorLimits,
+  round2,
+} from '../../utils';
 import { getAppTypeLogo } from '../icons/appTypeLogo';
-import { strings } from '../../constants';
+import { strings, ACCELERATOR_LABELS } from '../../constants';
 import styles from './WorkspaceCard.module.css';
 
 interface WorkspaceCardProps {
@@ -100,18 +109,31 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
             {spec.accessType === 'OwnerOnly' && <Chip label={strings.common.private} size="small" className={styles.privateChip} />}
           </Stack>
 
-          <Stack direction="row" gap={2} sx={{ color: 'text.secondary' }}>
+          {/* Human units matching the form's vocabulary (spec quantities like "8Gi" parse
+              to the same numbers the sliders show). Distinct glyph per resource kind:
+              Speed=CPU, Memory=RAM, Storage=disk, DeveloperBoard=accelerators. */}
+          <Stack direction="row" gap={2} sx={{ color: 'text.secondary', flexWrap: 'wrap' }}>
+            <Stack direction="row" alignItems="center" gap={0.5}>
+              <Speed sx={{ fontSize: 16 }} />
+              <Typography variant="caption">{spec.resources?.limits?.cpu ? `${round2(parseCpuCores(spec.resources.limits.cpu, 0))} CPU` : '— CPU'}</Typography>
+            </Stack>
             <Stack direction="row" alignItems="center" gap={0.5}>
               <Memory sx={{ fontSize: 16 }} />
-              <Typography variant="caption">{spec.resources?.limits?.cpu ?? '—'} CPU</Typography>
+              <Typography variant="caption">
+                {spec.resources?.limits?.memory ? `${round2(parseMemoryGi(spec.resources.limits.memory, 0))} ${strings.common.gb}` : '—'}
+              </Typography>
             </Stack>
-            <Stack direction="row" alignItems="center" gap={0.5}>
-              <DeveloperBoard sx={{ fontSize: 16 }} />
-              <Typography variant="caption">{spec.resources?.limits?.memory ?? '—'}</Typography>
-            </Stack>
+            {acceleratorLimits(spec.resources?.limits).map(([key, count]) => (
+              <Stack key={key} direction="row" alignItems="center" gap={0.5}>
+                <DeveloperBoard sx={{ fontSize: 16 }} />
+                <Typography variant="caption">
+                  {count} {ACCELERATOR_LABELS[key] ?? key}
+                </Typography>
+              </Stack>
+            ))}
             <Stack direction="row" alignItems="center" gap={0.5}>
               <Storage sx={{ fontSize: 16 }} />
-              <Typography variant="caption">{spec.storage?.size ?? '—'}</Typography>
+              <Typography variant="caption">{spec.storage?.size ? `${round2(parseMemoryGi(spec.storage.size, 0))} ${strings.common.gb}` : '—'}</Typography>
             </Stack>
           </Stack>
         </CardContent>

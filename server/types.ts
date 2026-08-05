@@ -31,9 +31,11 @@ export interface K8sMetadata {
 // on edit). So we treat it as an opaque passthrough object.
 export type IdleDetection = Record<string, unknown>;
 
+// Open records: templates may bound and workspaces may carry arbitrary extended-resource
+// keys (nvidia.com/gpu, MIG profiles, hugepages-*); the server relays them verbatim.
 export interface K8sResourceRequirements {
-  limits?: { cpu?: string; memory?: string; 'nvidia.com/gpu'?: string };
-  requests?: { cpu?: string; memory?: string; 'nvidia.com/gpu'?: string };
+  limits?: Record<string, string>;
+  requests?: Record<string, string>;
 }
 
 export interface K8sCondition {
@@ -78,16 +80,14 @@ export interface K8sWorkspaceTemplate {
     allowCustomImages?: boolean;
     defaultAccessType?: string;
     defaultOwnershipType?: string;
+    // Keyed by Kubernetes resource name; extended-resource keys (nvidia.com/gpu, MIG
+    // profiles, any vendor.domain/resource) are first-class alongside cpu/memory.
     resourceBounds?: {
-      resources?: {
-        cpu?: { min?: string; max?: string };
-        memory?: { min?: string; max?: string };
-        'nvidia.com/gpu'?: { min?: string; max?: string };
-      };
+      resources?: Record<string, { min?: string; max?: string } | undefined>;
     };
     defaultResources?: {
-      requests?: { cpu?: string; memory?: string };
-      limits?: { cpu?: string; memory?: string };
+      requests?: Record<string, string | undefined>;
+      limits?: Record<string, string | undefined>;
     };
     primaryStorage?: {
       defaultSize?: string;

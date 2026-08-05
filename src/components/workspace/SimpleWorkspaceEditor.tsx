@@ -20,14 +20,14 @@
 //   Identity: name read-only (immutable); displayName editable.
 //   Save: selective PATCH, no desiredStatus (stay Stopped), navigate to '/'.
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Alert, Box, Button, CircularProgress, Paper, Stack, TextField, Tooltip, Typography } from '@mui/material';
 import { LockOutlined } from '@mui/icons-material';
 import { useTemplates, useUpdateWorkspace } from '../../api';
 import { ApiError } from '../../api/auth-interceptor';
 import type { DiscoveredTemplate, UpdateWorkspaceRequest, Workspace } from '../../types';
-import { strings } from '../../constants';
+import { strings, ACCELERATOR_LABELS } from '../../constants';
 import {
   resolveTemplateControls,
   conformAxis,
@@ -36,6 +36,8 @@ import {
   computeMemoryRequest,
   parseCpuCores,
   parseMemoryGi,
+  parseResourceValue,
+  clamp,
   type ConformAdjustment,
   type ResolvedTemplateControls,
 } from '../../utils';
@@ -68,6 +70,25 @@ function seedFromSpec(
   const image = conformImage(spec.image ?? '', controls.image);
 
   const adjustments = [...cpu.adjustments, ...memory.adjustments, ...image.adjustments];
+
+  // Accelerator axes: seed each declared key from its stored limit, conformed into the
+  // template bounds (banner on a real clamp). An ABSENT stored key seeds at
+  // clamp(0, min, max) with NO adjustment — absence is not drift, and template defaults
+  // are a create-time concept; adopting one here would silently add a device the user
+  // never chose. The seeded floor is display-only: save emits an absent key only once
+  // the user touches that slider (see handleSave).
+  const accelerators: Record<string, number> = {};
+  for (const acc of controls.accelerators) {
+    const stored = spec.resources?.limits?.[acc.key];
+    if (stored !== undefined) {
+      const parsed = Math.round(parseResourceValue(stored, acc.axis.default));
+      const conformed = conformAxis('accelerator', parsed, acc.axis, '');
+      accelerators[acc.key] = conformed.value;
+      adjustments.push(...conformed.adjustments.map((a) => ({ ...a, key: acc.key })));
+    } else {
+      accelerators[acc.key] = clamp(0, acc.axis.min, acc.axis.max);
+    }
+  }
 
   // Seed the idle toggle. With a stored idleShutdown block, seed from its own values
   // (conforming the timeout to the template bounds). Without one, seed OFF at the template's
@@ -104,6 +125,7 @@ function seedFromSpec(
       cpu: cpu.value,
       memory: memory.value,
       storage: storedStorage,
+      accelerators,
       image: image.value,
       accessType: spec.accessType ?? 'Public',
       idleEnabled,
@@ -158,9 +180,23 @@ export function SimpleWorkspaceEditor({ workspace, displayName, onDisplayNameCha
     setValues(seed.values);
   }
 
+  // Per-key accelerator touches: emission of a key ABSENT from the stored spec is gated on
+  // the user moving that key's own slider (see handleSave).
+  const touchedAccelerators = useRef<Record<string, boolean>>({});
   const handleFieldChange = useCallback(<K extends keyof WorkspaceFormValues>(key: K, value: WorkspaceFormValues[K]) => {
-    if (key === 'cpu' || key === 'memory') setResourcesTouched(true);
-    setValues((prev) => ({ ...prev, [key]: value }));
+    if (key === 'cpu' || key === 'memory' || key === 'accelerators') setResourcesTouched(true);
+    if (key === 'accelerators') {
+      // The form hands back the whole record; mark only the keys whose value moved.
+      setValues((prev) => {
+        const next = value as Record<string, number>;
+        for (const k of Object.keys(next)) {
+          if (next[k] !== prev.accelerators[k]) touchedAccelerators.current[k] = true;
+        }
+        return { ...prev, accelerators: next };
+      });
+    } else {
+      setValues((prev) => ({ ...prev, [key]: value }));
+    }
   }, []);
 
   const templateLabel = storedRef
@@ -171,7 +207,7 @@ export function SimpleWorkspaceEditor({ workspace, displayName, onDisplayNameCha
 
   // build `resources` only if a slider was touched OR the seed conformed a resource
   // (adjustments prove a stored value drifted out of bounds and must be re-sent).
-  const resourcesDrifted = seed.adjustments.some((a) => a.field === 'cpu' || a.field === 'memory');
+  const resourcesDrifted = seed.adjustments.some((a) => a.field === 'cpu' || a.field === 'memory' || a.field === 'accelerator');
   const shouldSendResources = resourcesTouched || resourcesDrifted;
 
   const handleSave = useCallback(async () => {
@@ -199,9 +235,27 @@ export function SimpleWorkspaceEditor({ workspace, displayName, onDisplayNameCha
         controls.requestsPolicy.memory.source === 'template'
           ? computeMemoryRequest(controls.requestsPolicy.memory, values.memory)
           : (storedMemReq ?? computeMemoryRequest(controls.requestsPolicy.memory, values.memory));
+      // The server replaces spec.resources wholesale, so every stored key the form does
+      // not model (hugepages, keys from templates no longer declaring them) must ride
+      // along verbatim; modeled keys are rebuilt from the controls. For modeled
+      // accelerator keys a stored REQUEST is dropped deliberately: emission is
+      // limits-only, Kubernetes mirrors request = limit for extended resources.
+      const modeled = ['cpu', 'memory', ...controls.accelerators.map((a) => a.key)];
+      const carryUnmodeled = (stored: Record<string, string> | undefined) =>
+        Object.fromEntries(Object.entries(stored ?? {}).filter(([key]) => !modeled.includes(key)));
+      // A key absent from the stored spec is emitted only after the user touches its own
+      // slider: under a min>0 template the absent-key seed is a nonzero floor, and an
+      // unrelated slider touch (cpu/memory) must not inject a device the user never chose.
+      const acceleratorLimits = Object.fromEntries(
+        controls.accelerators
+          .filter(
+            (a) => (values.accelerators[a.key] ?? 0) > 0 && (workspace.spec.resources?.limits?.[a.key] !== undefined || touchedAccelerators.current[a.key]),
+          )
+          .map((a) => [a.key, `${Math.round(values.accelerators[a.key])}`]),
+      );
       request.resources = {
-        requests: { cpu: cpuReq, memory: memReq },
-        limits: { cpu: `${values.cpu}`, memory: `${values.memory}Gi` },
+        requests: { ...carryUnmodeled(workspace.spec.resources?.requests), cpu: cpuReq, memory: memReq },
+        limits: { ...carryUnmodeled(workspace.spec.resources?.limits), ...acceleratorLimits, cpu: `${values.cpu}`, memory: `${values.memory}Gi` },
       };
     }
 
@@ -308,6 +362,8 @@ function ConformBanner({ adjustments, onDismiss }: { adjustments: ConformAdjustm
         return ws.editConformIdleTimeout(a.from, a.to);
       case 'idleEnabled':
         return ws.editConformIdleEnabled;
+      case 'accelerator':
+        return ws.editConformAccelerator(a.key ? (ACCELERATOR_LABELS[a.key] ?? a.key) : '', a.from, a.to);
     }
   };
   return (

@@ -15,14 +15,25 @@
 //   Idle: three states (Unavailable / Structure-locked / Interactive).
 
 import type { AccessType, OwnershipType, WorkspaceTemplate, DiscoveredTemplate, IdleDetection } from '../types';
-import { RESOURCE_DEFAULTS, IDLE_SHUTDOWN_DEFAULTS, STATIC_DEFAULTS, resourceBounds, DEFAULT_TEMPLATE_LABEL } from '../constants';
-import { parseCpuCores, parseMemoryGi, clamp } from './workspace';
+import { RESOURCE_DEFAULTS, IDLE_SHUTDOWN_DEFAULTS, STATIC_DEFAULTS, resourceBounds, DEFAULT_TEMPLATE_LABEL, ACCELERATOR_LABELS } from '../constants';
+import { parseCpuCores, parseMemoryGi, parseResourceValue, clamp } from './workspace';
 
 export interface AxisControl {
   min: number;
   max: number;
   default: number;
   step: number;
+}
+
+// One accelerator axis: an extended-resource key the template declares in
+// resourceBounds.resources, rendered as an integer slider. `label` is the friendly display
+// name for well-known keys (the raw key otherwise); `sublabel` carries the raw key whenever
+// it differs from the label, so the exact resource name stays visible.
+export interface AcceleratorControl {
+  key: string;
+  label: string;
+  sublabel?: string;
+  axis: AxisControl;
 }
 
 export interface ImageControl {
@@ -55,6 +66,10 @@ export interface ResolvedTemplateControls {
   cpu: AxisControl;
   memory: AxisControl;
   storage: AxisControl;
+  // One integer axis per extended-resource key the template declares (empty without a
+  // template — accelerators are strictly template-gated, the advanced editor is the
+  // escape hatch). Sorted by key for a stable render order.
+  accelerators: AcceleratorControl[];
   image: ImageControl;
   idle: IdleControls;
   accessType: AccessType; // seed for the Public/Private toggle
@@ -69,7 +84,8 @@ export interface ResolvedTemplateControls {
 // (The operator still receives the exact submitted value; this only shapes slider stops.)
 function ceilToStep(value: number, step: number): number {
   if (step <= 0) return value;
-  return Math.ceil(value / step - 1e-9) * step;
+  const ceiled = Math.ceil(value / step - 1e-9) * step;
+  return ceiled === 0 ? 0 : ceiled; // the epsilon makes ceil(0) land on -0; normalize
 }
 
 // Build one axis (cpu/memory/storage) from a template min/max/default, falling back to the
@@ -97,6 +113,35 @@ function buildAxis(args: {
 
   const def = clamp(templateDefault ?? staticDefault, min, max);
   return { min, max, default: def, step };
+}
+
+// Accelerator axes. Extended resources are integer-only with request == limit, so one
+// rule covers every vendor key; Math.round guards a template author writing quantities
+// like "500m". The fallback fills holes in a DECLARED range only — presence of the key
+// gates the control, never the fallback.
+const ACCELERATOR_FALLBACK = { min: 0, max: 8, step: 1 };
+
+function buildAcceleratorControls(spec: WorkspaceTemplate['spec']): AcceleratorControl[] {
+  const bounds = spec.resourceBounds?.resources ?? {};
+  const parseCount = (value: string | undefined, fallback: number) => Math.round(parseResourceValue(value, fallback));
+  return Object.entries(bounds)
+    .filter(([key]) => key.includes('/'))
+    .map(([key, range]) => {
+      const label = ACCELERATOR_LABELS[key] ?? key;
+      return {
+        key,
+        label,
+        ...(label !== key && { sublabel: key }),
+        axis: buildAxis({
+          templateMin: range?.min !== undefined ? parseCount(range.min, ACCELERATOR_FALLBACK.min) : null,
+          templateMax: range?.max !== undefined ? parseCount(range.max, ACCELERATOR_FALLBACK.max) : null,
+          templateDefault: spec.defaultResources?.limits?.[key] !== undefined ? parseCount(spec.defaultResources.limits[key], 0) : null,
+          staticBound: ACCELERATOR_FALLBACK,
+          staticDefault: 0,
+        }),
+      };
+    })
+    .sort((a, b) => a.key.localeCompare(b.key));
 }
 
 // --- the resolver ---
@@ -152,6 +197,7 @@ export function resolveTemplateControls(template: WorkspaceTemplate | null, pres
     cpu,
     memory,
     storage,
+    accelerators: buildAcceleratorControls(spec),
     image: resolveImage(template),
     idle: resolveIdle(template),
     accessType: normalizeAccess(spec.defaultAccessType) ?? 'Public',
@@ -171,6 +217,7 @@ function noTemplateControls(preservedRef?: { name: string; namespace?: string })
     cpu: axis(resourceBounds.cpu, STATIC_DEFAULTS.cpu),
     memory: axis(resourceBounds.memory, STATIC_DEFAULTS.memory),
     storage: axis(resourceBounds.storage, STATIC_DEFAULTS.storage),
+    accelerators: [],
     image: { mode: 'free', value: '', options: [] },
     idle: { available: false },
     accessType: 'Public',
@@ -249,7 +296,9 @@ function normalizeOwnership(value: string | undefined): OwnershipType | null {
 
 // A single value that was adjusted to fit the current template, for the disclosure banner.
 export interface ConformAdjustment {
-  field: 'cpu' | 'memory' | 'storage' | 'image' | 'idleTimeout' | 'idleEnabled';
+  field: 'cpu' | 'memory' | 'storage' | 'image' | 'idleTimeout' | 'idleEnabled' | 'accelerator';
+  // Set only for field === 'accelerator': the extended-resource key that was clamped.
+  key?: string;
   from: string;
   to: string;
 }
@@ -266,7 +315,8 @@ export interface ConformResult<T> {
 export function conformAxis(field: ConformAdjustment['field'], value: number, control: AxisControl, unit: string): ConformResult<number> {
   const clamped = clamp(value, control.min, control.max);
   if (clamped === value) return { value, adjustments: [] };
-  return { value: clamped, adjustments: [{ field, from: `${value} ${unit}`, to: `${clamped} ${unit}` }] };
+  const withUnit = (n: number) => (unit ? `${n} ${unit}` : `${n}`);
+  return { value: clamped, adjustments: [{ field, from: withUnit(value), to: withUnit(clamped) }] };
 }
 
 // Conform a stored image to the current image control: if the mode is select/fixed and the
@@ -323,12 +373,21 @@ export function buildResourcesBlock(
   controls: ResolvedTemplateControls,
   cpuLimitCores: number,
   memoryLimitGi: number,
-): { requests: { cpu: string; memory: string }; limits: { cpu: string; memory: string } } {
+  acceleratorCounts: Record<string, number> = {},
+): { requests: { cpu: string; memory: string }; limits: Record<string, string> & { cpu: string; memory: string } } {
+  // Accelerator emission is limits-only (Kubernetes mirrors request = limit for extended
+  // resources, and the operator does not validate a mismatch) and gated on the template
+  // actually declaring the key, so a stale count from a previously selected template can
+  // never leak into the spec. A count of 0 omits the key entirely: an absent extended
+  // resource, not a zero limit.
+  const acceleratorLimits = Object.fromEntries(
+    controls.accelerators.filter((a) => (acceleratorCounts[a.key] ?? 0) > 0).map((a) => [a.key, `${Math.round(acceleratorCounts[a.key])}`]),
+  );
   return {
     requests: {
       cpu: computeCpuRequest(controls.requestsPolicy.cpu, cpuLimitCores),
       memory: computeMemoryRequest(controls.requestsPolicy.memory, memoryLimitGi),
     },
-    limits: { cpu: `${cpuLimitCores}`, memory: `${memoryLimitGi}Gi` },
+    limits: { ...acceleratorLimits, cpu: `${cpuLimitCores}`, memory: `${memoryLimitGi}Gi` },
   };
 }

@@ -6,6 +6,7 @@ import {
   Stop,
   OpenInNew,
   Edit,
+  Speed,
   Memory,
   DeveloperBoard,
   Storage,
@@ -16,9 +17,9 @@ import {
 } from '@mui/icons-material';
 import { useWorkspace, useStartWorkspace, useStopWorkspace } from '../api';
 import { useAuth } from '../context';
-import { isOwner as checkIsOwner, getWorkspaceStatus, getStatusChipColor, getWorkspaceOwner } from '../utils';
+import { isOwner as checkIsOwner, getWorkspaceStatus, getStatusChipColor, getWorkspaceOwner, acceleratorLimits } from '../utils';
 import type { WorkspaceCondition } from '../types';
-import { strings } from '../constants';
+import { strings, ACCELERATOR_LABELS } from '../constants';
 import styles from './WorkspaceDetail.module.css';
 
 function getConditionIcon(type: string, status: string) {
@@ -205,7 +206,7 @@ export function WorkspaceDetail() {
               <InfoRow
                 label={
                   <Stack direction="row" alignItems="center" gap={0.5}>
-                    <Memory sx={{ fontSize: 16 }} /> CPU
+                    <Speed sx={{ fontSize: 16 }} /> CPU
                   </Stack>
                 }
                 value={workspace.spec.resources?.limits?.cpu ?? '—'}
@@ -213,11 +214,24 @@ export function WorkspaceDetail() {
               <InfoRow
                 label={
                   <Stack direction="row" alignItems="center" gap={0.5}>
-                    <DeveloperBoard sx={{ fontSize: 16 }} /> Memory
+                    <Memory sx={{ fontSize: 16 }} /> Memory
                   </Stack>
                 }
                 value={workspace.spec.resources?.limits?.memory ?? '—'}
               />
+              {acceleratorLimits(workspace.spec.resources?.limits).map(([key, count]) => (
+                <InfoRow
+                  key={key}
+                  label={
+                    <Tooltip title={key}>
+                      <Stack direction="row" alignItems="center" gap={0.5}>
+                        <DeveloperBoard sx={{ fontSize: 16 }} /> {ACCELERATOR_LABELS[key] ?? key}
+                      </Stack>
+                    </Tooltip>
+                  }
+                  value={count}
+                />
+              ))}
               <InfoRow
                 label={
                   <Stack direction="row" alignItems="center" gap={0.5}>

@@ -10,7 +10,20 @@ import {
   getStatusChipColor,
   isValidK8sName,
   sanitizeK8sName,
+  round2,
 } from './workspace';
+
+describe('round2', () => {
+  test('rounds to 2 decimals for display', () => {
+    expect(round2(0.9313)).toBe('0.93');
+    expect(round2(1.5)).toBe('1.5');
+  });
+
+  test('never collapses a nonzero quantity to 0, and true zero stays 0', () => {
+    expect(round2(0.001)).toBe('<0.01');
+    expect(round2(0)).toBe('0');
+  });
+});
 
 describe('clamp', () => {
   test.each([
