@@ -234,6 +234,41 @@ test.describe('Advanced YAML editor', () => {
     await expect(caution).toHaveCount(0);
   });
 
+  test('editing the YAML buffer and saving persists the spec change (full-spec replace)', async ({ page }) => {
+    const name = `${RUN_ID}-create`;
+    await page.goto(`/workspace/${name}/edit`);
+    await waitForEditor(page);
+
+    // Swap the image inside the buffer for another template-allowed one. The buffer is the
+    // only editing surface exercised here — the structured fields stay untouched.
+    const yaml = await getEditorYaml(page);
+    expect(yaml).toContain('nginx:latest');
+    await setEditorYaml(page, yaml.replace('nginx:latest', 'nginx:1.27'));
+
+    await page.getByRole('button', { name: /save changes/i }).click();
+    await expectOnPath(page);
+
+    // The replaced spec landed: detail shows the new image, and the workspace stayed
+    // Stopped (desiredStatus rode through the buffer unchanged).
+    await page.goto(`/workspace/${name}`);
+    await expect(page.getByText('nginx:1.27', { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('.MuiChip-label').getByText('Stopped', { exact: true })).toBeVisible({ timeout: 10_000 });
+  });
+
+  test('buffer content violating template bounds is rejected by Validate on the edit route', async ({ page }) => {
+    const name = `${RUN_ID}-create`;
+    await page.goto(`/workspace/${name}/edit`);
+    await waitForEditor(page);
+
+    // Raise memory (limit and request) beyond the default template's 2Gi cap; the
+    // operator's dry-run must reject it without persisting anything.
+    const yaml = await getEditorYaml(page);
+    await setEditorYaml(page, yaml.replace(/memory: [^\n]+/g, 'memory: 999Gi'));
+
+    await page.getByRole('button', { name: /^validate$/i }).click();
+    await expect(page.getByText(/exceeds|denied|admission webhook/i).first()).toBeVisible({ timeout: 15_000 });
+  });
+
   test('YAML syntax error blocks save', async ({ page }) => {
     await openAdvancedCreate(page);
     await fillIdentity(page, `${RUN_ID}-syntax`);
