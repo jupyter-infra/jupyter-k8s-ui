@@ -5,8 +5,9 @@
 // controls as create — seeded from the CURRENT workspace spec, conformed to the template.
 //
 // Edit-specific behavior:
-//   — preserve stored requests verbatim; send `resources` only when a cpu/mem slider
-//     was touched OR a stored value drifted out of bounds.
+//   — preserve stored requests verbatim; send `resources` only when a resource slider
+//     was touched OR the seed disclosed drift (a stored value out of bounds, or a
+//     min>0 accelerator absent from the spec).
 //   — conform-on-load: clamp every modeled axis to the current template and disclose
 //     each adjustment in one dismissable banner (forced by whole-spec revalidation).
 //   — unresolvable templateRef (RBAC-invisible / deleted): seed from the stored spec,
@@ -37,7 +38,6 @@ import {
   parseCpuCores,
   parseMemoryGi,
   parseResourceValue,
-  clamp,
   type ConformAdjustment,
   type ResolvedTemplateControls,
 } from '../../utils';
@@ -72,22 +72,20 @@ function seedFromSpec(
   const adjustments = [...cpu.adjustments, ...memory.adjustments, ...image.adjustments];
 
   // Accelerator axes: seed each declared key from its stored limit, conformed into the
-  // template bounds (banner on a real clamp). An ABSENT stored key seeds at
-  // clamp(0, min, max) with NO adjustment — absence is not drift, and template defaults
-  // are a create-time concept; adopting one here would silently add a device the user
-  // never chose. The seeded floor is display-only: save emits an absent key only once
-  // the user touches that slider (see handleSave).
+  // template bounds. An absent key seeds as 0 (a zero count omits the key on save, so
+  // absent and 0 are the same state). On a min:0 axis, 0 conforms to 0 with no
+  // adjustment: absence is not drift, and an untouched save never injects the key (see
+  // handleSave). On a min>0 axis, 0 is out of bounds, so absence is drift: conform to
+  // the floor and disclose it in the banner, exactly like cpu/memory. The floor, not
+  // the template default: the default is a create-time concept, the floor is the
+  // minimal count the template admits.
   const accelerators: Record<string, number> = {};
   for (const acc of controls.accelerators) {
     const stored = spec.resources?.limits?.[acc.key];
-    if (stored !== undefined) {
-      const parsed = Math.round(parseResourceValue(stored, acc.axis.default));
-      const conformed = conformAxis('accelerator', parsed, acc.axis, '');
-      accelerators[acc.key] = conformed.value;
-      adjustments.push(...conformed.adjustments.map((a) => ({ ...a, key: acc.key })));
-    } else {
-      accelerators[acc.key] = clamp(0, acc.axis.min, acc.axis.max);
-    }
+    const parsed = stored !== undefined ? Math.round(parseResourceValue(stored, acc.axis.default)) : 0;
+    const conformed = conformAxis('accelerator', parsed, acc.axis, '');
+    accelerators[acc.key] = conformed.value;
+    adjustments.push(...conformed.adjustments.map((a) => ({ ...a, key: acc.key })));
   }
 
   // Seed the idle toggle. With a stored idleShutdown block, seed from its own values
@@ -180,8 +178,8 @@ export function SimpleWorkspaceEditor({ workspace, displayName, onDisplayNameCha
     setValues(seed.values);
   }
 
-  // Per-key accelerator touches: emission of a key ABSENT from the stored spec is gated on
-  // the user moving that key's own slider (see handleSave).
+  // Per-key accelerator touches: emission of a min:0 key ABSENT from the stored spec is
+  // gated on the user moving that key's own slider (see handleSave).
   const touchedAccelerators = useRef<Record<string, boolean>>({});
   const handleFieldChange = useCallback(<K extends keyof WorkspaceFormValues>(key: K, value: WorkspaceFormValues[K]) => {
     if (key === 'cpu' || key === 'memory' || key === 'accelerators') setResourcesTouched(true);
@@ -243,13 +241,18 @@ export function SimpleWorkspaceEditor({ workspace, displayName, onDisplayNameCha
       const modeled = ['cpu', 'memory', ...controls.accelerators.map((a) => a.key)];
       const carryUnmodeled = (stored: Record<string, string> | undefined) =>
         Object.fromEntries(Object.entries(stored ?? {}).filter(([key]) => !modeled.includes(key)));
-      // A key absent from the stored spec is emitted only after the user touches its own
-      // slider: under a min>0 template the absent-key seed is a nonzero floor, and an
-      // unrelated slider touch (cpu/memory) must not inject a device the user never chose.
+      // Emit a key when it is stored, when the user touched its own slider, or when the
+      // axis floor is above zero: a min>0 template mandates the device, the seed conformed
+      // an absent key to that floor, and this block replaces spec.resources wholesale, so
+      // omitting the key would delete a mandated device. A min:0 key absent from the spec
+      // stays out: an unrelated slider touch (cpu/memory) must not inject a device the
+      // user never chose.
       const acceleratorLimits = Object.fromEntries(
         controls.accelerators
           .filter(
-            (a) => (values.accelerators[a.key] ?? 0) > 0 && (workspace.spec.resources?.limits?.[a.key] !== undefined || touchedAccelerators.current[a.key]),
+            (a) =>
+              (values.accelerators[a.key] ?? 0) > 0 &&
+              (workspace.spec.resources?.limits?.[a.key] !== undefined || touchedAccelerators.current[a.key] || a.axis.min > 0),
           )
           .map((a) => [a.key, `${Math.round(values.accelerators[a.key])}`]),
       );

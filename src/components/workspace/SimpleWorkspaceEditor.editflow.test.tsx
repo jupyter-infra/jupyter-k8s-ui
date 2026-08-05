@@ -441,9 +441,10 @@ describe('SimpleWorkspaceEditor accelerator axes', () => {
     expect(lastPayload().resources).toBeUndefined();
   });
 
-  test('min>0 template: touching CPU does not inject an absent accelerator; touching its slider does', async () => {
-    // Absent key seeds to the floor (min 1). That floor is display-only: only the key's
-    // own slider marks it for emission.
+  test('min>0 template: an absent key seeds the floor, discloses drift, and an untouched save force-sends it', async () => {
+    // Absent means 0, and 0 is out of bounds on a min>0 axis: the workspace no longer
+    // satisfies the template, so the seed conforms to the floor and the save must carry
+    // the key (the resources block replaces the spec wholesale).
     templatesResponse = {
       items: [
         tmpl({
@@ -462,17 +463,67 @@ describe('SimpleWorkspaceEditor accelerator axes', () => {
     );
     await screen.findByText(/^resources$/i);
     expect((screen.getByRole('slider', { name: 'GPU' }) as HTMLInputElement).value).toBe('1');
+    expect(screen.getByText('GPU adjusted from 0 to 1 (template bounds).')).toBeDefined();
 
-    fireEvent.change(screen.getByRole('slider', { name: /cpu/i }), { target: { value: '1' } });
     save();
     await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
-    const first = lastPayload();
-    expect(first.resources?.limits?.cpu).toBe('1');
-    expect(first.resources?.limits && 'nvidia.com/gpu' in first.resources.limits).toBe(false);
+    const p = lastPayload();
+    expect(p.resources?.limits?.['nvidia.com/gpu']).toBe('1');
+    // The forced block carries the stored values verbatim alongside the conformed key.
+    expect(p.resources?.limits?.cpu).toBe('2');
+    expect(p.resources?.requests?.cpu).toBe('500m');
+  });
 
+  test('pinned min===max template: an absent key seeds the pin on a disabled slider and an untouched save sends it', async () => {
+    // A disabled slider can never be touched, so emission must come from the drift path alone.
+    templatesResponse = {
+      items: [
+        tmpl({
+          displayName: 'GPU',
+          resourceBounds: { resources: { 'nvidia.com/gpu': { min: '2', max: '2' } } },
+        }),
+      ],
+      access: { user: 'ok', shared: 'ok' },
+      namespaces: { own: 'user-ns', shared: 'shared-ns' },
+    };
+    await renderEditor(
+      baseWorkspace({
+        templateRef: { name: 'eks-oidc', namespace: 'shared-ns' },
+        resources: { limits: { cpu: '2', memory: '4Gi' }, requests: { cpu: '500m', memory: '1Gi' } },
+      }),
+    );
+    await screen.findByText(/^resources$/i);
+    const slider = screen.getByRole('slider', { name: 'GPU' }) as HTMLInputElement;
+    expect(slider.value).toBe('2');
+    expect(slider.disabled).toBe(true);
+    expect(screen.getByText('GPU adjusted from 0 to 2 (template bounds).')).toBeDefined();
+
+    save();
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    expect(lastPayload().resources?.limits?.['nvidia.com/gpu']).toBe('2');
+  });
+
+  test('min>0 template: sliding an absent key above the seeded floor sends the slid value', async () => {
+    templatesResponse = {
+      items: [
+        tmpl({
+          displayName: 'GPU',
+          resourceBounds: { resources: { 'nvidia.com/gpu': { min: '1', max: '2' } } },
+        }),
+      ],
+      access: { user: 'ok', shared: 'ok' },
+      namespaces: { own: 'user-ns', shared: 'shared-ns' },
+    };
+    await renderEditor(
+      baseWorkspace({
+        templateRef: { name: 'eks-oidc', namespace: 'shared-ns' },
+        resources: { limits: { cpu: '2', memory: '4Gi' }, requests: { cpu: '500m', memory: '1Gi' } },
+      }),
+    );
+    await screen.findByText(/^resources$/i);
     fireEvent.change(screen.getByRole('slider', { name: 'GPU' }), { target: { value: '2' } });
     save();
-    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
     expect(lastPayload().resources?.limits?.['nvidia.com/gpu']).toBe('2');
   });
 });
