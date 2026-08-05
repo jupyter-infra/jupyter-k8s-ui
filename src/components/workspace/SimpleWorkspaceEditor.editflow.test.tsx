@@ -441,6 +441,24 @@ describe('SimpleWorkspaceEditor accelerator axes', () => {
     expect(lastPayload().resources).toBeUndefined();
   });
 
+  test('min:0 template: a CPU-touched save sends resources without injecting the absent key', async () => {
+    // The one case where a min:0 absent key coexists with a sent resources block: the
+    // emission filter must keep the key out (absence is not drift on a zero-floor axis).
+    await renderEditor(
+      baseWorkspace({
+        templateRef: { name: 'eks-oidc', namespace: 'shared-ns' },
+        resources: { limits: { cpu: '2', memory: '4Gi' }, requests: { cpu: '500m', memory: '1Gi' } },
+      }),
+    );
+    await screen.findByText(/^resources$/i);
+    fireEvent.change(screen.getByRole('slider', { name: /cpu/i }), { target: { value: '1' } });
+    save();
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    const p = lastPayload();
+    expect(p.resources?.limits?.cpu).toBe('1');
+    expect(p.resources?.limits && 'nvidia.com/gpu' in p.resources.limits).toBe(false);
+  });
+
   test('min>0 template: an absent key seeds the floor, discloses drift, and an untouched save force-sends it', async () => {
     // Absent means 0, and 0 is out of bounds on a min>0 axis: the workspace no longer
     // satisfies the template, so the seed conforms to the floor and the save must carry
