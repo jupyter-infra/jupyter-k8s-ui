@@ -137,12 +137,18 @@ export const round2 = (v: number): string => {
 };
 
 /**
- * Check if the given owner annotation matches the current username.
- * Handles various OIDC provider formats (plain, github:user, provider/user, etc.)
+ * Whether the `created-by` annotation identifies the current user.
+ *
+ * The operator stamps `created-by` with the authoritative Kubernetes username (the API-server
+ * -constructed `<username-prefix>:<claim>`), and `/me` resolves that exact string into
+ * `user.k8sUser` via SelfSubjectReview. So this is a plain equality — no provider-shaped fuzzy
+ * matching (which was both overfit to `github:` and loose enough to false-positive, e.g.
+ * `system:serviceaccount:ns:bob` matching `bob`). Pass `user?.k8sUser` here, never the raw
+ * display `username`. Display-only: real access is enforced by the user's token downstream.
  */
-export function isOwner(owner: string | undefined, username: string | undefined): boolean {
-  if (!owner || !username) return false;
-  return owner === username || owner === `github:${username}` || owner.endsWith(`/${username}`) || owner.includes(`:${username}`);
+export function isOwner(owner: string | undefined, k8sUser: string | null | undefined): boolean {
+  if (!owner || !k8sUser) return false;
+  return owner === k8sUser;
 }
 
 /**
