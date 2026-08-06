@@ -108,6 +108,7 @@ export async function handlePatchMyNamespace(req: Request, jwt: string | null): 
     universeFp: expired ? '' : pref.universeFp,
     visibleExp: expired ? 0 : pref.visibleExp,
     boundUser: pref.boundUser, // re-derived by the builder from jwt; value here is irrelevant
+    k8sUser: pref.k8sUser, // preserve the cached identity (GET /me owns writing it)
   };
   return attachPreferenceCookie(jsonResponse({ active: namespace }), nextPref, jwt, { preserveVisibleExp: true });
 }
@@ -190,6 +191,7 @@ export async function handleListNamespaces(req: Request, jwt: string): Promise<R
     universeFp: fp,
     visibleExp: 0,
     boundUser: pref.boundUser, // re-derived by the builder from jwt; value here is irrelevant
+    k8sUser: pref.k8sUser, // preserve the cached identity (GET /me owns writing it)
   };
   return attachPreferenceCookie(response, nextPref, jwt);
 }

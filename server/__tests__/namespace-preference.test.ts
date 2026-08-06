@@ -1,6 +1,6 @@
 import { describe, test, expect, mock, beforeEach } from 'bun:test';
 import { randomBytes } from 'crypto';
-import { KEY_LENGTH } from '../crypto';
+import { KEY_LENGTH, deriveKeys, sign } from '../crypto';
 import type { KeyEntry, KeyMap } from '../middleware/session';
 
 // The preference cookie carries an authz-shaped `visible` set, so signing is MANDATORY:
@@ -11,7 +11,7 @@ mock.module('../secret-watcher', () => ({
   getKeyMap: () => testKeyMap,
 }));
 
-const { readNamespacePreference, isVisibleExpired, freshVisible, buildNamespacePreferenceCookie, NS_PREF_COOKIE_NAME } =
+const { readNamespacePreference, isVisibleExpired, freshVisible, buildNamespacePreferenceCookie, userTag, NS_PREF_COOKIE_NAME } =
   await import('../middleware/namespace-preference');
 
 function keyMapWith(kid = 'k1'): KeyMap {
@@ -37,7 +37,7 @@ function reqWithCookie(value: string): Request {
 
 // Build a full preference from partial fields (defaults for the scan-cache metadata). boundUser
 // is irrelevant on the input — the builder always re-derives it from the jwt it's given.
-function pref(over: { activeNs?: string | null; visible?: string[]; checkedUpTo?: number; universeFp?: string }) {
+function pref(over: { activeNs?: string | null; visible?: string[]; checkedUpTo?: number; universeFp?: string; k8sUser?: string | null }) {
   return {
     activeNs: over.activeNs ?? null,
     visible: over.visible ?? [],
@@ -45,10 +45,11 @@ function pref(over: { activeNs?: string | null; visible?: string[]; checkedUpTo?
     universeFp: over.universeFp ?? 'fp',
     visibleExp: 0,
     boundUser: '',
+    k8sUser: over.k8sUser ?? null,
   };
 }
 
-const EMPTY = { activeNs: null, visible: [], checkedUpTo: 0, universeFp: '', visibleExp: 0, boundUser: '' };
+const EMPTY = { activeNs: null, visible: [], checkedUpTo: 0, universeFp: '', visibleExp: 0, boundUser: '', k8sUser: null };
 
 beforeEach(() => {
   testKeyMap = keyMapWith();
@@ -64,6 +65,27 @@ describe('namespace preference cookie', () => {
     expect(parsed.universeFp).toBe('abc');
     expect(isVisibleExpired(parsed)).toBe(false);
     expect(freshVisible(parsed)).toEqual(['team-a', 'team-x']);
+  });
+
+  test('round-trips k8sUser (the cached authoritative identity)', () => {
+    const setCookie = buildNamespacePreferenceCookie(pref({ activeNs: 'team-a', k8sUser: 'github:alice' }), JWT)!;
+    const parsed = readNamespacePreference(reqWithCookie(cookieValue(setCookie)), JWT);
+    expect(parsed.k8sUser).toBe('github:alice');
+  });
+
+  test('a cookie predating k8sUser stays valid; k8sUser normalizes to null', () => {
+    // Sign a legacy payload (no k8sUser field) with the real test key so it VERIFIES — this
+    // exercises the normalization path, not a tamper rejection. The field was added later; an
+    // older, otherwise well-formed cookie must not be discarded.
+    const entry = [...testKeyMap.keys.values()][0];
+    const { signingKey } = deriveKeys(entry.key);
+    const legacy = { activeNs: 'team-a', visible: ['team-a'], checkedUpTo: 1, universeFp: 'fp', visibleExp: 9999999999, boundUser: userTag(JWT) };
+    const buf = Buffer.from(JSON.stringify(legacy), 'utf-8');
+    const value = `${buf.toString('base64url')}.${entry.kid}.${sign(buf, signingKey, entry.kid).toString('base64url')}`;
+
+    const parsed = readNamespacePreference(reqWithCookie(value), JWT);
+    expect(parsed.activeNs).toBe('team-a');
+    expect(parsed.k8sUser).toBeNull();
   });
 
   test('a tampered visible set fails verification and is treated as empty', () => {
