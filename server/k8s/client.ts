@@ -1,6 +1,7 @@
-import { KubeConfig, CustomObjectsApi, AuthorizationV1Api, V1SelfSubjectAccessReview } from '@kubernetes/client-node';
+import { KubeConfig, CustomObjectsApi, AuthorizationV1Api, AuthenticationV1Api, V1SelfSubjectAccessReview } from '@kubernetes/client-node';
 import { createHash } from 'crypto';
 import { isLocalDevelopment } from './config';
+import { decodeJWTPayload } from '../jwt';
 
 // --- KubeConfig Factory ---
 
@@ -49,7 +50,7 @@ export function createKubeConfig(jwt: string | null): KubeConfig {
 // Avoids re-creating KubeConfig + API client on every single request. The cache holds
 // heterogeneous client types keyed by a kind-prefixed hash, e.g. `co:<hash>` for
 // CustomObjectsApi and `authz:<hash>` for AuthorizationV1Api.
-type CachedApi = CustomObjectsApi | AuthorizationV1Api;
+type CachedApi = CustomObjectsApi | AuthorizationV1Api | AuthenticationV1Api;
 const clientCache = new Map<string, { client: CachedApi; expiresAt: number }>();
 const CLIENT_CACHE_TTL_MS = 10 * 60_000; // 10 minutes
 const CLIENT_CACHE_MAX_SIZE = 100;
@@ -131,6 +132,41 @@ export async function reuseOrCreateUserK8sClient(jwt: string | null): Promise<Cu
 
   const kc = createKubeConfig(jwt);
   const client = kc.makeApiClient(CustomObjectsApi);
+  setCachedClient(cacheKey, client);
+  return client;
+}
+
+// Dev has no cluster to run a SelfSubjectReview against. The real API server derives the
+// K8s username from the token (<username-prefix>:<claim>); with no server, the best local
+// stand-in is the raw claim (preferred_username || sub) — the same value /me already
+// reports. This keeps ownership matching consistent in no-cluster dev; the prefixed form is
+// exercised for real against Kind in E2E, never here.
+function createMockAuthnClient(jwt: string | null): AuthenticationV1Api {
+  const payload = jwt ? decodeJWTPayload(jwt) : null;
+  const claim = (payload?.preferred_username as string) || (payload?.sub as string) || '';
+  return {
+    createSelfSubjectReview: async () => ({ body: { status: { userInfo: { username: claim } } } }),
+  } as unknown as AuthenticationV1Api;
+}
+
+/**
+ * Reuse-or-create a per-user AuthenticationV1Api client for SelfSubjectReview — the call
+ * that learns the authoritative K8s username the API server sees (with its username-prefix),
+ * as opposed to the raw OIDC claim. Built from the SAME user KubeConfig (the review must
+ * reflect the caller's identity, never the SA's), cached under a distinct `authn:<hash>` key
+ * sharing the TTL/eviction. In dev, returns the no-cluster mock above.
+ */
+export async function reuseOrCreateAuthnClient(jwt: string | null): Promise<AuthenticationV1Api> {
+  if (isLocalDevelopment()) {
+    return createMockAuthnClient(jwt);
+  }
+
+  const cacheKey = cacheKeyFor('authn', jwt);
+  const cached = getCachedClient(cacheKey);
+  if (cached) return cached as AuthenticationV1Api;
+
+  const kc = createKubeConfig(jwt);
+  const client = kc.makeApiClient(AuthenticationV1Api);
   setCachedClient(cacheKey, client);
   return client;
 }
