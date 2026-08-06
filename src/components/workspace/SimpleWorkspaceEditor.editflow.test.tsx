@@ -443,7 +443,7 @@ describe('SimpleWorkspaceEditor accelerator axes', () => {
 
   test('min:0 template: a CPU-touched save sends resources without injecting the absent key', async () => {
     // The one case where a min:0 absent key coexists with a sent resources block: the
-    // emission filter must keep the key out (absence is not drift on a zero-floor axis).
+    // emission filter must keep the key out.
     await renderEditor(
       baseWorkspace({
         templateRef: { name: 'eks-oidc', namespace: 'shared-ns' },
@@ -460,9 +460,6 @@ describe('SimpleWorkspaceEditor accelerator axes', () => {
   });
 
   test('min>0 template: an absent key seeds the floor, discloses drift, and an untouched save force-sends it', async () => {
-    // Absent means 0, and 0 is out of bounds on a min>0 axis: the workspace no longer
-    // satisfies the template, so the seed conforms to the floor and the save must carry
-    // the key (the sent block replaces spec.resources wholesale).
     templatesResponse = {
       items: [
         tmpl({
