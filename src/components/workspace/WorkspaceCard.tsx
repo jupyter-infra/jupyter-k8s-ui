@@ -11,10 +11,9 @@ import {
   getStatusChipColor,
   isOwner as checkIsOwner,
   getWorkspaceOwner,
-  parseCpuCores,
-  parseMemoryGi,
   acceleratorLimits,
-  round2,
+  formatCpuCores,
+  formatMemoryGiB,
 } from '../../utils';
 import { getAppTypeLogo } from '../icons/appTypeLogo';
 import { strings, ACCELERATOR_LABELS } from '../../constants';
@@ -115,13 +114,11 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
           <Stack direction="row" gap={2} sx={{ color: 'text.secondary', flexWrap: 'wrap' }}>
             <Stack direction="row" alignItems="center" gap={0.5}>
               <Speed sx={{ fontSize: 16 }} />
-              <Typography variant="caption">{spec.resources?.limits?.cpu ? `${round2(parseCpuCores(spec.resources.limits.cpu, 0))} CPU` : '— CPU'}</Typography>
+              <Typography variant="caption">{spec.resources?.limits?.cpu ? `${formatCpuCores(spec.resources.limits.cpu)} CPU` : '— CPU'}</Typography>
             </Stack>
             <Stack direction="row" alignItems="center" gap={0.5}>
               <Memory sx={{ fontSize: 16 }} />
-              <Typography variant="caption">
-                {spec.resources?.limits?.memory ? `${round2(parseMemoryGi(spec.resources.limits.memory, 0))} ${strings.common.gb}` : '—'}
-              </Typography>
+              <Typography variant="caption">{spec.resources?.limits?.memory ? formatMemoryGiB(spec.resources.limits.memory) : '—'}</Typography>
             </Stack>
             {acceleratorLimits(spec.resources?.limits).map(([key, count]) => (
               <Stack key={key} direction="row" alignItems="center" gap={0.5}>
@@ -133,7 +130,7 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
             ))}
             <Stack direction="row" alignItems="center" gap={0.5}>
               <Storage sx={{ fontSize: 16 }} />
-              <Typography variant="caption">{spec.storage?.size ? `${round2(parseMemoryGi(spec.storage.size, 0))} ${strings.common.gb}` : '—'}</Typography>
+              <Typography variant="caption">{spec.storage?.size ? formatMemoryGiB(spec.storage.size) : '—'}</Typography>
             </Stack>
           </Stack>
         </CardContent>

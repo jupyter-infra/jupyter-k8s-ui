@@ -275,9 +275,14 @@ describe('conformAxis', () => {
   });
 
   test('below-min value clamps up and records the adjustment', () => {
-    const r = conformAxis('memory', 0.5, control, 'GB');
+    const r = conformAxis('memory', 0.5, control, 'GiB');
     expect(r.value).toBe(1);
-    expect(r.adjustments[0]).toMatchObject({ field: 'memory', to: '1 GB' });
+    expect(r.adjustments[0]).toMatchObject({ field: 'memory', to: '1 GiB' });
+  });
+
+  test('adjustment strings round the raw parsed value', () => {
+    const r = conformAxis('memory', 0.9313225746154785, control, 'GiB');
+    expect(r.adjustments[0]).toMatchObject({ from: '0.93 GiB', to: '1 GiB' });
   });
 });
 

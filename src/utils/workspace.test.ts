@@ -11,6 +11,8 @@ import {
   isValidK8sName,
   sanitizeK8sName,
   round2,
+  formatCpuCores,
+  formatMemoryGiB,
 } from './workspace';
 
 describe('round2', () => {
@@ -22,6 +24,15 @@ describe('round2', () => {
   test('never collapses a nonzero quantity to 0, and true zero stays 0', () => {
     expect(round2(0.001)).toBe('<0.01');
     expect(round2(0)).toBe('0');
+  });
+});
+
+describe('shared quantity formatters', () => {
+  test('formatCpuCores parses and rounds', () => {
+    expect(formatCpuCores('1500m')).toBe('1.5');
+  });
+  test('formatMemoryGiB parses, rounds, and carries the unit', () => {
+    expect(formatMemoryGiB('1G')).toBe('0.93 GiB');
   });
 });
 

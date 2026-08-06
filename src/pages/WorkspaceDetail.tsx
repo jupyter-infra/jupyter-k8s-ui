@@ -23,9 +23,8 @@ import {
   getStatusChipColor,
   getWorkspaceOwner,
   acceleratorLimits,
-  parseCpuCores,
-  parseMemoryGi,
-  round2,
+  formatCpuCores,
+  formatMemoryGiB,
 } from '../utils';
 import type { WorkspaceCondition } from '../types';
 import { strings, ACCELERATOR_LABELS } from '../constants';
@@ -218,7 +217,7 @@ export function WorkspaceDetail() {
                     <Speed sx={{ fontSize: 16 }} /> CPU
                   </Stack>
                 }
-                value={workspace.spec.resources?.limits?.cpu ? round2(parseCpuCores(workspace.spec.resources.limits.cpu, 0)) : '—'}
+                value={workspace.spec.resources?.limits?.cpu ? formatCpuCores(workspace.spec.resources.limits.cpu) : '—'}
               />
               <InfoRow
                 label={
@@ -226,9 +225,7 @@ export function WorkspaceDetail() {
                     <Memory sx={{ fontSize: 16 }} /> Memory
                   </Stack>
                 }
-                value={
-                  workspace.spec.resources?.limits?.memory ? `${round2(parseMemoryGi(workspace.spec.resources.limits.memory, 0))} ${strings.common.gb}` : '—'
-                }
+                value={workspace.spec.resources?.limits?.memory ? formatMemoryGiB(workspace.spec.resources.limits.memory) : '—'}
               />
               {acceleratorLimits(workspace.spec.resources?.limits).map(([key, count]) => (
                 <InfoRow
@@ -249,7 +246,7 @@ export function WorkspaceDetail() {
                     <Storage sx={{ fontSize: 16 }} /> Storage
                   </Stack>
                 }
-                value={workspace.spec.storage?.size ? `${round2(parseMemoryGi(workspace.spec.storage.size, 0))} ${strings.common.gb}` : '—'}
+                value={workspace.spec.storage?.size ? formatMemoryGiB(workspace.spec.storage.size) : '—'}
               />
             </Stack>
           </Paper>

@@ -1,4 +1,5 @@
 import type { Workspace } from '../types';
+import { strings } from '../constants';
 
 // Workspace status helpers
 
@@ -135,6 +136,10 @@ export const round2 = (v: number): string => {
   const r = Math.round(v * 100) / 100;
   return r === 0 && v > 0 ? '<0.01' : `${r}`;
 };
+
+// Shared display formatting for stored quantities (card chips, detail rows).
+export const formatCpuCores = (v: string): string => round2(parseCpuCores(v, 0));
+export const formatMemoryGiB = (v: string): string => `${round2(parseMemoryGi(v, 0))} ${strings.common.gb}`;
 
 /**
  * Check if the given owner annotation matches the current username.
