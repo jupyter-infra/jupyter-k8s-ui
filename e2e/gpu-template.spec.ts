@@ -133,6 +133,20 @@ test.describe('Accelerator axes (gpu-template)', () => {
     await expect(card.getByText(/ephemeral-storage/)).toHaveCount(0);
   });
 
+  test('display edge cases: non-step-clean quantities round on the card in GiB', async ({ page }) => {
+    // Land awkward but in-bounds quantities the way a YAML edit would; the card must
+    // round for display and label binary units GiB.
+    execSync(`${KUBECTL} patch workspace ${WS_NAME} --type=merge -p='{"spec":{"resources":{"limits":{"cpu":"1500m","memory":"1G"}}}}'`, {
+      stdio: 'pipe',
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: /all/i }).click();
+    const card = page.getByLabel(new RegExp(`${WS_NAME}.*workspace`, 'i'));
+    await expect(card).toBeVisible({ timeout: 10_000 });
+    await expect(card.getByText('1.5 CPU')).toBeVisible();
+    await expect(card.getByText('0.93 GiB')).toBeVisible();
+  });
+
   test('edit seeds the stored GPU and sliding to 0 removes the key', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /all/i }).click();
