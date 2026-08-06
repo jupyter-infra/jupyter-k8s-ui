@@ -120,7 +120,6 @@ test.describe('Accelerator axes (gpu-template)', () => {
   });
 
   test('an unprefixed stored limit never renders as an accelerator chip', async ({ page }) => {
-    // Landed via kubectl patch, the YAML-editor channel for keys the form does not model.
     execSync(`${KUBECTL} patch workspace ${WS_NAME} --type=merge -p='{"spec":{"resources":{"limits":{"ephemeral-storage":"1073741824"}}}}'`, {
       stdio: 'pipe',
     });
@@ -132,8 +131,7 @@ test.describe('Accelerator axes (gpu-template)', () => {
     await expect(card.getByText(/ephemeral-storage/)).toHaveCount(0);
   });
 
-  test('quantities entered through YAML render rounded and labeled GiB on the card', async ({ page }) => {
-    // "1G" is 10^9 bytes, 0.93 GiB.
+  test('quantities entered through YAML render rounded and labeled GiB the card and detail page', async ({ page }) => {
     execSync(`${KUBECTL} patch workspace ${WS_NAME} --type=merge -p='{"spec":{"resources":{"limits":{"cpu":"1500m","memory":"1G"}}}}'`, {
       stdio: 'pipe',
     });
@@ -144,7 +142,6 @@ test.describe('Accelerator axes (gpu-template)', () => {
     await expect(card.getByText('1.5 CPU')).toBeVisible();
     await expect(card.getByText('0.93 GiB')).toBeVisible();
 
-    // Detail renders the same values through the same formatters.
     await page.goto(`/workspace/${WS_NAME}`);
     await expect(page.getByText('1.5', { exact: true })).toBeVisible();
     await expect(page.getByText('0.93 GiB', { exact: true })).toBeVisible();

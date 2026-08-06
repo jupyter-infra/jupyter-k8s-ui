@@ -482,7 +482,6 @@ describe('SimpleWorkspaceEditor accelerator axes', () => {
     await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
     const p = lastPayload();
     expect(p.resources?.limits?.['nvidia.com/gpu']).toBe('1');
-    // The save replaces spec.resources wholesale, so stored values must ride along verbatim.
     expect(p.resources?.limits?.cpu).toBe('2');
     expect(p.resources?.requests?.cpu).toBe('500m');
   });

@@ -5,9 +5,8 @@
 // controls as create — seeded from the CURRENT workspace spec, conformed to the template.
 //
 // Edit-specific behavior:
-//   — preserve stored requests verbatim; send `resources` only when a resource slider
-//     was touched OR the seed disclosed drift (a stored value out of bounds, or a
-//     min>0 accelerator absent from the spec).
+//   — preserve stored requests verbatim; send `resources` only when a cpu/mem slider
+//     was touched OR a stored value drifted out of bounds.
 //   — conform-on-load: clamp every modeled axis to the current template and disclose
 //     each adjustment in one dismissable banner (forced by whole-spec revalidation).
 //   — unresolvable templateRef (RBAC-invisible / deleted): seed from the stored spec,
@@ -72,8 +71,7 @@ function seedFromSpec(
 
   const adjustments = [...cpu.adjustments, ...memory.adjustments, ...image.adjustments];
 
-  // Seed each accelerator from its stored limit, absent keys as 0; conformAxis clamps a
-  // min>0 absence to the floor with the drift banner (the #62 contract).
+  // Seed each accelerator from its stored limit, absent keys as 0. Conform each to the template's current bounds, and disclose any adjustments.
   const accelerators: Record<string, number> = {};
   for (const acc of controls.accelerators) {
     const stored = spec.resources?.limits?.[acc.key];
@@ -173,8 +171,6 @@ export function SimpleWorkspaceEditor({ workspace, displayName, onDisplayNameCha
     setValues(seed.values);
   }
 
-  // Per-key accelerator touches: emission of a min:0 key ABSENT from the stored spec is
-  // gated on the user moving that key's own slider (see handleSave).
   const touchedAccelerators = useRef<Record<string, boolean>>({});
   const handleFieldChange = useCallback(<K extends keyof WorkspaceFormValues>(key: K, value: WorkspaceFormValues[K]) => {
     if (key === 'cpu' || key === 'memory' || key === 'accelerators') setResourcesTouched(true);
