@@ -17,7 +17,15 @@ import {
 } from '@mui/icons-material';
 import { useWorkspace, useStartWorkspace, useStopWorkspace } from '../api';
 import { useAuth } from '../context';
-import { isOwner as checkIsOwner, getWorkspaceStatus, getStatusChipColor, getWorkspaceOwner, acceleratorLimits } from '../utils';
+import {
+  isOwner as checkIsOwner,
+  getWorkspaceStatus,
+  getStatusChipColor,
+  getWorkspaceOwner,
+  acceleratorLimits,
+  formatCpuCores,
+  formatMemoryGiB,
+} from '../utils';
 import type { WorkspaceCondition } from '../types';
 import { strings, ACCELERATOR_LABELS } from '../constants';
 import styles from './WorkspaceDetail.module.css';
@@ -209,7 +217,7 @@ export function WorkspaceDetail() {
                     <Speed sx={{ fontSize: 16 }} /> CPU
                   </Stack>
                 }
-                value={workspace.spec.resources?.limits?.cpu ?? '—'}
+                value={workspace.spec.resources?.limits?.cpu ? formatCpuCores(workspace.spec.resources.limits.cpu) : '—'}
               />
               <InfoRow
                 label={
@@ -217,7 +225,7 @@ export function WorkspaceDetail() {
                     <Memory sx={{ fontSize: 16 }} /> Memory
                   </Stack>
                 }
-                value={workspace.spec.resources?.limits?.memory ?? '—'}
+                value={workspace.spec.resources?.limits?.memory ? formatMemoryGiB(workspace.spec.resources.limits.memory) : '—'}
               />
               {acceleratorLimits(workspace.spec.resources?.limits).map(([key, count]) => (
                 <InfoRow
@@ -238,7 +246,7 @@ export function WorkspaceDetail() {
                     <Storage sx={{ fontSize: 16 }} /> Storage
                   </Stack>
                 }
-                value={workspace.spec.storage?.size ?? '—'}
+                value={workspace.spec.storage?.size ? formatMemoryGiB(workspace.spec.storage.size) : '—'}
               />
             </Stack>
           </Paper>

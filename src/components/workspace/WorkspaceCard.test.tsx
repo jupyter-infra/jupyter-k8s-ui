@@ -137,13 +137,15 @@ describe('WorkspaceCard accelerator chip', () => {
     expect(screen.queryByText(/GPU/)).toBeNull();
   });
 
-  test('non-step-clean stored quantities round to 2 decimals for display', () => {
+  test('stored quantities the sliders cannot produce round to 2 decimals', () => {
     const ws = makeWorkspace({ owner: 'alice' });
     // "1G" is 10^9 bytes = 0.9313… Gi; "1500m" is 1.5 cores — both must not render raw floats.
     ws.spec.resources = { limits: { cpu: '1500m', memory: '1G' } };
+    ws.spec.storage = { size: '2G' };
     renderCard(ws);
     expect(screen.getByText('1.5 CPU')).toBeDefined();
-    expect(screen.getByText(/^0\.93 GB$/)).toBeDefined();
+    expect(screen.getByText(/^0\.93 GiB$/)).toBeDefined();
+    expect(screen.getByText(/^1\.86 GiB$/)).toBeDefined();
   });
 
   test('ephemeral-storage limits never render as accelerator chips (unprefixed keys are built-ins)', () => {

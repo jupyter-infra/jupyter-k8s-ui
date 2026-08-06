@@ -16,7 +16,7 @@ export const strings = {
     private: 'Private',
     public: 'Public',
     cores: 'cores',
-    gb: 'GB',
+    gb: 'GiB',
     min: 'min',
   },
 
@@ -299,8 +299,8 @@ export const imageOptions = [
 // Resource configuration
 export const resourceBounds = {
   cpu: { min: 0.5, max: 8, step: 0.5, unit: 'cores' },
-  memory: { min: 1, max: 16, step: 1, unit: 'GB' },
-  storage: { min: 5, max: 100, step: 5, unit: 'GB' },
+  memory: { min: 1, max: 16, step: 1, unit: 'GiB' },
+  storage: { min: 5, max: 100, step: 5, unit: 'GiB' },
 } as const;
 
 // Friendly display labels for well-known extended-resource keys; any key not listed

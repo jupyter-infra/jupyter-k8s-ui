@@ -7,9 +7,28 @@ import {
   conformAxis,
   conformImage,
   buildResourcesBlock,
+  shouldEmitAccelerator,
 } from './templateBounds';
 import type { WorkspaceTemplate, WorkspaceTemplateSpec, DiscoveredTemplate } from '../types';
 import { STATIC_DEFAULTS, resourceBounds, RESOURCE_DEFAULTS, IDLE_SHUTDOWN_DEFAULTS, DEFAULT_TEMPLATE_LABEL } from '../constants';
+
+describe('shouldEmitAccelerator', () => {
+  test('is false for a zero count', () => {
+    expect(shouldEmitAccelerator(0, { stored: true, touched: true, min: 1 })).toBe(false);
+  });
+  test('is true for a stored key', () => {
+    expect(shouldEmitAccelerator(1, { stored: true, touched: false, min: 0 })).toBe(true);
+  });
+  test('is true for a touched slider', () => {
+    expect(shouldEmitAccelerator(1, { stored: false, touched: true, min: 0 })).toBe(true);
+  });
+  test('is true for an absent untouched key when the template requires it', () => {
+    expect(shouldEmitAccelerator(1, { stored: false, touched: false, min: 1 })).toBe(true);
+  });
+  test('is false for an absent untouched key when the template makes it optional', () => {
+    expect(shouldEmitAccelerator(1, { stored: false, touched: false, min: 0 })).toBe(false);
+  });
+});
 
 function tmpl(spec: WorkspaceTemplateSpec, name = 'eks-oidc', namespace = 'shared'): WorkspaceTemplate {
   return { metadata: { name, namespace }, spec };
@@ -256,9 +275,14 @@ describe('conformAxis', () => {
   });
 
   test('below-min value clamps up and records the adjustment', () => {
-    const r = conformAxis('memory', 0.5, control, 'GB');
+    const r = conformAxis('memory', 0.5, control, 'GiB');
     expect(r.value).toBe(1);
-    expect(r.adjustments[0]).toMatchObject({ field: 'memory', to: '1 GB' });
+    expect(r.adjustments[0]).toMatchObject({ field: 'memory', to: '1 GiB' });
+  });
+
+  test('adjustment strings round the raw parsed value', () => {
+    const r = conformAxis('memory', 0.9313225746154785, control, 'GiB');
+    expect(r.adjustments[0]).toMatchObject({ from: '0.93 GiB', to: '1 GiB' });
   });
 });
 

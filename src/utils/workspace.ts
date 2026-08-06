@@ -1,4 +1,5 @@
 import type { Workspace } from '../types';
+import { strings } from '../constants';
 
 // Workspace status helpers
 
@@ -135,6 +136,10 @@ export const round2 = (v: number): string => {
   const r = Math.round(v * 100) / 100;
   return r === 0 && v > 0 ? '<0.01' : `${r}`;
 };
+
+// Shared formatting for UI (card chips, detail rows).
+export const formatCpuCores = (v: string): string => round2(parseCpuCores(v, 0));
+export const formatMemoryGiB = (v: string): string => `${round2(parseMemoryGi(v, 0))} ${strings.common.gb}`;
 
 /**
  * Whether the `created-by` annotation identifies the current user.

@@ -441,9 +441,23 @@ describe('SimpleWorkspaceEditor accelerator axes', () => {
     expect(lastPayload().resources).toBeUndefined();
   });
 
-  test('min>0 template: touching CPU does not inject an absent accelerator; touching its slider does', async () => {
-    // Absent key seeds to the floor (min 1). That floor is display-only: only the key's
-    // own slider marks it for emission.
+  test('editing another resource never adds a missing optional GPU', async () => {
+    await renderEditor(
+      baseWorkspace({
+        templateRef: { name: 'eks-oidc', namespace: 'shared-ns' },
+        resources: { limits: { cpu: '2', memory: '4Gi' }, requests: { cpu: '500m', memory: '1Gi' } },
+      }),
+    );
+    await screen.findByText(/^resources$/i);
+    fireEvent.change(screen.getByRole('slider', { name: /cpu/i }), { target: { value: '1' } });
+    save();
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    const p = lastPayload();
+    expect(p.resources?.limits?.cpu).toBe('1');
+    expect(p.resources?.limits && 'nvidia.com/gpu' in p.resources.limits).toBe(false);
+  });
+
+  test('a missing required GPU saves at its template minimum with a banner', async () => {
     templatesResponse = {
       items: [
         tmpl({
@@ -462,17 +476,65 @@ describe('SimpleWorkspaceEditor accelerator axes', () => {
     );
     await screen.findByText(/^resources$/i);
     expect((screen.getByRole('slider', { name: 'GPU' }) as HTMLInputElement).value).toBe('1');
+    expect(screen.getByText('GPU adjusted from 0 to 1 (template bounds).')).toBeDefined();
 
-    fireEvent.change(screen.getByRole('slider', { name: /cpu/i }), { target: { value: '1' } });
     save();
     await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
-    const first = lastPayload();
-    expect(first.resources?.limits?.cpu).toBe('1');
-    expect(first.resources?.limits && 'nvidia.com/gpu' in first.resources.limits).toBe(false);
+    const p = lastPayload();
+    expect(p.resources?.limits?.['nvidia.com/gpu']).toBe('1');
+    expect(p.resources?.limits?.cpu).toBe('2');
+    expect(p.resources?.requests?.cpu).toBe('500m');
+  });
 
+  test('a missing pinned GPU saves at the pin despite its disabled slider', async () => {
+    templatesResponse = {
+      items: [
+        tmpl({
+          displayName: 'GPU',
+          resourceBounds: { resources: { 'nvidia.com/gpu': { min: '2', max: '2' } } },
+        }),
+      ],
+      access: { user: 'ok', shared: 'ok' },
+      namespaces: { own: 'user-ns', shared: 'shared-ns' },
+    };
+    await renderEditor(
+      baseWorkspace({
+        templateRef: { name: 'eks-oidc', namespace: 'shared-ns' },
+        resources: { limits: { cpu: '2', memory: '4Gi' }, requests: { cpu: '500m', memory: '1Gi' } },
+      }),
+    );
+    await screen.findByText(/^resources$/i);
+    const slider = screen.getByRole('slider', { name: 'GPU' }) as HTMLInputElement;
+    expect(slider.value).toBe('2');
+    expect(slider.disabled).toBe(true);
+    expect(screen.getByText('GPU adjusted from 0 to 2 (template bounds).')).toBeDefined();
+
+    save();
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    expect(lastPayload().resources?.limits?.['nvidia.com/gpu']).toBe('2');
+  });
+
+  test('sliding a required GPU above its seeded minimum saves the slid value', async () => {
+    templatesResponse = {
+      items: [
+        tmpl({
+          displayName: 'GPU',
+          resourceBounds: { resources: { 'nvidia.com/gpu': { min: '1', max: '2' } } },
+        }),
+      ],
+      access: { user: 'ok', shared: 'ok' },
+      namespaces: { own: 'user-ns', shared: 'shared-ns' },
+    };
+    await renderEditor(
+      baseWorkspace({
+        templateRef: { name: 'eks-oidc', namespace: 'shared-ns' },
+        resources: { limits: { cpu: '2', memory: '4Gi' }, requests: { cpu: '500m', memory: '1Gi' } },
+      }),
+    );
+    await screen.findByText(/^resources$/i);
     fireEvent.change(screen.getByRole('slider', { name: 'GPU' }), { target: { value: '2' } });
     save();
-    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
     expect(lastPayload().resources?.limits?.['nvidia.com/gpu']).toBe('2');
   });
 });

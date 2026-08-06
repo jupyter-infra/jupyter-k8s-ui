@@ -120,8 +120,6 @@ test.describe('Accelerator axes (gpu-template)', () => {
   });
 
   test('an unprefixed stored limit never renders as an accelerator chip', async ({ page }) => {
-    // Land a built-in key in limits the same way a YAML-editor edit would; the card
-    // must not render it as an accelerator chip.
     execSync(`${KUBECTL} patch workspace ${WS_NAME} --type=merge -p='{"spec":{"resources":{"limits":{"ephemeral-storage":"1073741824"}}}}'`, {
       stdio: 'pipe',
     });
@@ -131,6 +129,22 @@ test.describe('Accelerator axes (gpu-template)', () => {
     await expect(card).toBeVisible({ timeout: 10_000 });
     await expect(card.getByText('1 GPU')).toBeVisible();
     await expect(card.getByText(/ephemeral-storage/)).toHaveCount(0);
+  });
+
+  test('quantities entered through YAML render rounded and labeled GiB the card and detail page', async ({ page }) => {
+    execSync(`${KUBECTL} patch workspace ${WS_NAME} --type=merge -p='{"spec":{"resources":{"limits":{"cpu":"1500m","memory":"1G"}}}}'`, {
+      stdio: 'pipe',
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: /all/i }).click();
+    const card = page.getByLabel(new RegExp(`${WS_NAME}.*workspace`, 'i'));
+    await expect(card).toBeVisible({ timeout: 10_000 });
+    await expect(card.getByText('1.5 CPU')).toBeVisible();
+    await expect(card.getByText('0.93 GiB')).toBeVisible();
+
+    await page.goto(`/workspace/${WS_NAME}`);
+    await expect(page.getByText('1.5', { exact: true })).toBeVisible();
+    await expect(page.getByText('0.93 GiB', { exact: true })).toBeVisible();
   });
 
   test('edit seeds the stored GPU and sliding to 0 removes the key', async ({ page }) => {

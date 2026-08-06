@@ -37,9 +37,9 @@ import {
   parseCpuCores,
   parseMemoryGi,
   parseResourceValue,
-  clamp,
   type ConformAdjustment,
   type ResolvedTemplateControls,
+  shouldEmitAccelerator,
 } from '../../utils';
 import { WorkspaceResourceForm, type WorkspaceFormValues } from './WorkspaceResourceForm';
 import { LockedTemplateField } from './LockedTemplateField';
@@ -64,30 +64,21 @@ function seedFromSpec(
   const storedStorage = parseMemoryGi(spec.storage?.size, controls.storage.default);
 
   const cpu = conformAxis('cpu', storedCpu, controls.cpu, 'cores');
-  const memory = conformAxis('memory', storedMem, controls.memory, 'GB');
+  const memory = conformAxis('memory', storedMem, controls.memory, strings.common.gb);
   // Storage is read-only on edit — we don't clamp/conform it, just display the stored
   // value. (Any drift there is the operator's / #439's concern, surfaced by dry-run on save.)
   const image = conformImage(spec.image ?? '', controls.image);
 
   const adjustments = [...cpu.adjustments, ...memory.adjustments, ...image.adjustments];
 
-  // Accelerator axes: seed each declared key from its stored limit, conformed into the
-  // template bounds (banner on a real clamp). An ABSENT stored key seeds at
-  // clamp(0, min, max) with NO adjustment — absence is not drift, and template defaults
-  // are a create-time concept; adopting one here would silently add a device the user
-  // never chose. The seeded floor is display-only: save emits an absent key only once
-  // the user touches that slider (see handleSave).
+  // Seed each accelerator from its stored limit, absent keys as 0. Conform each to the template's current bounds, and disclose any adjustments.
   const accelerators: Record<string, number> = {};
   for (const acc of controls.accelerators) {
     const stored = spec.resources?.limits?.[acc.key];
-    if (stored !== undefined) {
-      const parsed = Math.round(parseResourceValue(stored, acc.axis.default));
-      const conformed = conformAxis('accelerator', parsed, acc.axis, '');
-      accelerators[acc.key] = conformed.value;
-      adjustments.push(...conformed.adjustments.map((a) => ({ ...a, key: acc.key })));
-    } else {
-      accelerators[acc.key] = clamp(0, acc.axis.min, acc.axis.max);
-    }
+    const parsed = stored !== undefined ? Math.round(parseResourceValue(stored, acc.axis.default)) : 0;
+    const conformed = conformAxis('accelerator', parsed, acc.axis, '');
+    accelerators[acc.key] = conformed.value;
+    adjustments.push(...conformed.adjustments.map((a) => ({ ...a, key: acc.key })));
   }
 
   // Seed the idle toggle. With a stored idleShutdown block, seed from its own values
@@ -180,8 +171,6 @@ export function SimpleWorkspaceEditor({ workspace, displayName, onDisplayNameCha
     setValues(seed.values);
   }
 
-  // Per-key accelerator touches: emission of a key ABSENT from the stored spec is gated on
-  // the user moving that key's own slider (see handleSave).
   const touchedAccelerators = useRef<Record<string, boolean>>({});
   const handleFieldChange = useCallback(<K extends keyof WorkspaceFormValues>(key: K, value: WorkspaceFormValues[K]) => {
     if (key === 'cpu' || key === 'memory' || key === 'accelerators') setResourcesTouched(true);
@@ -243,13 +232,14 @@ export function SimpleWorkspaceEditor({ workspace, displayName, onDisplayNameCha
       const modeled = ['cpu', 'memory', ...controls.accelerators.map((a) => a.key)];
       const carryUnmodeled = (stored: Record<string, string> | undefined) =>
         Object.fromEntries(Object.entries(stored ?? {}).filter(([key]) => !modeled.includes(key)));
-      // A key absent from the stored spec is emitted only after the user touches its own
-      // slider: under a min>0 template the absent-key seed is a nonzero floor, and an
-      // unrelated slider touch (cpu/memory) must not inject a device the user never chose.
       const acceleratorLimits = Object.fromEntries(
         controls.accelerators
-          .filter(
-            (a) => (values.accelerators[a.key] ?? 0) > 0 && (workspace.spec.resources?.limits?.[a.key] !== undefined || touchedAccelerators.current[a.key]),
+          .filter((a) =>
+            shouldEmitAccelerator(values.accelerators[a.key] ?? 0, {
+              stored: workspace.spec.resources?.limits?.[a.key] !== undefined,
+              touched: !!touchedAccelerators.current[a.key],
+              min: a.axis.min,
+            }),
           )
           .map((a) => [a.key, `${Math.round(values.accelerators[a.key])}`]),
       );
