@@ -68,7 +68,7 @@ export function WorkspaceList() {
 
     return workspaces.filter((ws) => {
       if (filter === 'mine') {
-        if (!checkIsOwner(getWorkspaceOwner(ws), user?.username)) return false;
+        if (!checkIsOwner(getWorkspaceOwner(ws), user?.k8sUser)) return false;
       }
 
       if (search) {
@@ -79,7 +79,7 @@ export function WorkspaceList() {
 
       return true;
     });
-  }, [workspaces, filter, user?.username, search]);
+  }, [workspaces, filter, user?.k8sUser, search]);
 
   const handleFilterChange = (_: React.MouseEvent<HTMLElement>, value: string | null) => {
     if (value && (value === 'all' || value === 'mine')) {

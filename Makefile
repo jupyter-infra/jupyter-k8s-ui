@@ -100,7 +100,9 @@ docker-push: ## Push docker image with the web app.
 .PHONY: refresh-token
 refresh-token: ## Fetch a fresh OIDC token and set up .env for local development.
 	@if [ ! -f .env ]; then cp .env.example .env; echo "Created .env from .env.example"; fi
-	@OIDC_ARGS=$$(kubectl config view --raw 2>/dev/null | grep -E -- '--(oidc-|listen-address)' | sed 's/^[[:space:]]*- //' | tr '\n' ' '); \
+	@CTX=$$(kubectl config current-context 2>/dev/null); \
+	OIDC_USER=$$(kubectl config view --raw -o jsonpath="{.contexts[?(@.name==\"$$CTX\")].context.user}" 2>/dev/null); \
+	OIDC_ARGS=$$(kubectl config view --raw -o jsonpath="{range .users[?(@.name==\"$$OIDC_USER\")].user.exec.args[*]}{@}{\"\n\"}{end}" 2>/dev/null | grep -E -- '--(oidc-|listen-address)' | tr '\n' ' '); \
 	if [ -z "$$OIDC_ARGS" ]; then \
 		echo ""; \
 		echo "ERROR: No OIDC configuration found in kubeconfig."; \
@@ -114,6 +116,7 @@ refresh-token: ## Fetch a fresh OIDC token and set up .env for local development
 		exit 1; \
 	fi; \
 	echo "Fetching OIDC token (browser may open for auth)..."; \
+	: "If this hangs, clear stale oidc-login cache locks: rm -f ~/.kube/cache/oidc-login/*.lock"; \
 	TMPFILE=$$(mktemp); \
 	if ! kubectl oidc-login get-token $$OIDC_ARGS > "$$TMPFILE" 2>&1; then \
 		echo ""; \

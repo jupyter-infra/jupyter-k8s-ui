@@ -76,9 +76,17 @@ export interface NamespacePreference {
   // recompute). Managed internally by read/build; handlers pass plain NamespacePreference
   // objects and never set it.
   boundUser: string;
+  // The authoritative Kubernetes username (<username-prefix>:<claim>) the API server enforces
+  // against — the string the operator stamps into `created-by`. Read-through cache: GET /me
+  // resolves it ONCE via SelfSubjectReview then mints it here, so subsequent loads (on ANY
+  // replica — the cookie travels with the request) skip the cluster call. Stable per identity,
+  // so it carries NO freshness expiry (unlike `visible`); it lives for the cookie's Max-Age
+  // and is re-bound by `boundUser`. null when not yet resolved. Display-only, like the rest of
+  // this cookie — never the security boundary. Every writer must preserve it.
+  k8sUser: string | null;
 }
 
-const EMPTY_PREFERENCE: NamespacePreference = { activeNs: null, visible: [], checkedUpTo: 0, universeFp: '', visibleExp: 0, boundUser: '' };
+const EMPTY_PREFERENCE: NamespacePreference = { activeNs: null, visible: [], checkedUpTo: 0, universeFp: '', visibleExp: 0, boundUser: '', k8sUser: null };
 
 /**
  * A stable, non-reversible tag for the JWT's owner. Hashes the `sub` claim (stable OIDC
@@ -143,6 +151,9 @@ function verifyAndParse(cookieValue: string, keyMap: KeyMap): NamespacePreferenc
         if (typeof payload.visibleExp !== 'number' || !Array.isArray(payload.visible)) return null;
         if (typeof payload.checkedUpTo !== 'number' || typeof payload.universeFp !== 'string') return null;
         if (typeof payload.boundUser !== 'string') return null;
+        // k8sUser was added later; a cookie minted before it is otherwise valid. Normalize a
+        // missing/ill-typed value to null (unresolved) rather than rejecting the whole cookie.
+        payload.k8sUser = typeof payload.k8sUser === 'string' ? payload.k8sUser : null;
         return payload;
       }
     }
@@ -196,6 +207,7 @@ export function buildNamespacePreferenceCookie(pref: NamespacePreference, jwt: s
     visibleExp: opts.preserveVisibleExp ? pref.visibleExp : now + NS_PREF_VISIBLE_TTL_SECS,
     // Bind to the writing user, always freshly derived (never carried from the input pref).
     boundUser: userTag(jwt),
+    k8sUser: pref.k8sUser,
   };
 
   const { signingKey } = deriveKeys(signingEntry.key);

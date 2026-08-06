@@ -48,6 +48,7 @@ function installMocks() {
         return { body: { items: [] } };
       },
     }),
+    reuseOrCreateAuthnClient: async () => ({}),
     reuseOrCreateAuthClient: async () => ({
       createSelfSubjectAccessReview: async (body: { spec: { resourceAttributes?: { namespace?: string } } }) => ({
         body: { ...body, status: { allowed: ssarVerdict } },

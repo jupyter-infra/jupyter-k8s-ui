@@ -117,7 +117,7 @@ describe('create via inline YAML toggle', () => {
     validateSpy.mockClear();
     validateSpy.mockResolvedValue({ valid: true });
     templatesResponse = { items: [], access: { user: 'ok', shared: 'ok' }, namespaces: { own: 'user-ns', shared: 'shared-ns' } };
-    globalThis.fetch = mock(async () => new Response(JSON.stringify({ authenticated: true, username: 'alice' }), { status: 200 })) as typeof fetch;
+    globalThis.fetch = mock(async () => new Response(JSON.stringify({ authenticated: true, displayUser: 'alice' }), { status: 200 })) as typeof fetch;
   });
   // Flush inside act BEFORE the synchronous cleanup(), so any trailing update from the
   // just-finished test (e.g. MUI InputBase's mount effect) is applied under act rather than
@@ -181,7 +181,7 @@ describe('template-aware simple create', () => {
     createSpy.mockClear();
     createSimpleSpy.mockClear();
     templatesResponse = { items: [], access: { user: 'ok', shared: 'ok' }, namespaces: { own: 'user-ns', shared: 'shared-ns' } };
-    globalThis.fetch = mock(async () => new Response(JSON.stringify({ authenticated: true, username: 'alice' }), { status: 200 })) as typeof fetch;
+    globalThis.fetch = mock(async () => new Response(JSON.stringify({ authenticated: true, displayUser: 'alice' }), { status: 200 })) as typeof fetch;
   });
   // See the note above: flush under act before cleanup so trailing updates don't leak.
   afterEach(async () => {
@@ -340,7 +340,7 @@ describe('accelerator axes in simple create', () => {
   beforeEach(() => {
     createSimpleSpy.mockClear();
     templatesResponse = { items: [], access: { user: 'ok', shared: 'ok' }, namespaces: { own: 'user-ns', shared: 'shared-ns' } };
-    globalThis.fetch = mock(async () => new Response(JSON.stringify({ authenticated: true, username: 'alice' }), { status: 200 })) as typeof fetch;
+    globalThis.fetch = mock(async () => new Response(JSON.stringify({ authenticated: true, displayUser: 'alice' }), { status: 200 })) as typeof fetch;
   });
   afterEach(async () => {
     await flush();

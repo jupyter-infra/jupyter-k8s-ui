@@ -3,7 +3,14 @@ import { createContext, useContext, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 interface User {
-  username: string;
+  /** Raw OIDC claim (preferred_username || sub) — for display only (avatar, default names). */
+  displayUser: string;
+  /**
+   * Authoritative Kubernetes username the API server enforces against (<prefix>:<claim>) —
+   * the string stamped into the `created-by` annotation. Compare ownership against THIS, not
+   * `username`. null when the server couldn't resolve it (no-cluster dev, transient error).
+   */
+  k8sUser: string | null;
   email?: string;
   groups?: string[];
 }

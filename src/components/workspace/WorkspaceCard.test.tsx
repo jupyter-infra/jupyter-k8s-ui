@@ -3,9 +3,14 @@ import { render, screen, cleanup } from '@testing-library/react';
 import { WorkspaceCard } from './WorkspaceCard';
 import { TestProviders, makeWorkspace } from '../../test-utils';
 
-// Mock auth context to pretend "alice" is logged in
+// Mock auth context to pretend "alice" is logged in. `displayUser` (raw OIDC claim,
+// display-only) and `k8sUser` (the authoritative K8s username `created-by` holds) are
+// DELIBERATELY DIFFERENT here: ownership must compare against k8sUser, so the owner annotations
+// in these tests use 'alice' (== k8sUser) while displayUser is a distinct claim. This makes the
+// owner-gating tests a real regression guard for #57 — reverting the call site to
+// user?.displayUser would break them.
 mock.module('../../context', () => ({
-  useAuth: () => ({ user: { username: 'alice' }, isLoading: false }),
+  useAuth: () => ({ user: { displayUser: 'alice-raw-claim', k8sUser: 'alice' }, isLoading: false }),
 }));
 
 // Mock mutations so we can assert on `isPending` etc without real fetches

@@ -40,7 +40,7 @@ export function WorkspaceCreate() {
   const { data: workspaces } = useWorkspaces();
   const templatesQuery = useTemplates();
 
-  const defaults = useMemo(() => generateDefaults(user?.username ?? 'user', workspaces?.length ?? 0), [user?.username, workspaces?.length]);
+  const defaults = useMemo(() => generateDefaults(user?.displayUser ?? 'user', workspaces?.length ?? 0), [user?.displayUser, workspaces?.length]);
 
   // Name/displayName are lifted here so they persist across the form <-> YAML toggle.
   const [nameOverride, setNameOverride] = useState<string | null>(null);

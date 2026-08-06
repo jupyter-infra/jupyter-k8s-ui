@@ -57,6 +57,7 @@ function installMocks() {
     // Superset: satisfy all sibling static imports — incl. reuseOrCreateUserK8sClient
     // (handlers/workspaces.ts), else `bun run test:server` fails on the file loading after us.
     reuseOrCreateUserK8sClient: async () => ({}),
+    reuseOrCreateAuthnClient: async () => ({}),
     loadKubeConfigBestEffort: () => null,
     reuseOrCreateAuthClient: async () => ({
       createSelfSubjectAccessReview: async (body: { spec: { resourceAttributes?: { namespace?: string } } }) => {

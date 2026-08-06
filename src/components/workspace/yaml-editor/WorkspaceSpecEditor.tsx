@@ -381,7 +381,7 @@ export function WorkspaceSpecEditor({
   // the pod and drops the user's session. Enforce the same check on the page.
   if (isEdit && existing) {
     const owner = getWorkspaceOwner(existing);
-    if (!isOwner(owner, user?.username)) {
+    if (!isOwner(owner, user?.k8sUser)) {
       return <EditNotice title={ws.advancedEditNotAllowedTitle} message={ws.advancedEditNotOwner} onBack={() => navigate('/')} backLabel={ws.advancedBack} />;
     }
     if (getWorkspaceStatus(existing) !== 'Stopped') {

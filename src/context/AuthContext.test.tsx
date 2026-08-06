@@ -40,13 +40,13 @@ describe('AuthContext', () => {
   test('sets user when /me returns authenticated response', async () => {
     mockFetchOnce({
       ok: true,
-      json: async () => ({ authenticated: true, user: { username: 'alice', email: 'a@x.com' } }),
+      json: async () => ({ authenticated: true, user: { displayUser: 'alice', k8sUser: 'github:alice', email: 'a@x.com' } }),
     });
 
     const { result } = renderHook(() => useAuth(), { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.user).toEqual({ username: 'alice', email: 'a@x.com' });
+    expect(result.current.user).toEqual({ displayUser: 'alice', k8sUser: 'github:alice', email: 'a@x.com' });
   });
 
   test('sets user to null when /me returns unauthenticated flag', async () => {

@@ -81,17 +81,26 @@ describe('parseResourceValue / parseMemoryGi / parseCpuCores', () => {
 });
 
 describe('isOwner', () => {
-  // Each branch represents a different OIDC provider format seen in the wild.
+  // The `created-by` annotation holds the authoritative K8s username (<prefix>:<claim>) and
+  // /me resolves that exact string into user.k8sUser, so matching is plain equality — no
+  // provider-shaped fuzzy branches. Each case is a distinct contract of that equality.
   test.each([
-    ['alice', 'alice', true, 'exact'],
-    ['github:alice', 'alice', true, 'github: prefix'],
-    ['dex/alice', 'alice', true, 'provider/user'],
-    ['oidc:alice', 'alice', true, 'provider:user'],
-    ['alice', 'bob', false, 'mismatch'],
-    [undefined, 'alice', false, 'missing owner'],
-    ['alice', undefined, false, 'missing username'],
-  ])('isOwner(%s, %s) → %s (%s)', (owner, user, expected) => {
-    expect(isOwner(owner, user)).toBe(expected);
+    // The annotation the API server stamps IS the prefixed username; k8sUser is that same
+    // prefixed string. Exact match.
+    ['github:alice', 'github:alice', true, 'prefixed exact match'],
+    ['alice', 'alice', true, 'unprefixed exact match'],
+    // The old fuzz matched the raw claim against a prefixed owner; that mismatch is the bug.
+    ['github:alice', 'alice', false, 'raw claim must NOT match prefixed owner'],
+    // The false positive the old substring fuzz allowed: a service account whose name ends
+    // in the username. Plain equality rejects it.
+    ['system:serviceaccount:kube-system:bob', 'bob', false, 'service account is not user bob'],
+    ['dex/alice', 'alice', false, 'provider/user no longer fuzzy-matches'],
+    ['github:alice', 'github:bob', false, 'different user'],
+    [undefined, 'github:alice', false, 'missing owner'],
+    ['github:alice', undefined, false, 'missing k8sUser (undefined)'],
+    ['github:alice', null, false, 'unresolved k8sUser (null) matches nothing'],
+  ])('isOwner(%s, %s) → %s (%s)', (owner, k8sUser, expected) => {
+    expect(isOwner(owner, k8sUser)).toBe(expected);
   });
 });
 

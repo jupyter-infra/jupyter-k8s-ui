@@ -28,6 +28,7 @@ function installMocks() {
     // statically-imported module needs — incl. reuseOrCreateUserK8sClient (handlers/
     // workspaces.ts), or `bun run test:server` fails on whichever file loads after us.
     reuseOrCreateUserK8sClient: async () => ({}),
+    reuseOrCreateAuthnClient: async () => ({}),
     reuseOrCreateAuthClient: async () => ({ createSelfSubjectAccessReview: async () => ({ body: { status: { allowed: true } } }) }),
     loadKubeConfigBestEffort: () => ({
       makeApiClient: () => ({ listNamespace: () => listImpl() }),

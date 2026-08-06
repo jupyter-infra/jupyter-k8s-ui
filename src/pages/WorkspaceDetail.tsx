@@ -98,7 +98,7 @@ export function WorkspaceDetail() {
   const isRunning = workspace.spec.desiredStatus === 'Running';
 
   const owner = getWorkspaceOwner(workspace);
-  const ownerMatch = checkIsOwner(owner, user?.username);
+  const ownerMatch = checkIsOwner(owner, user?.k8sUser);
   const canOpen = workspaceStatus === 'Running' && accessURL && (ownerMatch || workspace.spec.accessType === 'Public');
 
   const handleStart = () => startMutation.mutate(workspace.metadata.name);

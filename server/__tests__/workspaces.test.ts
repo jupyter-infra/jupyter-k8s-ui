@@ -26,6 +26,7 @@ mock.module('../k8s/client', () => ({
     replaceNamespacedCustomObject: mockedK8s.replace,
     deleteNamespacedCustomObject: mockedK8s.del,
   }),
+  reuseOrCreateAuthnClient: async () => ({}),
 }));
 
 import { handleListWorkspaces, handleGetWorkspace, handleCreateWorkspace, handleUpdateWorkspace, handleDeleteWorkspace } from '../handlers/workspaces';
