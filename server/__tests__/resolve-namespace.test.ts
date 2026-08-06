@@ -37,6 +37,7 @@ function installMocks() {
     // reuseOrCreateUserK8sClient (handlers/workspaces.ts), else `bun run test:server` fails
     // on the file that loads after us.
     reuseOrCreateUserK8sClient: async () => ({}),
+    reuseOrCreateAuthnClient: async () => ({}),
     loadKubeConfigBestEffort: () => null,
     reuseOrCreateAuthClient: async (jwt: string | null) => ({
       createSelfSubjectAccessReview: async (body: { spec: { resourceAttributes?: { namespace?: string } } }) => {

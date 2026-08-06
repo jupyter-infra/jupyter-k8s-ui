@@ -188,6 +188,8 @@ When adding a new test:
 - Frontend test → colocate next to the source (`src/**/*.test.ts` or `*.test.tsx`) — DOM is auto-available via preload
 - E2E test → goes in `e2e/` (Playwright, see E2E section below)
 
+**Adding an export to `server/k8s/client.ts`? Stub it in every `mock.module('../k8s/client', …)`** `mock.module` is process-global, so each factory must export every name. A missing one is silently tolerated on Linux but hard-errors on macOS, dropping those files from the suite.
+
 ### Writing tests that earn their keep
 
 **Rule: each test should fail for a distinct reason.** If two tests would fail from the same bug, one is redundant. Aim for breadth across failure modes, not depth on one.
