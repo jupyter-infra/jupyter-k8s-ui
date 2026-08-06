@@ -90,7 +90,7 @@ describe('SimpleWorkspaceEditor', () => {
   beforeEach(() => {
     updateSpy.mockClear();
     templatesResponse = { items: [], access: { user: 'ok', shared: 'ok' }, namespaces: { own: 'user-ns', shared: 'shared-ns' } };
-    globalThis.fetch = mock(async () => new Response(JSON.stringify({ authenticated: true, username: 'alice' }), { status: 200 })) as typeof fetch;
+    globalThis.fetch = mock(async () => new Response(JSON.stringify({ authenticated: true, displayUser: 'alice' }), { status: 200 })) as typeof fetch;
   });
   // Flush under act before the synchronous cleanup(), so trailing updates don't leak.
   afterEach(async () => {
@@ -355,7 +355,7 @@ describe('SimpleWorkspaceEditor accelerator axes', () => {
       access: { user: 'ok', shared: 'ok' },
       namespaces: { own: 'user-ns', shared: 'shared-ns' },
     };
-    globalThis.fetch = mock(async () => new Response(JSON.stringify({ authenticated: true, username: 'alice' }), { status: 200 })) as typeof fetch;
+    globalThis.fetch = mock(async () => new Response(JSON.stringify({ authenticated: true, displayUser: 'alice' }), { status: 200 })) as typeof fetch;
   });
   afterEach(async () => {
     await flush();

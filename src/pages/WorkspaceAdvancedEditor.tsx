@@ -66,7 +66,7 @@ export function WorkspaceAdvancedEditor() {
           isLoading={isLoading}
           error={error}
           existing={existing}
-          username={user?.username}
+          k8sUser={user?.k8sUser}
           routeName={routeName}
           name={name}
           setName={setNameOverride}
@@ -87,7 +87,7 @@ interface EditBodyProps {
   isLoading: boolean;
   error: unknown;
   existing: ReturnType<typeof useWorkspace>['data'];
-  username?: string;
+  k8sUser?: string | null;
   routeName?: string;
   name: string;
   setName: (v: string) => void;
@@ -104,7 +104,7 @@ function EditBody({
   isLoading,
   error,
   existing,
-  username,
+  k8sUser,
   routeName,
   name,
   setName,
@@ -146,7 +146,7 @@ function EditBody({
   if (error || !existing) {
     return <Notice message={error instanceof Error ? error.message : ws.advancedLoadError} onBack={onBack} backLabel={ws.advancedBack} />;
   }
-  if (!isOwner(getWorkspaceOwner(existing), username)) {
+  if (!isOwner(getWorkspaceOwner(existing), k8sUser)) {
     return <Notice title={ws.advancedEditNotAllowedTitle} message={ws.advancedEditNotOwner} onBack={onBack} backLabel={ws.advancedBack} />;
   }
   if (getWorkspaceStatus(existing) !== 'Stopped') {

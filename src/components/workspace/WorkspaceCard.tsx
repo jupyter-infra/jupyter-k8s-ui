@@ -42,7 +42,7 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
   const accessURL = status?.accessURL;
 
   const owner = getWorkspaceOwner(workspace);
-  const ownerMatch = checkIsOwner(owner, user?.username);
+  const ownerMatch = checkIsOwner(owner, user?.k8sUser);
 
   const canOpen = workspaceStatus === 'Running' && accessURL && (ownerMatch || spec.accessType === 'Public');
   const isRunning = spec.desiredStatus === 'Running';

@@ -46,7 +46,7 @@ export function Layout() {
               </IconButton>
             </Tooltip>
             <ThemeSwitcher />
-            {isLoading ? <Skeleton variant="circular" width={32} height={32} /> : user ? <UserMenu username={user.username} /> : null}
+            {isLoading ? <Skeleton variant="circular" width={32} height={32} /> : user ? <UserMenu username={user.displayUser} /> : null}
           </Stack>
         </Toolbar>
       </AppBar>
