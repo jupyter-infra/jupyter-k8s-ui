@@ -133,7 +133,7 @@ test.describe('Accelerator axes (gpu-template)', () => {
   });
 
   test('quantities entered through YAML render rounded and labeled GiB on the card', async ({ page }) => {
-    // "1500m" is 1.5 cores; "1G" is 10^9 bytes = 0.93 GiB; YAML edits can store both.
+    // "1G" is 10^9 bytes, 0.93 GiB.
     execSync(`${KUBECTL} patch workspace ${WS_NAME} --type=merge -p='{"spec":{"resources":{"limits":{"cpu":"1500m","memory":"1G"}}}}'`, {
       stdio: 'pipe',
     });
@@ -143,6 +143,11 @@ test.describe('Accelerator axes (gpu-template)', () => {
     await expect(card).toBeVisible({ timeout: 10_000 });
     await expect(card.getByText('1.5 CPU')).toBeVisible();
     await expect(card.getByText('0.93 GiB')).toBeVisible();
+
+    // Detail renders the same values through the same formatters.
+    await page.goto(`/workspace/${WS_NAME}`);
+    await expect(page.getByText('1.5', { exact: true })).toBeVisible();
+    await expect(page.getByText('0.93 GiB', { exact: true })).toBeVisible();
   });
 
   test('edit seeds the stored GPU and sliding to 0 removes the key', async ({ page }) => {
