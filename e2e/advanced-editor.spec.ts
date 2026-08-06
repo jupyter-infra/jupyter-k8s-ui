@@ -126,7 +126,11 @@ async function fillIdentity(page: Page, name: string) {
 async function deleteWorkspace(page: Page, name: string) {
   await page.goto('/');
   await page.getByRole('button', { name: /all/i }).click();
-  const card = page.getByLabel(new RegExp(`${name}.*workspace`, 'i'));
+  // Look the card up by the resource name it displays.
+  const card = page
+    .getByLabel(/workspace,/i)
+    .filter({ hasText: name })
+    .first();
   if (!(await card.isVisible().catch(() => false))) return;
   await card.getByRole('button', { name: /more options/i }).click();
   await page.getByRole('menuitem', { name: /delete/i }).click();
@@ -232,6 +236,40 @@ test.describe('Advanced YAML editor', () => {
     await combobox.fill('default');
     await page.getByRole('option', { name: 'default' }).click();
     await expect(caution).toHaveCount(0);
+  });
+
+  test('editing the YAML buffer and saving persists the spec change', async ({ page }) => {
+    const name = `${RUN_ID}-create`;
+    await page.goto(`/workspace/${name}/edit`);
+    await waitForEditor(page);
+
+    // Swap the image inside the buffer for another template-allowed one.
+    await expect.poll(async () => getEditorYaml(page), { timeout: 10_000 }).toContain('nginx:latest');
+    const yaml = await getEditorYaml(page);
+    await setEditorYaml(page, yaml.replace('nginx:latest', 'nginx:1.27'));
+
+    await page.getByRole('button', { name: /save changes/i }).click();
+    await expectOnPath(page);
+
+    await page.goto(`/workspace/${name}`);
+    await expect(page.getByText('nginx:1.27', { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('.MuiChip-label').getByText('Stopped', { exact: true })).toBeVisible({ timeout: 10_000 });
+  });
+
+  test('buffer content violating template bounds is rejected by Validate on the edit route', async ({ page }) => {
+    const name = `${RUN_ID}-create`;
+    await page.goto(`/workspace/${name}/edit`);
+    await waitForEditor(page);
+
+    // Raise memory beyond the default template's 2Gi cap.
+    await expect.poll(async () => getEditorYaml(page), { timeout: 10_000 }).toContain('memory:');
+    const yaml = await getEditorYaml(page);
+    const mutated = yaml.replace(/memory: [^\n]+/g, 'memory: 999Gi');
+    expect(mutated).toContain('999Gi');
+    await setEditorYaml(page, mutated);
+
+    await page.getByRole('button', { name: /^validate$/i }).click();
+    await expect(page.getByText(/exceeds|denied|admission webhook/i).first()).toBeVisible({ timeout: 15_000 });
   });
 
   test('YAML syntax error blocks save', async ({ page }) => {
