@@ -391,3 +391,10 @@ export function buildResourcesBlock(
     limits: { ...acceleratorLimits, cpu: `${cpuLimitCores}`, memory: `${memoryLimitGi}Gi` },
   };
 }
+
+// Save-time emission gate for one accelerator axis on the edit path: a zero count is
+// never emitted; a nonzero count is emitted when the key is already stored, when its own
+// slider was touched, or when the axis floor mandates the device (min > 0, #62).
+export function shouldEmitAccelerator(value: number, state: { stored: boolean; touched: boolean; min: number }): boolean {
+  return value > 0 && (state.stored || state.touched || state.min > 0);
+}

@@ -7,9 +7,28 @@ import {
   conformAxis,
   conformImage,
   buildResourcesBlock,
+  shouldEmitAccelerator,
 } from './templateBounds';
 import type { WorkspaceTemplate, WorkspaceTemplateSpec, DiscoveredTemplate } from '../types';
 import { STATIC_DEFAULTS, resourceBounds, RESOURCE_DEFAULTS, IDLE_SHUTDOWN_DEFAULTS, DEFAULT_TEMPLATE_LABEL } from '../constants';
+
+describe('shouldEmitAccelerator', () => {
+  test('a zero count is never emitted', () => {
+    expect(shouldEmitAccelerator(0, { stored: true, touched: true, min: 1 })).toBe(false);
+  });
+  test('a stored key emits', () => {
+    expect(shouldEmitAccelerator(1, { stored: true, touched: false, min: 0 })).toBe(true);
+  });
+  test('a touched slider emits its key', () => {
+    expect(shouldEmitAccelerator(1, { stored: false, touched: true, min: 0 })).toBe(true);
+  });
+  test('a mandated floor emits an absent untouched key', () => {
+    expect(shouldEmitAccelerator(1, { stored: false, touched: false, min: 1 })).toBe(true);
+  });
+  test('an optional absent untouched key stays out', () => {
+    expect(shouldEmitAccelerator(1, { stored: false, touched: false, min: 0 })).toBe(false);
+  });
+});
 
 function tmpl(spec: WorkspaceTemplateSpec, name = 'eks-oidc', namespace = 'shared'): WorkspaceTemplate {
   return { metadata: { name, namespace }, spec };

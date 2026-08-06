@@ -40,6 +40,7 @@ import {
   parseResourceValue,
   type ConformAdjustment,
   type ResolvedTemplateControls,
+  shouldEmitAccelerator,
 } from '../../utils';
 import { WorkspaceResourceForm, type WorkspaceFormValues } from './WorkspaceResourceForm';
 import { LockedTemplateField } from './LockedTemplateField';
@@ -71,14 +72,8 @@ function seedFromSpec(
 
   const adjustments = [...cpu.adjustments, ...memory.adjustments, ...image.adjustments];
 
-  // Accelerator axes: seed each declared key from its stored limit, conformed into the
-  // template bounds. An absent key seeds as 0 (a zero count omits the key on save, so
-  // absent and 0 are the same state). On a min:0 axis, 0 conforms to 0 with no
-  // adjustment: absence is not drift, and an untouched save never injects the key (see
-  // handleSave). On a min>0 axis, 0 is out of bounds, so absence is drift: conform to
-  // the floor and disclose it in the banner, exactly like cpu/memory. The floor, not
-  // the template default: the default is a create-time concept, the floor is the
-  // minimal count the template admits.
+  // Seed each accelerator from its stored limit, absent keys as 0; conformAxis clamps a
+  // min>0 absence to the floor with the drift banner (the #62 contract).
   const accelerators: Record<string, number> = {};
   for (const acc of controls.accelerators) {
     const stored = spec.resources?.limits?.[acc.key];
@@ -241,18 +236,14 @@ export function SimpleWorkspaceEditor({ workspace, displayName, onDisplayNameCha
       const modeled = ['cpu', 'memory', ...controls.accelerators.map((a) => a.key)];
       const carryUnmodeled = (stored: Record<string, string> | undefined) =>
         Object.fromEntries(Object.entries(stored ?? {}).filter(([key]) => !modeled.includes(key)));
-      // Emit a key when it is stored, when the user touched its own slider, or when the
-      // axis floor is above zero: a min>0 template mandates the device, the seed conformed
-      // an absent key to that floor, and this block replaces spec.resources wholesale, so
-      // omitting the key would delete a mandated device. A min:0 key absent from the spec
-      // stays out: an unrelated slider touch (cpu/memory) must not inject a device the
-      // user never chose.
       const acceleratorLimits = Object.fromEntries(
         controls.accelerators
-          .filter(
-            (a) =>
-              (values.accelerators[a.key] ?? 0) > 0 &&
-              (workspace.spec.resources?.limits?.[a.key] !== undefined || touchedAccelerators.current[a.key] || a.axis.min > 0),
+          .filter((a) =>
+            shouldEmitAccelerator(values.accelerators[a.key] ?? 0, {
+              stored: workspace.spec.resources?.limits?.[a.key] !== undefined,
+              touched: !!touchedAccelerators.current[a.key],
+              min: a.axis.min,
+            }),
           )
           .map((a) => [a.key, `${Math.round(values.accelerators[a.key])}`]),
       );
