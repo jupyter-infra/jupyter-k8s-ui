@@ -16,7 +16,7 @@
 
 import type { AccessType, OwnershipType, WorkspaceTemplate, DiscoveredTemplate, IdleDetection } from '../types';
 import { RESOURCE_DEFAULTS, IDLE_SHUTDOWN_DEFAULTS, STATIC_DEFAULTS, resourceBounds, DEFAULT_TEMPLATE_LABEL, ACCELERATOR_LABELS } from '../constants';
-import { parseCpuCores, parseMemoryGi, parseResourceValue, clamp } from './workspace';
+import { parseCpuCores, parseMemoryGi, parseResourceValue, clamp, round2 } from './workspace';
 
 export interface AxisControl {
   min: number;
@@ -315,7 +315,7 @@ export interface ConformResult<T> {
 export function conformAxis(field: ConformAdjustment['field'], value: number, control: AxisControl, unit: string): ConformResult<number> {
   const clamped = clamp(value, control.min, control.max);
   if (clamped === value) return { value, adjustments: [] };
-  const withUnit = (n: number) => (unit ? `${n} ${unit}` : `${n}`);
+  const withUnit = (n: number) => (unit ? `${round2(n)} ${unit}` : round2(n));
   return { value: clamped, adjustments: [{ field, from: withUnit(value), to: withUnit(clamped) }] };
 }
 
