@@ -13,19 +13,19 @@ import type { WorkspaceTemplate, WorkspaceTemplateSpec, DiscoveredTemplate } fro
 import { STATIC_DEFAULTS, resourceBounds, RESOURCE_DEFAULTS, IDLE_SHUTDOWN_DEFAULTS, DEFAULT_TEMPLATE_LABEL } from '../constants';
 
 describe('shouldEmitAccelerator', () => {
-  test('a zero count is never emitted', () => {
+  test('is false for a zero count', () => {
     expect(shouldEmitAccelerator(0, { stored: true, touched: true, min: 1 })).toBe(false);
   });
-  test('a stored key emits', () => {
+  test('is true for a stored key', () => {
     expect(shouldEmitAccelerator(1, { stored: true, touched: false, min: 0 })).toBe(true);
   });
-  test('a touched slider emits its key', () => {
+  test('is true for a touched slider', () => {
     expect(shouldEmitAccelerator(1, { stored: false, touched: true, min: 0 })).toBe(true);
   });
-  test('a mandated floor emits an absent untouched key', () => {
+  test('is true for an absent untouched key when the template requires it', () => {
     expect(shouldEmitAccelerator(1, { stored: false, touched: false, min: 1 })).toBe(true);
   });
-  test('an optional absent untouched key stays out', () => {
+  test('is false for an absent untouched key when the template makes it optional', () => {
     expect(shouldEmitAccelerator(1, { stored: false, touched: false, min: 0 })).toBe(false);
   });
 });

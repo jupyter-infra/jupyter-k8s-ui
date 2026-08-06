@@ -132,7 +132,7 @@ describe('WorkspaceCard accelerator chip', () => {
     expect(screen.queryByText(/GPU/)).toBeNull();
   });
 
-  test('non-step-clean stored quantities round to 2 decimals for display', () => {
+  test('stored quantities the sliders cannot produce round to 2 decimals', () => {
     const ws = makeWorkspace({ owner: 'alice' });
     // "1G" is 10^9 bytes = 0.9313… Gi; "1500m" is 1.5 cores — both must not render raw floats.
     ws.spec.resources = { limits: { cpu: '1500m', memory: '1G' } };

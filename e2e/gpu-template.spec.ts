@@ -120,8 +120,7 @@ test.describe('Accelerator axes (gpu-template)', () => {
   });
 
   test('an unprefixed stored limit never renders as an accelerator chip', async ({ page }) => {
-    // Land a built-in key in limits the same way a YAML-editor edit would; the card
-    // must not render it as an accelerator chip.
+    // Landed via kubectl patch, the YAML-editor channel for keys the form does not model.
     execSync(`${KUBECTL} patch workspace ${WS_NAME} --type=merge -p='{"spec":{"resources":{"limits":{"ephemeral-storage":"1073741824"}}}}'`, {
       stdio: 'pipe',
     });
@@ -133,9 +132,8 @@ test.describe('Accelerator axes (gpu-template)', () => {
     await expect(card.getByText(/ephemeral-storage/)).toHaveCount(0);
   });
 
-  test('display edge cases: non-step-clean quantities round on the card in GiB', async ({ page }) => {
-    // Land awkward but in-bounds quantities the way a YAML edit would; the card must
-    // round for display and label binary units GiB.
+  test('quantities entered through YAML render rounded and labeled GiB on the card', async ({ page }) => {
+    // "1500m" is 1.5 cores; "1G" is 10^9 bytes = 0.93 GiB; YAML edits can store both.
     execSync(`${KUBECTL} patch workspace ${WS_NAME} --type=merge -p='{"spec":{"resources":{"limits":{"cpu":"1500m","memory":"1G"}}}}'`, {
       stdio: 'pipe',
     });

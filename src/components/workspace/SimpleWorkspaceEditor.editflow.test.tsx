@@ -441,9 +441,7 @@ describe('SimpleWorkspaceEditor accelerator axes', () => {
     expect(lastPayload().resources).toBeUndefined();
   });
 
-  test('min:0 template: a CPU-touched save sends resources without injecting the absent key', async () => {
-    // The one case where a min:0 absent key coexists with a sent resources block: the
-    // emission filter must keep the key out.
+  test('editing another resource never adds a missing optional GPU', async () => {
     await renderEditor(
       baseWorkspace({
         templateRef: { name: 'eks-oidc', namespace: 'shared-ns' },
@@ -459,7 +457,7 @@ describe('SimpleWorkspaceEditor accelerator axes', () => {
     expect(p.resources?.limits && 'nvidia.com/gpu' in p.resources.limits).toBe(false);
   });
 
-  test('min>0 template: an absent key seeds the floor, discloses drift, and an untouched save force-sends it', async () => {
+  test('a missing required GPU saves at its template minimum with a banner', async () => {
     templatesResponse = {
       items: [
         tmpl({
@@ -484,13 +482,12 @@ describe('SimpleWorkspaceEditor accelerator axes', () => {
     await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
     const p = lastPayload();
     expect(p.resources?.limits?.['nvidia.com/gpu']).toBe('1');
-    // The forced block carries the stored values verbatim alongside the conformed key.
+    // The save replaces spec.resources wholesale, so stored values must ride along verbatim.
     expect(p.resources?.limits?.cpu).toBe('2');
     expect(p.resources?.requests?.cpu).toBe('500m');
   });
 
-  test('pinned min===max template: an absent key seeds the pin on a disabled slider and an untouched save sends it', async () => {
-    // A disabled slider can never be touched, so emission must come from the drift path alone.
+  test('a missing pinned GPU saves at the pin despite its disabled slider', async () => {
     templatesResponse = {
       items: [
         tmpl({
@@ -518,7 +515,7 @@ describe('SimpleWorkspaceEditor accelerator axes', () => {
     expect(lastPayload().resources?.limits?.['nvidia.com/gpu']).toBe('2');
   });
 
-  test('min>0 template: sliding an absent key above the seeded floor sends the slid value', async () => {
+  test('sliding a required GPU above its seeded minimum saves the slid value', async () => {
     templatesResponse = {
       items: [
         tmpl({
