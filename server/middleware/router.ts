@@ -49,8 +49,9 @@ export async function handleRequest(req: Request): Promise<Response> {
  * Attach a Set-Cookie header to a response if needed.
  */
 function withSessionCookie(response: Response, jwt: string, source: import('./auth').TokenSource): Response {
-  // K8s rejected the token — clear the session cookie so Traefik's fast-path
-  // stops matching and the next request goes through OAuth2 Proxy for re-auth.
+  // K8s rejected the token — clear the session cookie so an auth proxy that routes on
+  // cookie presence stops matching, and the next request takes the unauthenticated path
+  // for re-auth.
   if (response.status === 401) {
     const newResponse = new Response(response.body, response);
     newResponse.headers.append('Set-Cookie', buildClearCookieHeader(serverConfig.session));
@@ -99,12 +100,11 @@ async function routeRequest(req: Request): Promise<Response> {
   if (pathname.startsWith(`${API_PREFIX}/`)) {
     const auth = extractAuth(req);
     if (!auth) {
-      // Clear the session cookie so the browser stops sending it. Traefik's
-      // fast-path IngressRoute matches on cookie presence (HeaderRegexp); if a
-      // stale cookie remains, every reload bypasses OAuth2 Proxy and lands here
-      // again — the user can never re-authenticate. Clearing it lets the next
-      // request fall to the auth-path route where OAuth2 Proxy triggers a fresh
-      // OIDC flow with Dex.
+      // Clear the session cookie so the browser stops sending it. A deployment may
+      // front the app with an auth proxy that routes on session-cookie presence; if a
+      // stale cookie remains, every reload keeps hitting this authenticated path and the
+      // user can never re-authenticate. Clearing it lets the next request take the
+      // unauthenticated path where a fresh auth flow can be triggered.
       const resp = errorResponse(401, 'Authentication required');
       resp.headers.append('Set-Cookie', buildClearCookieHeader(serverConfig.session));
       return resp;

@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { handleUnauthorized, clearAuthReloadFlag, AuthError, isAuthError } from '../api/auth-interceptor';
 
 interface User {
   /** Raw OIDC claim (preferred_username || sub) — for display only (avatar, default names). */
@@ -46,14 +47,36 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const { data, isLoading } = useQuery({
     queryKey: authKeys.me,
-    queryFn: async (): Promise<User | null> => {
+    queryFn: async (): Promise<User> => {
       const res = await fetch('/api/v1/me', { credentials: 'include' });
-      if (!res.ok) return null;
+
+      // A genuine unauthenticated result — either a 401 or the 200
+      // `{ authenticated: false }` shape a tokenless /me returns. Route it through the
+      // shared re-login path (sets the auth-failed flag the UI reads) and surface it as
+      // an AuthError so it is NOT retried and NOT cached as a valid `user = null` for the
+      // whole page session. The server clears any stale session cookie on that response,
+      // so the sign-in reload takes the unauthenticated path and self-heals.
+      if (res.status === 401) {
+        handleUnauthorized();
+        throw new AuthError('Unauthorized');
+      }
+      if (!res.ok) {
+        // Transient/server error — let React Query retry (bounded) before giving up,
+        // rather than pinning `user = null` on a single blip.
+        throw new Error(`Failed to load user (${res.status})`);
+      }
       const data: MeResponse = await res.json();
-      return data.authenticated && data.user ? data.user : null;
+      if (!data.authenticated || !data.user) {
+        handleUnauthorized();
+        throw new AuthError('Not authenticated');
+      }
+      clearAuthReloadFlag();
+      return data.user;
     },
     staleTime: 5 * 60 * 1000,
-    retry: false,
+    // Retry transient failures a bounded number of times, but never a genuine
+    // unauthenticated result — that should surface to the re-login flow immediately.
+    retry: (failureCount, error) => (isAuthError(error) ? false : failureCount < 2),
   });
 
   const user = data ?? null;

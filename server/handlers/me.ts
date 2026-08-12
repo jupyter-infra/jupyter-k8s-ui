@@ -1,7 +1,18 @@
 import { extractJWT, decodeJWTPayload } from '../middleware/auth';
 import { resolveK8sUsername } from '../k8s/identity';
 import { readNamespacePreference, buildNamespacePreferenceCookie } from '../middleware/namespace-preference';
+import { buildClearCookieHeader, parseCookieValue } from '../middleware/session';
+import { serverConfig } from '../k8s/config';
 import { jsonResponse, errorResponse } from '../responses';
+
+// True when the request still carries a session cookie that yielded no usable token —
+// i.e. it's stale/unvalidatable (e.g. its signing key rotated out of retention).
+function hasSessionCookie(req: Request): boolean {
+  if (!serverConfig.session.enabled) return false;
+  const cookieHeader = req.headers.get('Cookie');
+  if (!cookieHeader) return false;
+  return parseCookieValue(cookieHeader, serverConfig.session.cookieName) !== null;
+}
 
 // GET /me is the read-through cache for the authoritative K8s username. The cookie holds it
 // (signed, user-bound, no expiry — it's stable per identity); on a miss we resolve it ONCE
@@ -11,7 +22,18 @@ import { jsonResponse, errorResponse } from '../responses';
 export async function handleGetMe(req: Request): Promise<Response> {
   const jwt = extractJWT(req);
   if (!jwt) {
-    return jsonResponse({ authenticated: false, user: null });
+    const response = jsonResponse({ authenticated: false, user: null });
+    // A tokenless /me that still carries a session cookie means the cookie is
+    // stale/unvalidatable. A deployment may front the app with an auth proxy that routes
+    // on session-cookie *presence*, in which case a stale-but-present cookie keeps
+    // hitting this already-authenticated path and never reaches the unauthenticated flow
+    // that could re-issue a token — trapping the user. Clear it (mirroring the
+    // authenticated /api/* 401 path) so the next request takes the unauthenticated path
+    // and can self-heal.
+    if (hasSessionCookie(req)) {
+      response.headers.append('Set-Cookie', buildClearCookieHeader(serverConfig.session));
+    }
+    return response;
   }
 
   const payload = decodeJWTPayload(jwt);
