@@ -34,7 +34,8 @@ kubectl config set-context ${clusterName} --cluster=${clusterName} --user=${clus
 
 kubectl config use-context ${clusterName}
 
-Write-Host "Done! Run 'kubectl get workspaces' to verify."`;
+Write-Host "Done! Run 'kubectl get workspaces' to verify."
+Write-Host 'Troubleshoot: getting "Unauthorized"? run: kubectl oidc-login clean'`;
   }
 
   const installCmd = os === 'mac' ? 'brew install kubelogin' : 'krew install oidc-login';
@@ -74,6 +75,7 @@ kubectl config set-context ${clusterName} --cluster=${clusterName} --user=${clus
 kubectl config use-context ${clusterName}
 
 echo "Done! Run 'kubectl get workspaces' to verify."
+echo 'Troubleshoot: getting "Unauthorized"? run: kubectl oidc-login clean'
 KUBECONFIG_SETUP`;
 }
 
