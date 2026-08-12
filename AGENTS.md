@@ -128,7 +128,7 @@ validation layer.
 
 ## Architecture Notes
 
-- Auth flow: Browser -> Traefik -> OAuth2 Proxy -> Web App (Bun) -> K8s API Server
+- Auth flow: Browser -> Traefik -> OAuth2 Proxy -> Web App (Bun) -> K8s API Server. This Traefik/OAuth2-Proxy/Dex stack (the `jupyter-k8s-aws` aws-oidc chart) is only **one** possible integration. Don't bake it into code or comments; reason in terms of generic authenticated/unauthenticated request paths and an optional auth proxy that may route on session-cookie presence.
 - In dev mode, backend reads `DEV_ACCESS_TOKEN` from `.env` instead of OAuth2 Proxy header
 - K8s clients are cached per JWT hash (10min TTL, max 100 clients)
 - React Query polls workspace list every 60s; detail polls every 3s while transitioning
