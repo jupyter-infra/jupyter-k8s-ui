@@ -1,9 +1,11 @@
 let authFailed = false;
 
 /**
- * Handle 401 responses. Sets an in-memory flag so all subsequent API calls
- * know auth is broken — no page reloads. The UI should check `isAuthFailed()`
- * and show a re-login prompt instead.
+ * Handle 401 responses. Sets an in-memory flag recording that auth is broken —
+ * no page reloads. The flag is queryable via `isAuthFailed()` but is not yet
+ * consulted by the UI: components currently react to `user === null` from
+ * AuthContext with their own auth-check logic. The flag remains a hook for a
+ * future centralized re-login prompt.
  */
 export function handleUnauthorized(): void {
   authFailed = true;

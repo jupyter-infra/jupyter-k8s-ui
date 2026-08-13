@@ -110,6 +110,37 @@ describe('handleGetMe — auth shape', () => {
   });
 });
 
+describe('handleGetMe — stale-cookie self-heal', () => {
+  // A tokenless /me that still carries a session cookie means the cookie is stale (e.g.
+  // its signing key rotated out). When an auth proxy routes on cookie presence, leaving
+  // it set traps the user; clearing it lets the next request take the unauthenticated
+  // path and re-authenticate.
+  function reqWithSessionCookie(): Request {
+    return new Request('http://x/api/v1/me', { headers: { Cookie: `${serverConfig.session.cookieName}=stale.k1.sig` } });
+  }
+
+  test('clears the session cookie when tokenless with a session cookie present', async () => {
+    serverConfig.session.enabled = true;
+    const res = await handleGetMe(reqWithSessionCookie());
+    expect(await res.json()).toEqual({ authenticated: false, user: null });
+    const setCookie = res.headers.get('Set-Cookie');
+    expect(setCookie).toContain(`${serverConfig.session.cookieName}=`);
+    expect(setCookie).toContain('Max-Age=0');
+  });
+
+  test('does not set a clear-cookie when no session cookie is present', async () => {
+    serverConfig.session.enabled = true;
+    const res = await handleGetMe(meReq());
+    expect(res.headers.get('Set-Cookie')).toBeNull();
+  });
+
+  test('does not clear when sessions are disabled', async () => {
+    serverConfig.session.enabled = false;
+    const res = await handleGetMe(reqWithSessionCookie());
+    expect(res.headers.get('Set-Cookie')).toBeNull();
+  });
+});
+
 describe('handleGetMe — k8sUser read-through cache', () => {
   test('cache miss: resolves via SelfSubjectReview and mints it into the cookie', async () => {
     const res = await handleGetMe(meReq(buildJWT({ sub: 'alice', preferred_username: 'alice' })));
