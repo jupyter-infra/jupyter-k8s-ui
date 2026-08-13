@@ -52,7 +52,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       // A genuine unauthenticated result — either a 401 or the 200
       // `{ authenticated: false }` shape a tokenless /me returns. Route it through the
-      // shared re-login path (sets the auth-failed flag the UI reads) and surface it as
+      // shared re-login path (sets the in-memory auth-failed flag) and surface it as
       // an AuthError so it is NOT retried and NOT cached as a valid `user = null` for the
       // whole page session. The server clears any stale session cookie on that response,
       // so the sign-in reload takes the unauthenticated path and self-heals.
