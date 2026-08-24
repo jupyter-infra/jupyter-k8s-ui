@@ -396,3 +396,31 @@ export function buildResourcesBlock(
 export function shouldEmitAccelerator(value: number, state: { stored: boolean; touched: boolean; min: number }): boolean {
   return value > 0 && (state.stored || state.touched || state.min > 0);
 }
+
+// True when a template pins every resource axis (min === max on cpu, memory, and each
+// accelerator axis) — the form has nothing editable to serialize. Storage is excluded:
+// it serializes as spec.storage, not spec.resources.
+export function allResourceAxesPinned(controls: ResolvedTemplateControls): boolean {
+  return (
+    controls.hasTemplate &&
+    controls.cpu.min === controls.cpu.max &&
+    controls.memory.min === controls.memory.max &&
+    controls.accelerators.every((a) => a.axis.min === a.axis.max)
+  );
+}
+
+// Create-payload resources (#69): omit the block entirely when the template pins every
+// axis, so the operator's admission defaulting stamps the COMPLETE template
+// defaultResources — including keys the form never renders (accelerator requests).
+// Defaulting is wholesale-on-nil, not per-key: `{}` gets nothing and a partial block is
+// stored as-is, so a template with any editable axis still sends the complete block,
+// pinned values included.
+export function buildCreateResources(
+  controls: ResolvedTemplateControls,
+  cpuLimitCores: number,
+  memoryLimitGi: number,
+  acceleratorCounts: Record<string, number> = {},
+): ReturnType<typeof buildResourcesBlock> | undefined {
+  if (allResourceAxesPinned(controls)) return undefined;
+  return buildResourcesBlock(controls, cpuLimitCores, memoryLimitGi, acceleratorCounts);
+}

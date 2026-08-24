@@ -11,7 +11,7 @@ import { WorkspaceResourceForm, type WorkspaceFormValues } from '../components/w
 import { WorkspaceSpecEditor } from '../components/workspace/yaml-editor/WorkspaceSpecEditor';
 import type { CreateWorkspaceRequest, DiscoveredTemplate } from '../types';
 import { strings } from '../constants';
-import { sanitizeK8sName, resolveTemplateControls, buildResourcesBlock, clamp } from '../utils';
+import { sanitizeK8sName, resolveTemplateControls, buildCreateResources, clamp } from '../utils';
 
 function generateDefaults(username: string, existingCount: number) {
   const n = existingCount + 1;
@@ -153,12 +153,15 @@ export function WorkspaceCreate() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // WYSIWYG: send exactly what the form displays. Complete resources block so the
-    // wholesale overlay doesn't wipe requests.
+    // WYSIWYG: send exactly what the form displays. A complete resources block when any
+    // axis is editable (a partial one would wipe requests under the wholesale overlay);
+    // no block at all when the template pins every axis, so admission stamps the complete
+    // template defaults, including keys the form never renders (#69).
+    const resources = buildCreateResources(controls, values.cpu, values.memory, values.accelerators);
     const request: CreateWorkspaceRequest = {
       name,
       displayName: displayName || name,
-      resources: buildResourcesBlock(controls, values.cpu, values.memory, values.accelerators),
+      ...(resources && { resources }),
       storage: { size: `${values.storage}Gi` },
       accessType: values.accessType,
       ownershipType: controls.ownershipType, // not derived from accessType

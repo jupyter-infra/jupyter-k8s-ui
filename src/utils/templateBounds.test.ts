@@ -8,6 +8,8 @@ import {
   conformImage,
   buildResourcesBlock,
   shouldEmitAccelerator,
+  allResourceAxesPinned,
+  buildCreateResources,
 } from './templateBounds';
 import type { WorkspaceTemplate, WorkspaceTemplateSpec, DiscoveredTemplate } from '../types';
 import { STATIC_DEFAULTS, resourceBounds, RESOURCE_DEFAULTS, IDLE_SHUTDOWN_DEFAULTS, DEFAULT_TEMPLATE_LABEL } from '../constants';
@@ -402,5 +404,52 @@ describe('buildResourcesBlock — accelerator emission', () => {
   test('a count for a key the template does not declare is ignored', () => {
     const block = buildResourcesBlock(controls, 2, 4, { 'amd.com/gpu': 3 });
     expect('amd.com/gpu' in block.limits).toBe(false);
+  });
+});
+
+describe('allResourceAxesPinned / buildCreateResources — pinned-template create payload (#69)', () => {
+  const pinnedSpec: WorkspaceTemplateSpec = {
+    resourceBounds: { resources: { cpu: { min: '3', max: '3' }, memory: { min: '12Gi', max: '12Gi' }, 'nvidia.com/gpu': { min: '1', max: '1' } } },
+    defaultResources: { requests: { cpu: '3', memory: '12Gi', 'nvidia.com/gpu': '1' }, limits: { cpu: '3', memory: '12Gi', 'nvidia.com/gpu': '1' } },
+  };
+
+  test('fully pinned template omits the resources block so admission stamps the defaults', () => {
+    const controls = resolveTemplateControls(tmpl(pinnedSpec));
+    expect(allResourceAxesPinned(controls)).toBe(true);
+    expect(buildCreateResources(controls, controls.cpu.default, controls.memory.default, { 'nvidia.com/gpu': 1 })).toBeUndefined();
+  });
+
+  test('an accelerator axis pinned at 0/0 still counts as pinned', () => {
+    const controls = resolveTemplateControls(
+      tmpl({ resourceBounds: { resources: { cpu: { min: '2', max: '2' }, memory: { min: '4Gi', max: '4Gi' }, 'nvidia.com/gpu': { min: '0', max: '0' } } } }),
+    );
+    expect(allResourceAxesPinned(controls)).toBe(true);
+  });
+
+  test('a gpu key only in defaultResources (no bounds axis) does not unpin', () => {
+    const controls = resolveTemplateControls(
+      tmpl({
+        resourceBounds: { resources: { cpu: { min: '1', max: '1' }, memory: { min: '2Gi', max: '2Gi' } } },
+        defaultResources: { requests: { 'nvidia.com/gpu': '1' }, limits: { 'nvidia.com/gpu': '1' } },
+      }),
+    );
+    expect(buildCreateResources(controls, 1, 2)).toBeUndefined();
+  });
+
+  test('one editable axis yields the COMPLETE block, pinned values included', () => {
+    // Partial blocks are stored as-is under wholesale-on-nil defaulting, so the pinned
+    // memory value must ride along with the edited cpu.
+    const controls = resolveTemplateControls(tmpl({ resourceBounds: { resources: { cpu: { min: '1', max: '4' }, memory: { min: '4Gi', max: '4Gi' } } } }));
+    expect(allResourceAxesPinned(controls)).toBe(false);
+    const block = buildCreateResources(controls, 2, 4);
+    expect(block).toBeDefined();
+    expect(block!.limits).toEqual({ cpu: '2', memory: '4Gi' });
+    expect(Object.keys(block!.requests)).toEqual(['cpu', 'memory']);
+  });
+
+  test('no template never counts as pinned and always builds the block', () => {
+    const controls = resolveTemplateControls(null);
+    expect(allResourceAxesPinned(controls)).toBe(false);
+    expect(buildCreateResources(controls, 2, 4)).toBeDefined();
   });
 });
