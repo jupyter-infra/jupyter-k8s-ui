@@ -430,10 +430,30 @@ describe('allResourceAxesPinned / buildCreateResources — pinned-template creat
     const controls = resolveTemplateControls(
       tmpl({
         resourceBounds: { resources: { cpu: { min: '1', max: '1' }, memory: { min: '2Gi', max: '2Gi' } } },
-        defaultResources: { requests: { 'nvidia.com/gpu': '1' }, limits: { 'nvidia.com/gpu': '1' } },
+        defaultResources: { requests: { cpu: '1', memory: '2Gi', 'nvidia.com/gpu': '1' }, limits: { cpu: '1', memory: '2Gi', 'nvidia.com/gpu': '1' } },
       }),
     );
     expect(buildCreateResources(controls, 1, 2)).toBeUndefined();
+  });
+
+  test('pinned bounds without defaultResources still send the block (nothing to stamp)', () => {
+    // The operator's defaulter is a no-op when the template declares no defaultResources,
+    // so omission here would store a workspace with no limits at all.
+    const controls = resolveTemplateControls(tmpl({ resourceBounds: { resources: { cpu: { min: '1', max: '1' }, memory: { min: '2Gi', max: '2Gi' } } } }));
+    expect(allResourceAxesPinned(controls)).toBe(true);
+    expect(controls.defaultsCoverPinnedAxes).toBe(false);
+    expect(buildCreateResources(controls, 1, 2)).toBeDefined();
+  });
+
+  test('defaults missing a pinned accelerator axis block the omission', () => {
+    const controls = resolveTemplateControls(
+      tmpl({
+        resourceBounds: { resources: { cpu: { min: '1', max: '1' }, memory: { min: '2Gi', max: '2Gi' }, 'nvidia.com/gpu': { min: '1', max: '1' } } },
+        defaultResources: { requests: { cpu: '1', memory: '2Gi' }, limits: { cpu: '1', memory: '2Gi' } },
+      }),
+    );
+    expect(controls.defaultsCoverPinnedAxes).toBe(false);
+    expect(buildCreateResources(controls, 1, 2, { 'nvidia.com/gpu': 1 })).toBeDefined();
   });
 
   test('one editable axis yields the COMPLETE block, pinned values included', () => {
