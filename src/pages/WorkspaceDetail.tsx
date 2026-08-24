@@ -15,7 +15,7 @@ import {
   Schedule,
   Info,
 } from '@mui/icons-material';
-import { useWorkspace, useStartWorkspace, useStopWorkspace } from '../api';
+import { useWorkspace, useStartWorkspace, useStopWorkspace, useTemplates } from '../api';
 import { useAuth } from '../context';
 import {
   isOwner as checkIsOwner,
@@ -25,6 +25,8 @@ import {
   acceleratorLimits,
   formatCpuCores,
   formatMemoryGiB,
+  findTemplateByRef,
+  effectiveResources,
 } from '../utils';
 import type { WorkspaceCondition } from '../types';
 import { strings, ACCELERATOR_LABELS } from '../constants';
@@ -77,6 +79,7 @@ export function WorkspaceDetail() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { data: workspace, isLoading, error } = useWorkspace(name ?? '');
+  const templatesQuery = useTemplates();
   const startMutation = useStartWorkspace();
   const stopMutation = useStopWorkspace();
 
@@ -104,6 +107,9 @@ export function WorkspaceDetail() {
   const workspaceStatus = getWorkspaceStatus(workspace);
   const accessURL = workspace.status?.accessURL;
   const isRunning = workspace.spec.desiredStatus === 'Running';
+  // Display fallback (#69): pinned-template creates omit spec.resources (admission stamps
+  // the template defaults server-side), so show the resolved template's defaults.
+  const resources = effectiveResources(workspace.spec, findTemplateByRef(templatesQuery.data?.items, workspace.spec.templateRef));
 
   const owner = getWorkspaceOwner(workspace);
   const ownerMatch = checkIsOwner(owner, user?.k8sUser);
@@ -217,7 +223,7 @@ export function WorkspaceDetail() {
                     <Speed sx={{ fontSize: 16 }} /> CPU
                   </Stack>
                 }
-                value={workspace.spec.resources?.limits?.cpu ? formatCpuCores(workspace.spec.resources.limits.cpu) : '—'}
+                value={resources?.limits?.cpu ? formatCpuCores(resources.limits.cpu) : '—'}
               />
               <InfoRow
                 label={
@@ -225,9 +231,9 @@ export function WorkspaceDetail() {
                     <Memory sx={{ fontSize: 16 }} /> Memory
                   </Stack>
                 }
-                value={workspace.spec.resources?.limits?.memory ? formatMemoryGiB(workspace.spec.resources.limits.memory) : '—'}
+                value={resources?.limits?.memory ? formatMemoryGiB(resources.limits.memory) : '—'}
               />
-              {acceleratorLimits(workspace.spec.resources?.limits).map(([key, count]) => (
+              {acceleratorLimits(resources?.limits).map(([key, count]) => (
                 <InfoRow
                   key={key}
                   label={

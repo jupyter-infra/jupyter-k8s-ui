@@ -15,10 +15,13 @@ mock.module('../../context', () => ({
 
 // Mock mutations so we can assert on `isPending` etc without real fetches
 const mutationStub = { mutate: mock(() => {}), isPending: false };
+// Mutable so individual tests can supply template fixtures for the resources fallback.
+let templatesItems: unknown[] = [];
 mock.module('../../api', () => ({
   useStartWorkspace: () => mutationStub,
   useStopWorkspace: () => mutationStub,
   useDeleteWorkspace: () => mutationStub,
+  useTemplates: () => ({ data: { items: templatesItems }, isLoading: false }),
 }));
 
 function renderCard(ws: ReturnType<typeof makeWorkspace>) {
@@ -160,5 +163,47 @@ describe('WorkspaceCard accelerator chip', () => {
     ws.spec.resources = { limits: { cpu: '1m', memory: '4Gi' } };
     renderCard(ws);
     expect(screen.getByText('<0.01 CPU')).toBeDefined();
+  });
+});
+
+describe('WorkspaceCard resources fallback to template defaults (#69)', () => {
+  const pinnedTemplate = {
+    metadata: { name: 'pinned-gpu', namespace: 'shared' },
+    spec: { defaultResources: { requests: { cpu: '3', memory: '12Gi', 'nvidia.com/gpu': '1' }, limits: { cpu: '3', memory: '12Gi', 'nvidia.com/gpu': '1' } } },
+    sourceNamespace: 'shared',
+  };
+
+  beforeEach(() => {
+    cleanup();
+    templatesItems = [pinnedTemplate];
+  });
+
+  test('a workspace without spec.resources shows its template defaults', () => {
+    const ws = makeWorkspace({ owner: 'alice' });
+    delete ws.spec.resources;
+    ws.spec.templateRef = { name: 'pinned-gpu', namespace: 'shared' };
+    renderCard(ws);
+    expect(screen.getByText('3 CPU')).toBeDefined();
+    expect(screen.getByText('12 GiB')).toBeDefined();
+    expect(screen.getByText('1 GPU')).toBeDefined();
+  });
+
+  test('an unresolvable templateRef keeps the placeholder values', () => {
+    templatesItems = [];
+    const ws = makeWorkspace({ owner: 'alice' });
+    delete ws.spec.resources;
+    ws.spec.templateRef = { name: 'ghost-template' };
+    renderCard(ws);
+    expect(screen.getByText('— CPU')).toBeDefined();
+  });
+
+  test('stored resources win over template defaults', () => {
+    const ws = makeWorkspace({ owner: 'alice' });
+    ws.spec.resources = { limits: { cpu: '2', memory: '4Gi' } };
+    ws.spec.templateRef = { name: 'pinned-gpu', namespace: 'shared' };
+    renderCard(ws);
+    expect(screen.getByText('2 CPU')).toBeDefined();
+    // The template's gpu default must not leak into a workspace that stored no gpu.
+    expect(screen.queryByText('1 GPU')).toBeNull();
   });
 });

@@ -3,7 +3,7 @@ import { PlayArrow, Stop, OpenInNew, MoreVert, Delete, Circle, Speed, Memory, De
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Workspace } from '../../types';
-import { useStartWorkspace, useStopWorkspace, useDeleteWorkspace } from '../../api';
+import { useStartWorkspace, useStopWorkspace, useDeleteWorkspace, useTemplates } from '../../api';
 import { useAuth } from '../../context';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import {
@@ -14,6 +14,8 @@ import {
   acceleratorLimits,
   formatCpuCores,
   formatMemoryGiB,
+  findTemplateByRef,
+  effectiveResources,
 } from '../../utils';
 import { getAppTypeLogo } from '../icons/appTypeLogo';
 import { strings, ACCELERATOR_LABELS } from '../../constants';
@@ -37,6 +39,11 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
   // Template pill: the workspace's templateRef name (if any). No-template workspaces show
   // no pill.
   const templateLabel = spec.templateRef?.name ?? null;
+  // Display fallback (#69): pinned-template creates omit spec.resources (admission stamps
+  // the template defaults server-side), so show the resolved template's defaults. The
+  // templates query is shared and cached — one fetch for the whole list page.
+  const templatesQuery = useTemplates();
+  const resources = effectiveResources(spec, findTemplateByRef(templatesQuery.data?.items, spec.templateRef));
   const workspaceStatus = getWorkspaceStatus(workspace);
   const accessURL = status?.accessURL;
 
@@ -114,13 +121,13 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
           <Stack direction="row" gap={2} sx={{ color: 'text.secondary', flexWrap: 'wrap' }}>
             <Stack direction="row" alignItems="center" gap={0.5}>
               <Speed sx={{ fontSize: 16 }} />
-              <Typography variant="caption">{spec.resources?.limits?.cpu ? `${formatCpuCores(spec.resources.limits.cpu)} CPU` : '— CPU'}</Typography>
+              <Typography variant="caption">{resources?.limits?.cpu ? `${formatCpuCores(resources.limits.cpu)} CPU` : '— CPU'}</Typography>
             </Stack>
             <Stack direction="row" alignItems="center" gap={0.5}>
               <Memory sx={{ fontSize: 16 }} />
-              <Typography variant="caption">{spec.resources?.limits?.memory ? formatMemoryGiB(spec.resources.limits.memory) : '—'}</Typography>
+              <Typography variant="caption">{resources?.limits?.memory ? formatMemoryGiB(resources.limits.memory) : '—'}</Typography>
             </Stack>
-            {acceleratorLimits(spec.resources?.limits).map(([key, count]) => (
+            {acceleratorLimits(resources?.limits).map(([key, count]) => (
               <Stack key={key} direction="row" alignItems="center" gap={0.5}>
                 <DeveloperBoard sx={{ fontSize: 16 }} />
                 <Typography variant="caption">
