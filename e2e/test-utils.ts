@@ -1,4 +1,24 @@
+import { execSync } from 'node:child_process';
 import { expect, type Page } from '@playwright/test';
+
+// Advertise fake extended-resource capacity on a Kind node by patching node status (the
+// documented mechanism, no device plugin needed:
+// https://kubernetes.io/docs/tasks/administer-cluster/extended-resource-node/).
+// Scheduling is then real, so workspaces requesting the resource reach Running while the
+// container never touches a device.
+export function advertiseNodeCapacity(kubectl: string, node: string, resources: Record<string, string>): void {
+  const patch = JSON.stringify(Object.entries(resources).map(([key, value]) => ({ op: 'add', path: `/status/capacity/${key.replace(/\//g, '~1')}`, value })));
+  execSync(`${kubectl} patch node ${node} --subresource=status --type=json -p='${patch}'`, { stdio: 'pipe' });
+}
+
+export function withdrawNodeCapacity(kubectl: string, node: string, keys: string[]): void {
+  const patch = JSON.stringify(keys.map((key) => ({ op: 'remove', path: `/status/capacity/${key.replace(/\//g, '~1')}` })));
+  try {
+    execSync(`${kubectl} patch node ${node} --subresource=status --type=json -p='${patch}'`, { stdio: 'pipe' });
+  } catch {
+    // Best-effort: leftover fake capacity is harmless and re-advertised next run.
+  }
+}
 
 // Shared E2E helpers. NOT a .spec file, so Playwright won't collect it as a test.
 

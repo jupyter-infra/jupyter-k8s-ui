@@ -416,4 +416,46 @@ describe('accelerator axes in simple create', () => {
     await screen.findByText(/^resources$/i);
     expect(screen.queryByRole('slider', { name: 'GPU' })).toBeNull();
   });
+
+  const pinnedGpuTemplate = () =>
+    tmplFixture(
+      {
+        defaultImage: 'jupyter/pytorch:latest',
+        resourceBounds: { resources: { cpu: { min: '3', max: '3' }, memory: { min: '12Gi', max: '12Gi' }, 'nvidia.com/gpu': { min: '1', max: '1' } } },
+        defaultResources: { requests: { cpu: '3', memory: '12Gi', 'nvidia.com/gpu': '1' }, limits: { cpu: '3', memory: '12Gi', 'nvidia.com/gpu': '1' } },
+      },
+      'pinned-gpu',
+    );
+
+  test('a fully pinned template submits without spec.resources; templateRef, image, and storage still ride (#69)', async () => {
+    templatesResponse = { items: [pinnedGpuTemplate()], access: { user: 'ok', shared: 'ok' }, namespaces: { own: 'user-ns', shared: 'shared-ns' } };
+    await renderCreate();
+    fireEvent.click(await screen.findByRole('button', { name: /select pinned-gpu template/i }));
+    submit();
+
+    await waitFor(() => expect(createSimpleSpy).toHaveBeenCalledTimes(1));
+    const p = lastSimplePayload();
+    // Omission (not a partial block) is the contract: admission stamps the complete
+    // template defaults, including the accelerator requests the form never renders.
+    expect(p.resources).toBeUndefined();
+    expect(p.templateRef).toEqual({ name: 'pinned-gpu', namespace: 'shared-ns' });
+    expect(p.storage).toEqual({ size: '10Gi' });
+    expect(p.image).toBe('jupyter/pytorch:latest');
+  });
+
+  test('touching sliders on an editable template then switching to a pinned one still omits resources (#69)', async () => {
+    templatesResponse = {
+      items: [gpuTemplate(), pinnedGpuTemplate()],
+      access: { user: 'ok', shared: 'ok' },
+      namespaces: { own: 'user-ns', shared: 'shared-ns' },
+    };
+    await renderCreate();
+    fireEvent.click(await screen.findByRole('button', { name: /select gpu-tmpl template/i }));
+    fireEvent.change(screen.getByRole('slider', { name: 'GPU' }), { target: { value: '2' } });
+    fireEvent.click(screen.getByRole('button', { name: /select pinned-gpu template/i }));
+    submit();
+
+    await waitFor(() => expect(createSimpleSpy).toHaveBeenCalledTimes(1));
+    expect(lastSimplePayload().resources).toBeUndefined();
+  });
 });

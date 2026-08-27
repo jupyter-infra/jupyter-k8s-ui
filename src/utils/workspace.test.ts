@@ -13,6 +13,8 @@ import {
   round2,
   formatCpuCores,
   formatMemoryGiB,
+  findTemplateByRef,
+  effectiveResources,
 } from './workspace';
 
 describe('round2', () => {
@@ -205,5 +207,52 @@ describe('getStatusChipColor', () => {
     ['Unknown', 'default'],
   ] as const)('%s → %s', (status, expected) => {
     expect(getStatusChipColor(status)).toBe(expected);
+  });
+});
+
+describe('findTemplateByRef', () => {
+  const items = [
+    { metadata: { name: 'tmpl-a', namespace: 'shared' }, spec: {}, sourceNamespace: 'shared' },
+    { metadata: { name: 'tmpl-a', namespace: 'user-ns' }, spec: {}, sourceNamespace: 'user-ns' },
+    { metadata: { name: 'tmpl-b', namespace: 'shared' }, spec: {}, sourceNamespace: 'shared' },
+  ];
+
+  test('matches on name and namespace when the ref carries one', () => {
+    expect(findTemplateByRef(items, { name: 'tmpl-a', namespace: 'user-ns' })?.metadata.namespace).toBe('user-ns');
+  });
+
+  test('a namespace-less ref matches the first name hit', () => {
+    expect(findTemplateByRef(items, { name: 'tmpl-b' })?.metadata.namespace).toBe('shared');
+  });
+
+  test('no ref, no items, or no match resolve to null', () => {
+    expect(findTemplateByRef(items, undefined)).toBeNull();
+    expect(findTemplateByRef(undefined, { name: 'tmpl-a' })).toBeNull();
+    expect(findTemplateByRef(items, { name: 'ghost' })).toBeNull();
+  });
+});
+
+describe('effectiveResources', () => {
+  const template = {
+    metadata: { name: 't', namespace: 'shared' },
+    spec: { defaultResources: { requests: { cpu: '3' }, limits: { cpu: '3', 'nvidia.com/gpu': '1' } } },
+    sourceNamespace: 'shared',
+  };
+
+  test('absent spec.resources falls back to the template defaults', () => {
+    expect(effectiveResources({}, template)).toEqual(template.spec.defaultResources);
+  });
+
+  test('an empty {} block does NOT fall back (mirrors the operator nil check)', () => {
+    expect(effectiveResources({ resources: {} }, template)).toEqual({});
+  });
+
+  test('stored resources win over template defaults', () => {
+    const stored = { limits: { cpu: '2' } };
+    expect(effectiveResources({ resources: stored }, template)).toBe(stored);
+  });
+
+  test('no template and no stored block resolve to undefined', () => {
+    expect(effectiveResources({}, null)).toBeUndefined();
   });
 });

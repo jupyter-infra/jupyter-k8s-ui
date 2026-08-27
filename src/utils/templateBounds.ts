@@ -70,6 +70,10 @@ export interface ResolvedTemplateControls {
   // template — accelerators are strictly template-gated, the advanced editor is the
   // escape hatch). Sorted by key for a stable render order.
   accelerators: AcceleratorControl[];
+  // True when defaultResources.limits cover cpu, memory, and every accelerator axis
+  // pinned above zero — the precondition for omission-create (#69): admission stamps
+  // defaults only when the template declares them.
+  defaultsCoverPinnedAxes: boolean;
   image: ImageControl;
   idle: IdleControls;
   accessType: AccessType; // seed for the Public/Private toggle
@@ -192,12 +196,23 @@ export function resolveTemplateControls(template: WorkspaceTemplate | null, pres
     staticDefault: STATIC_DEFAULTS.storage,
   });
 
+  // Omission-create (#69) relies on admission stamping defaultResources; the stamp only
+  // happens when the template declares them (resource_defaulter.go nil-checks both
+  // sides), and the bounds validator skips keys absent from the workspace block, so an
+  // uncovered omission stores a workspace with no limits at all. Coverage = default
+  // limits for cpu, memory, and every accelerator axis the template pins above zero.
+  const accelerators = buildAcceleratorControls(spec);
+  const defaultLimits = spec.defaultResources?.limits;
+  const defaultsCoverPinnedAxes =
+    defaultLimits?.cpu !== undefined && defaultLimits?.memory !== undefined && accelerators.every((a) => a.axis.min <= 0 || defaultLimits[a.key] !== undefined);
+
   return {
     hasTemplate: true,
     cpu,
     memory,
     storage,
-    accelerators: buildAcceleratorControls(spec),
+    accelerators,
+    defaultsCoverPinnedAxes,
     image: resolveImage(template),
     idle: resolveIdle(template),
     accessType: normalizeAccess(spec.defaultAccessType) ?? 'Public',
@@ -218,6 +233,7 @@ function noTemplateControls(preservedRef?: { name: string; namespace?: string })
     memory: axis(resourceBounds.memory, STATIC_DEFAULTS.memory),
     storage: axis(resourceBounds.storage, STATIC_DEFAULTS.storage),
     accelerators: [],
+    defaultsCoverPinnedAxes: false,
     image: { mode: 'free', value: '', options: [] },
     idle: { available: false },
     accessType: 'Public',
@@ -395,4 +411,32 @@ export function buildResourcesBlock(
 // Emit when the count is nonzero and the key is stored, touched, or required by the template (min > 0).
 export function shouldEmitAccelerator(value: number, state: { stored: boolean; touched: boolean; min: number }): boolean {
   return value > 0 && (state.stored || state.touched || state.min > 0);
+}
+
+// True when a template pins every resource axis (min === max on cpu, memory, and each
+// accelerator axis) — the form has nothing editable to serialize. Storage is excluded:
+// it serializes as spec.storage, not spec.resources.
+export function allResourceAxesPinned(controls: ResolvedTemplateControls): boolean {
+  return (
+    controls.hasTemplate &&
+    controls.cpu.min === controls.cpu.max &&
+    controls.memory.min === controls.memory.max &&
+    controls.accelerators.every((a) => a.axis.min === a.axis.max)
+  );
+}
+
+// Create-payload resources (#69): omit the block entirely when the template pins every
+// axis, so the operator's admission defaulting stamps the COMPLETE template
+// defaultResources — including keys the form never renders (accelerator requests).
+// Defaulting is wholesale-on-nil, not per-key: `{}` gets nothing and a partial block is
+// stored as-is, so a template with any editable axis still sends the complete block,
+// pinned values included.
+export function buildCreateResources(
+  controls: ResolvedTemplateControls,
+  cpuLimitCores: number,
+  memoryLimitGi: number,
+  acceleratorCounts: Record<string, number> = {},
+): ReturnType<typeof buildResourcesBlock> | undefined {
+  if (allResourceAxesPinned(controls) && controls.defaultsCoverPinnedAxes) return undefined;
+  return buildResourcesBlock(controls, cpuLimitCores, memoryLimitGi, acceleratorCounts);
 }

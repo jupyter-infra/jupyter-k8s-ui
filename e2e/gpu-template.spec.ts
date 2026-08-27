@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process';
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { expectOnPath } from './test-utils';
+import { expectOnPath, advertiseNodeCapacity, withdrawNodeCapacity } from './test-utils';
 
 // Accelerator axes end to end, against the real cluster with the gpu-template fixture
 // (e2e/fixtures/gpu-template.yaml: nvidia.com/gpu 0–2 default 1, plus a MIG profile key
@@ -21,26 +21,6 @@ const WS_NAME = `${RUN_ID}-ws`;
 const CLUSTER = process.env.E2E_KIND_CLUSTER || 'jupyter-k8s-dev';
 const NODE = `${CLUSTER}-control-plane`;
 const KUBECTL = `kubectl --context kind-${CLUSTER}`;
-
-function advertiseAccelerators() {
-  const patch = JSON.stringify([
-    { op: 'add', path: '/status/capacity/nvidia.com~1gpu', value: '4' },
-    { op: 'add', path: '/status/capacity/nvidia.com~1mig-1g.5gb', value: '4' },
-  ]);
-  execSync(`${KUBECTL} patch node ${NODE} --subresource=status --type=json -p='${patch}'`, { stdio: 'pipe' });
-}
-
-function withdrawAccelerators() {
-  const patch = JSON.stringify([
-    { op: 'remove', path: '/status/capacity/nvidia.com~1gpu' },
-    { op: 'remove', path: '/status/capacity/nvidia.com~1mig-1g.5gb' },
-  ]);
-  try {
-    execSync(`${KUBECTL} patch node ${NODE} --subresource=status --type=json -p='${patch}'`, { stdio: 'pipe' });
-  } catch {
-    // Best-effort: leftover fake capacity is harmless and re-advertised next run.
-  }
-}
 
 async function waitForCardStatus(page: Page, card: Locator, text: string) {
   await expect
@@ -74,8 +54,8 @@ async function waitForCardGone(page: Page, card: Locator) {
 test.describe('Accelerator axes (gpu-template)', () => {
   test.describe.configure({ mode: 'serial' });
 
-  test.beforeAll(() => advertiseAccelerators());
-  test.afterAll(() => withdrawAccelerators());
+  test.beforeAll(() => advertiseNodeCapacity(KUBECTL, NODE, { 'nvidia.com/gpu': '4', 'nvidia.com/mig-1g.5gb': '4' }));
+  test.afterAll(() => withdrawNodeCapacity(KUBECTL, NODE, ['nvidia.com/gpu', 'nvidia.com/mig-1g.5gb']));
 
   test('template-gated axes render and create emits the default GPU limit', async ({ page }) => {
     await page.goto('/create');

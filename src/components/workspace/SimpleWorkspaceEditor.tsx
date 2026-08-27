@@ -40,6 +40,7 @@ import {
   type ConformAdjustment,
   type ResolvedTemplateControls,
   shouldEmitAccelerator,
+  findTemplateByRef,
 } from '../../utils';
 import { WorkspaceResourceForm, type WorkspaceFormValues } from './WorkspaceResourceForm';
 import { LockedTemplateField } from './LockedTemplateField';
@@ -135,13 +136,9 @@ export function SimpleWorkspaceEditor({ workspace, displayName, onDisplayNameCha
 
   const storedRef = workspace.spec.templateRef;
 
-  // Resolve the workspace's template from the shared cache (match on name + namespace).
-  // Unresolvable (RBAC-invisible / deleted) → null template but preserve the ref.
-  const resolvedTemplate = useMemo<DiscoveredTemplate | null>(() => {
-    if (!storedRef) return null;
-    const items = templatesQuery.data?.items ?? [];
-    return items.find((t) => t.metadata.name === storedRef.name && (storedRef.namespace === undefined || t.metadata.namespace === storedRef.namespace)) ?? null;
-  }, [storedRef, templatesQuery.data]);
+  // Resolve the workspace's template from the shared cache. Unresolvable
+  // (RBAC-invisible / deleted) → null template but preserve the ref.
+  const resolvedTemplate = useMemo<DiscoveredTemplate | null>(() => findTemplateByRef(templatesQuery.data?.items, storedRef), [storedRef, templatesQuery.data]);
 
   // Ref set but not found in the discoverable list → treat as unresolvable.
   const refUnresolvable = Boolean(storedRef) && resolvedTemplate === null && !templatesQuery.isLoading;
