@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 // Advertise fake extended-resource capacity on a Kind node by patching node status (the
 // documented mechanism, no device plugin needed:
@@ -55,4 +55,39 @@ export async function expectOnPath(page: Page, opts: { path?: string; namespace?
     // The canonicalized `?namespace=<ns>` param (order-independent within the query).
     await expect(page).toHaveURL(new RegExp(`[?&]namespace=${escapeRegex(namespace)}(&|$)`), { timeout });
   }
+}
+
+/**
+ * Click Refresh until the card shows `text`. The list only auto-polls every 60s and the
+ * operator reconciles in seconds, so the refresh mirrors what a user waiting on a card does.
+ */
+export async function waitForCardStatus(page: Page, card: Locator, text: string) {
+  await expect
+    .poll(
+      async () => {
+        await page.getByRole('button', { name: /refresh/i }).click();
+        return card
+          .getByText(text, { exact: true })
+          .isVisible()
+          .catch(() => false);
+      },
+      { timeout: 30_000, intervals: [2_000] },
+    )
+    .toBeTruthy();
+}
+
+/**
+ * Click Refresh until the card is gone. Deletion is finalized asynchronously (the CR lists
+ * with a deletionTimestamp until the operator's finalizer runs), so the card can linger.
+ */
+export async function waitForCardGone(page: Page, card: Locator) {
+  await expect
+    .poll(
+      async () => {
+        await page.getByRole('button', { name: /refresh/i }).click();
+        return card.isVisible().catch(() => false);
+      },
+      { timeout: 30_000, intervals: [2_000] },
+    )
+    .toBeFalsy();
 }

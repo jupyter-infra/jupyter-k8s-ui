@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process';
-import { test, expect, type Locator, type Page } from '@playwright/test';
-import { expectOnPath } from './test-utils';
+import { test, expect } from '@playwright/test';
+import { expectOnPath, waitForCardStatus, waitForCardGone } from './test-utils';
 
 // The create form's sliders set the limits a workspace is created with. Against the e2e
 // default template (cpu 100m to 2, memory 128Mi to 2Gi, storage 1Gi to 10Gi, requests declared)
@@ -13,38 +13,7 @@ const CLUSTER = process.env.E2E_KIND_CLUSTER || 'jupyter-k8s-dev';
 const KUBECTL = `kubectl --context kind-${CLUSTER}`;
 
 function kubectlGet(resource: string, jsonpath: string): string {
-  try {
-    return execSync(`${KUBECTL} get ${resource} -o jsonpath='${jsonpath}'`, { stdio: 'pipe' }).toString();
-  } catch {
-    return '';
-  }
-}
-
-async function waitForCardStatus(page: Page, card: Locator, text: string) {
-  await expect
-    .poll(
-      async () => {
-        await page.getByRole('button', { name: /refresh/i }).click();
-        return card
-          .getByText(text, { exact: true })
-          .isVisible()
-          .catch(() => false);
-      },
-      { timeout: 30_000, intervals: [2_000] },
-    )
-    .toBeTruthy();
-}
-
-async function waitForCardGone(page: Page, card: Locator) {
-  await expect
-    .poll(
-      async () => {
-        await page.getByRole('button', { name: /refresh/i }).click();
-        return card.isVisible().catch(() => false);
-      },
-      { timeout: 30_000, intervals: [2_000] },
-    )
-    .toBeFalsy();
+  return execSync(`${KUBECTL} get ${resource} -o jsonpath='${jsonpath}'`, { stdio: 'pipe' }).toString();
 }
 
 test.describe('Create form sliders', () => {
@@ -77,7 +46,18 @@ test.describe('Create form sliders', () => {
     expect(resources.requests).toEqual({ cpu: '100m', memory: '128Mi' });
     expect(kubectlGet(`workspace ${WS_NAME}`, '{.spec.storage.size}')).toBe('10Gi');
     // The operator creates the PVC on its first reconcile, moments after the create.
-    await expect.poll(() => kubectlGet(`pvc workspace-${WS_NAME}-pvc`, '{.spec.resources.requests.storage}'), { timeout: 30_000 }).toBe('10Gi');
+    await expect
+      .poll(
+        () => {
+          try {
+            return kubectlGet(`pvc workspace-${WS_NAME}-pvc`, '{.spec.resources.requests.storage}');
+          } catch {
+            return '';
+          }
+        },
+        { timeout: 30_000 },
+      )
+      .toBe('10Gi');
   });
 
   test('the card shows the chosen values and the workspace reaches Running', async ({ page }) => {
