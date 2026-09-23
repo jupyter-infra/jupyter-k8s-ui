@@ -28,6 +28,7 @@ const WS_NAME = `${RUN_ID}-ns-ws`;
 const DEEPLINK_WS_NAME = `${RUN_ID}-deeplink`;
 const CONTEXT = `kind-${process.env.E2E_KIND_CLUSTER || 'jupyter-k8s-dev'}`;
 const SHARED_TEMPLATE_FIXTURE = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'optional', 'shared-template.yaml');
+const SECOND_NAMESPACE_FIXTURE = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'e2e-second-namespace.yaml');
 
 /** Open the namespace switcher and pick a namespace by name. */
 async function switchNamespace(page: Page, ns: string) {
@@ -181,6 +182,22 @@ test.describe('Namespace selection', () => {
     // cookie and the client must canonicalize back to ?namespace=e2e-team-b.
     await page.goto('/');
     await expectActiveNamespace(page, 'e2e-team-b', { checkUrl: true });
+  });
+
+  test('losing access to the active namespace drops the app back to the default one', async ({ page }) => {
+    // Revoke the e2e user's access to e2e-team-b and open the app there: the workspace list
+    // returns 403, the app recomputes the visible namespaces and switches to the default one.
+    await page.goto('/');
+    await switchNamespace(page, 'e2e-team-b');
+    await expectActiveNamespace(page, 'e2e-team-b');
+
+    execFileSync('kubectl', ['--context', CONTEXT, 'delete', 'rolebinding', 'e2e-test-binding', '-n', 'e2e-team-b'], { stdio: 'pipe' });
+    try {
+      await page.goto('/?namespace=e2e-team-b');
+      await expectActiveNamespace(page, 'default', { checkUrl: true });
+    } finally {
+      execFileSync('kubectl', ['--context', CONTEXT, 'apply', '-f', SECOND_NAMESPACE_FIXTURE], { stdio: 'pipe' });
+    }
   });
 
   test('cleanup: delete the test workspaces', async ({ page }) => {

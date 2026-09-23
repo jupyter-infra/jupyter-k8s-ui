@@ -78,6 +78,16 @@ test.describe('Workspace CRUD', () => {
     await waitForCardStatus(page, card, 'Running');
   });
 
+  test('creating a second workspace with the same name shows the server error and stays on the form', async ({ page }) => {
+    await page.goto('/create');
+    await page.getByRole('textbox', { name: /^name$/i }).fill(WS_NAME);
+    await page.getByRole('textbox', { name: /display name/i }).fill(WS_NAME);
+    await page.getByRole('button', { name: /create workspace/i }).click();
+
+    await expect(page.getByRole('alert').filter({ hasText: 'Resource already exists' })).toBeVisible();
+    await expectOnPath(page, { path: '/create' });
+  });
+
   test('stops a running workspace', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /all/i }).click();
