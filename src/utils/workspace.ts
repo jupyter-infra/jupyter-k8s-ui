@@ -108,23 +108,16 @@ export function acceleratorLimits(limits: Record<string, string | undefined> | u
     .sort(([a], [b]) => a.localeCompare(b));
 }
 
-// Resolve a workspace's template from a discovered list by templateRef: match on name,
-// and on namespace when the ref carries one (a namespace-less ref matches any).
-export function findTemplateByRef(items: DiscoveredTemplate[] | undefined, ref: { name: string; namespace?: string } | undefined): DiscoveredTemplate | null {
+// Resolve a workspace's template from a discovered list by templateRef. A ref without a
+// namespace means the workspace's own namespace, as the Workspace CRD defines it.
+export function findTemplateByRef(
+  items: DiscoveredTemplate[] | undefined,
+  ref: { name: string; namespace?: string } | undefined,
+  workspaceNamespace: string | undefined,
+): DiscoveredTemplate | null {
   if (!ref || !items) return null;
-  return items.find((t) => t.metadata.name === ref.name && (ref.namespace === undefined || t.metadata.namespace === ref.namespace)) ?? null;
-}
-
-// Resources to DISPLAY for a workspace: the stored block, else the template's defaults.
-// Block-level fallback mirroring the operator's nil check (admission stamps the template
-// defaultResources only when spec.resources is absent, so an omitted block means the pod
-// runs the defaults): `{}` does not fall back, and a per-key merge would display
-// resources the pod does not have.
-export function effectiveResources(
-  spec: { resources?: { requests?: Record<string, string | undefined>; limits?: Record<string, string | undefined> } },
-  template: DiscoveredTemplate | null | undefined,
-): { requests?: Record<string, string | undefined>; limits?: Record<string, string | undefined> } | undefined {
-  return spec.resources ?? template?.spec.defaultResources;
+  const namespace = ref.namespace || workspaceNamespace;
+  return items.find((t) => t.metadata.name === ref.name && t.metadata.namespace === namespace) ?? null;
 }
 
 /**

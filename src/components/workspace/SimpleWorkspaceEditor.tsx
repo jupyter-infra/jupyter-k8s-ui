@@ -141,7 +141,10 @@ export function SimpleWorkspaceEditor({ workspace, displayName, onDisplayNameCha
 
   // Resolve the workspace's template from the shared cache. Unresolvable
   // (RBAC-invisible / deleted) → null template but preserve the ref.
-  const resolvedTemplate = useMemo<DiscoveredTemplate | null>(() => findTemplateByRef(templatesQuery.data?.items, storedRef), [storedRef, templatesQuery.data]);
+  const resolvedTemplate = useMemo<DiscoveredTemplate | null>(
+    () => findTemplateByRef(templatesQuery.data?.items, storedRef, workspace.metadata.namespace),
+    [storedRef, templatesQuery.data, workspace.metadata.namespace],
+  );
 
   // Ref set but not found in the discoverable list → treat as unresolvable.
   const refUnresolvable = Boolean(storedRef) && resolvedTemplate === null && !templatesQuery.isLoading;

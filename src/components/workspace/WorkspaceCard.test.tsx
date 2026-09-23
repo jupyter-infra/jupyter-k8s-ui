@@ -1,7 +1,6 @@
 import { describe, test, expect, mock, beforeEach } from 'bun:test';
 import { render, screen, cleanup, act, fireEvent, waitFor } from '@testing-library/react';
 import { useLocation } from 'react-router-dom';
-import type { DiscoveredTemplate } from '../../types';
 import { TestProviders, makeWorkspace, makeQueryClient } from '../../test-utils';
 
 // Leaf-mock the API client (the pattern every suite here uses) and run the real hooks
@@ -9,15 +8,8 @@ import { TestProviders, makeWorkspace, makeQueryClient } from '../../test-utils'
 // test file that runs after this one: bun module mocks are process-global and never
 // restored, and file order varies by filesystem, so a barrel mock breaks other suites
 // only on some machines (the CI-only SimpleWorkspaceEditor failures).
-// Mutable so individual tests can supply template fixtures for the resources fallback.
-let templatesItems: DiscoveredTemplate[] = [];
 mock.module('../../api/client', () => ({
   apiClient: {
-    listTemplates: mock(async () => ({
-      items: templatesItems,
-      access: { user: 'ok', shared: 'ok' },
-      namespaces: { own: 'default', shared: 'shared' },
-    })),
     startWorkspace: mock(async () => ({})),
     stopWorkspace: mock(async () => ({})),
     deleteWorkspace: mock(async () => ({})),
@@ -47,9 +39,8 @@ async function renderCard(ws: ReturnType<typeof makeWorkspace>, extra?: React.Re
   // without a fetch — the same trick TestProviders uses for the namespace bootstrap.
   queryClient.setQueryData(authKeys.me, alice);
   let result!: ReturnType<typeof render>;
-  // Render, then settle the async templates query in a second act() scope: the
-  // resolution's batched notify lands after the rendering act exits, so a single
-  // combined scope leaves the commit outside act and the fallback text unrendered.
+  // Render, then flush a second act() scope: react-query's batched notify lands after the
+  // rendering act exits, so a single scope would leave that commit outside act.
   await act(async () => {
     result = render(
       <TestProviders queryClient={queryClient}>
@@ -69,7 +60,6 @@ async function renderCard(ws: ReturnType<typeof makeWorkspace>, extra?: React.Re
 
 beforeEach(() => {
   cleanup();
-  templatesItems = [];
 });
 
 describe('WorkspaceCard', () => {
@@ -199,43 +189,7 @@ describe('WorkspaceCard accelerator chip', () => {
   });
 });
 
-describe('WorkspaceCard resources fallback to template defaults (#69)', () => {
-  const pinnedTemplate = {
-    metadata: { name: 'pinned-gpu', namespace: 'shared' },
-    spec: { defaultResources: { requests: { cpu: '3', memory: '12Gi', 'nvidia.com/gpu': '1' }, limits: { cpu: '3', memory: '12Gi', 'nvidia.com/gpu': '1' } } },
-    sourceNamespace: 'shared',
-  } as DiscoveredTemplate;
-
-  test('a workspace without spec.resources shows its template defaults', async () => {
-    templatesItems = [pinnedTemplate];
-    const ws = makeWorkspace({ owner: 'alice' });
-    delete ws.spec.resources;
-    ws.spec.templateRef = { name: 'pinned-gpu', namespace: 'shared' };
-    await renderCard(ws);
-    expect(screen.getByText('3 CPU')).toBeDefined();
-    expect(screen.getByText('12 GiB')).toBeDefined();
-    expect(screen.getByText('1 GPU')).toBeDefined();
-  });
-
-  test('an unresolvable templateRef keeps the placeholder values', async () => {
-    const ws = makeWorkspace({ owner: 'alice' });
-    delete ws.spec.resources;
-    ws.spec.templateRef = { name: 'ghost-template' };
-    await renderCard(ws);
-    expect(screen.getByText('— CPU')).toBeDefined();
-  });
-
-  test('stored resources win over template defaults', async () => {
-    templatesItems = [pinnedTemplate];
-    const ws = makeWorkspace({ owner: 'alice' });
-    ws.spec.resources = { limits: { cpu: '2', memory: '4Gi' } };
-    ws.spec.templateRef = { name: 'pinned-gpu', namespace: 'shared' };
-    await renderCard(ws);
-    expect(screen.getByText('2 CPU')).toBeDefined();
-    // The template's gpu default must not leak into a workspace that stored no gpu.
-    expect(screen.queryByText('1 GPU')).toBeNull();
-  });
-
+describe('WorkspaceCard navigation', () => {
   test('Details navigates carrying the workspace namespace', async () => {
     // A bare /workspace/<name> would resolve the detail fetch against the cookie's
     // namespace, 404ing when this list was reached via a ?namespace= deep link.
