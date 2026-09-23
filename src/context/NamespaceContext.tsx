@@ -15,9 +15,10 @@ interface NamespaceContextType {
   // active namespace is no longer visible (revoked), drop to a usable one. Returns true if
   // it changed the active namespace (caller should stop treating the 403 as fatal).
   recoverFromForbidden: () => Promise<boolean>;
-  // Bootstrap state while activeNamespace is still undefined: `isBootstrapLoading` covers the
-  // request and its retries, `bootstrapError` is set once they are exhausted (never for an
-  // auth failure, which routes to re-login), and `retryBootstrap` runs the request again.
+  // Bootstrap state while activeNamespace is still undefined: `isBootstrapLoading` is true
+  // while the request runs, including its retries and a manual retry, `bootstrapError` is set
+  // once the retries are exhausted (never for an auth failure, which routes to re-login), and
+  // `retryBootstrap` runs the request again.
   isBootstrapLoading: boolean;
   bootstrapError: Error | null;
   retryBootstrap: () => void;
@@ -59,7 +60,7 @@ export function NamespaceProvider({ children }: NamespaceProviderProps) {
   const {
     data: bootstrap,
     error: bootstrapError,
-    isLoading: isBootstrapLoading,
+    isFetching: isBootstrapLoading,
     refetch: refetchBootstrap,
   } = useQuery({
     queryKey: namespaceKeys.active,

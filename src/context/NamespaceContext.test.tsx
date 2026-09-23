@@ -146,24 +146,34 @@ describe('NamespaceContext bootstrap resilience', () => {
     expect(attempts).toBeGreaterThanOrEqual(2);
   });
 
-  test('a persistent failure surfaces bootstrapError with no active namespace; retryBootstrap recovers', async () => {
+  test('a persistent failure surfaces bootstrapError with no active namespace; retryBootstrap shows progress, then recovers', async () => {
     let healthy = false;
-    getMyNamespaceImpl = async () => {
-      if (!healthy) throw new Error('down');
-      return { active: 'cookie-ns' };
+    let release: (() => void) | undefined;
+    getMyNamespaceImpl = () => {
+      if (!healthy) return Promise.reject(new Error('down'));
+      // Held open until the test releases it, so the in-flight retry state is observable.
+      return new Promise((resolve) => {
+        release = () => resolve({ active: 'cookie-ns' });
+      });
     };
     const { result } = renderHook(() => useNamespace(), { wrapper: wrapper(['/']) });
 
     await waitFor(() => expect(result.current.bootstrapError).not.toBeNull());
     expect(result.current.activeNamespace).toBeUndefined();
+    expect(result.current.isBootstrapLoading).toBe(false);
 
     healthy = true;
     await act(async () => {
       result.current.retryBootstrap();
     });
+    await waitFor(() => expect(result.current.isBootstrapLoading).toBe(true));
 
+    await act(async () => {
+      release?.();
+    });
     await waitFor(() => expect(result.current.activeNamespace).toBe('cookie-ns'));
     expect(result.current.bootstrapError).toBeNull();
+    expect(result.current.isBootstrapLoading).toBe(false);
   });
 
   test('an auth failure is not retried (it routes to re-login instead)', async () => {
