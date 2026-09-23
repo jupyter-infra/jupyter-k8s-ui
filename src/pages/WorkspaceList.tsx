@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNamespacedNavigate } from '../hooks';
 import {
   Box,
   Typography,
@@ -20,7 +20,7 @@ import { useWorkspaces, useClusterAccess } from '../api';
 import { isAuthError, ApiError } from '../api/auth-interceptor';
 import { useAuth } from '../context';
 import { useNamespace } from '../context/NamespaceContext';
-import { isOwner as checkIsOwner, getWorkspaceOwner, withNamespaceParam } from '../utils';
+import { isOwner as checkIsOwner, getWorkspaceOwner } from '../utils';
 import { WorkspaceCard } from '../components';
 import { strings } from '../constants';
 import styles from './WorkspaceList.module.css';
@@ -29,7 +29,7 @@ const KUBECTL_BANNER_DISMISSED_KEY = 'kubectl-banner-dismissed';
 const PAGE_SIZE = 12;
 
 export function WorkspaceList() {
-  const navigate = useNavigate();
+  const navigate = useNamespacedNavigate();
   const { user } = useAuth();
   const { activeNamespace, recoverFromForbidden, isBootstrapLoading, bootstrapError, retryBootstrap } = useNamespace();
   const { data: workspaces, isLoading, error, refetch, isFetching } = useWorkspaces();
@@ -93,7 +93,7 @@ export function WorkspaceList() {
     setPage(1);
   };
 
-  const handleCreateClick = () => navigate(withNamespaceParam('/create', activeNamespace));
+  const handleCreateClick = () => navigate('/create');
 
   // No namespace yet: the workspaces query is disabled until one resolves, so show the
   // bootstrap's own progress rather than a premature "No workspaces yet".

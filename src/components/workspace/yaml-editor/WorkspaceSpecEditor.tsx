@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNamespacedNavigate } from '../../../hooks';
 import { Typography, TextField, Button, Stack, Paper, Alert, CircularProgress, Box, Link } from '@mui/material';
 import type { editor } from 'monaco-editor';
 import { useWorkspace, useCrdSchema, useCreateWorkspaceAdvanced, useReplaceWorkspaceAdvanced } from '../../../api';
@@ -13,16 +13,7 @@ import { TemplateGuidancePanel } from './TemplateGuidancePanel';
 import { ValidationStatus } from './ValidationStatus';
 import type { AdvancedWorkspacePayload, WorkspaceSpec, DiscoveredTemplate } from '../../../types';
 import { strings } from '../../../constants';
-import {
-  sanitizeK8sName,
-  specToYaml,
-  yamlToSpec,
-  buildCreateScaffold,
-  getWorkspaceOwner,
-  getWorkspaceStatus,
-  isOwner,
-  withNamespaceParam,
-} from '../../../utils';
+import { sanitizeK8sName, specToYaml, yamlToSpec, buildCreateScaffold, getWorkspaceOwner, getWorkspaceStatus, isOwner } from '../../../utils';
 
 // Lazy-load the Monaco editor: it (plus its language workers) is a large dependency
 // only needed here, so keep it out of the main bundle.
@@ -128,7 +119,7 @@ export function WorkspaceSpecEditor({
   onTemplateNameChange,
   onResolvedTemplateChange,
 }: WorkspaceSpecEditorProps) {
-  const navigate = useNavigate();
+  const navigate = useNamespacedNavigate();
   const isEdit = mode === 'edit';
   const { workspace: ws, common } = strings;
   // When the parent lifts template state (inline create), use the controlled values;
@@ -340,7 +331,7 @@ export function WorkspaceSpecEditor({
         await createMutation.mutateAsync(payload);
       }
       setDirty(false);
-      navigate(withNamespaceParam('/', activeNamespace));
+      navigate('/');
     } catch (err) {
       if (err instanceof ApiError) {
         setSaveError({ message: err.message, details: err.details });
@@ -348,7 +339,7 @@ export function WorkspaceSpecEditor({
         setSaveError({ message: err instanceof Error ? err.message : 'Save failed' });
       }
     }
-  }, [buildPayload, isEdit, replaceMutation, createMutation, navigate, activeNamespace]);
+  }, [buildPayload, isEdit, replaceMutation, createMutation, navigate]);
 
   const saving = createMutation.isPending || replaceMutation.isPending;
 
@@ -361,7 +352,7 @@ export function WorkspaceSpecEditor({
     [dirty],
   );
 
-  const handleCancel = useCallback(() => guardedExit(() => navigate(withNamespaceParam('/', activeNamespace))), [guardedExit, navigate, activeNamespace]);
+  const handleCancel = useCallback(() => guardedExit(() => navigate('/')), [guardedExit, navigate]);
   const handleSwitchToForm = useCallback(() => {
     if (onSwitchToForm) guardedExit(onSwitchToForm);
   }, [guardedExit, onSwitchToForm]);
@@ -380,11 +371,7 @@ export function WorkspaceSpecEditor({
   // polling once the workspace settles to Running/Stopped). Show an error card instead.
   if (isEdit && (loadError || !existing)) {
     return (
-      <EditNotice
-        message={loadError instanceof Error ? loadError.message : ws.advancedLoadError}
-        onBack={() => navigate(withNamespaceParam('/', activeNamespace))}
-        backLabel={ws.advancedBack}
-      />
+      <EditNotice message={loadError instanceof Error ? loadError.message : ws.advancedLoadError} onBack={() => navigate('/')} backLabel={ws.advancedBack} />
     );
   }
 
@@ -395,21 +382,14 @@ export function WorkspaceSpecEditor({
   if (isEdit && existing) {
     const owner = getWorkspaceOwner(existing);
     if (!isOwner(owner, user?.k8sUser)) {
-      return (
-        <EditNotice
-          title={ws.advancedEditNotAllowedTitle}
-          message={ws.advancedEditNotOwner}
-          onBack={() => navigate(withNamespaceParam('/', activeNamespace))}
-          backLabel={ws.advancedBack}
-        />
-      );
+      return <EditNotice title={ws.advancedEditNotAllowedTitle} message={ws.advancedEditNotOwner} onBack={() => navigate('/')} backLabel={ws.advancedBack} />;
     }
     if (getWorkspaceStatus(existing) !== 'Stopped') {
       return (
         <EditNotice
           title={ws.advancedEditNotAllowedTitle}
           message={ws.advancedEditNotStopped}
-          onBack={() => navigate(withNamespaceParam(`/workspace/${existing.metadata.name}`, existing.metadata.namespace))}
+          onBack={() => navigate(`/workspace/${existing.metadata.name}`, { namespace: existing.metadata.namespace })}
           backLabel={ws.advancedBack}
         />
       );

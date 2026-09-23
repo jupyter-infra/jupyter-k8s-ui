@@ -1,10 +1,9 @@
-import { Outlet, Link } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import { AppBar, Toolbar, Typography, Container, Skeleton, Box, Stack, IconButton, Tooltip } from '@mui/material';
 import { Terminal } from '@mui/icons-material';
 import { useAuth } from '../../context';
-import { useNamespace } from '../../context/NamespaceContext';
-import { withNamespaceParam } from '../../utils';
 import { ThemeSwitcher } from '../ui/ThemeSwitcher';
+import { NamespacedLink } from '../ui/NamespacedLink';
 import { UserMenu } from './UserMenu';
 import { NamespaceSwitcher } from './NamespaceSwitcher';
 import { strings } from '../../constants';
@@ -12,7 +11,6 @@ import styles from './Layout.module.css';
 
 export function Layout() {
   const { user, isLoading } = useAuth();
-  const { activeNamespace } = useNamespace();
 
   return (
     <Box display="flex" flexDirection="column" minHeight="100vh">
@@ -28,7 +26,7 @@ export function Layout() {
         }}
       >
         <Toolbar className={styles.toolbar}>
-          <Link to={withNamespaceParam('/', activeNamespace)} className={styles.logoLink} aria-label={strings.a11y.homeLink}>
+          <NamespacedLink to="/" className={styles.logoLink} aria-label={strings.a11y.homeLink}>
             <Box className={styles.logoBox} aria-hidden="true">
               <Typography component="span" className={styles.logoText}>
                 {strings.app.logo}
@@ -37,14 +35,14 @@ export function Layout() {
             <Typography variant="h6" component="span" className={styles.brandText}>
               {strings.app.name}
             </Typography>
-          </Link>
+          </NamespacedLink>
 
           <Box sx={{ flex: 1 }} />
 
           <Stack direction="row" alignItems="center" gap={1}>
             <NamespaceSwitcher />
             <Tooltip title={strings.kubectl.navTooltip}>
-              <IconButton component={Link} to="/kubectl" size="small" aria-label={strings.kubectl.navAriaLabel}>
+              <IconButton component={NamespacedLink} to="/kubectl" size="small" aria-label={strings.kubectl.navAriaLabel}>
                 <Terminal fontSize="small" />
               </IconButton>
             </Tooltip>

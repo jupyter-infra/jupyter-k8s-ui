@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import { useNamespacedNavigate } from '../hooks';
 import { Typography, Stack, Container, CircularProgress, Box, Alert, Button } from '@mui/material';
 import { WorkspaceSpecEditor } from '../components/workspace/yaml-editor/WorkspaceSpecEditor';
 import { SimpleWorkspaceEditor } from '../components/workspace/SimpleWorkspaceEditor';
 import { useWorkspace } from '../api';
 import { useAuth } from '../context';
-import { getWorkspaceOwner, getWorkspaceStatus, isOwner, withNamespaceParam } from '../utils';
-import { useNamespace } from '../context/NamespaceContext';
+import { getWorkspaceOwner, getWorkspaceStatus, isOwner } from '../utils';
 import { strings } from '../constants';
 
 // A full-page notice shown when the workspace can't be edited (mirrors WorkspaceSpecEditor's
@@ -36,10 +36,9 @@ function EditNotice({ title, message, onBack, backLabel }: { title?: string; mes
 // create). The YAML editor is the single path to YAML — no ?mode= deep-link.
 export function WorkspaceAdvancedEditor() {
   const { name: routeName } = useParams();
-  const navigate = useNavigate();
+  const navigate = useNamespacedNavigate();
   const { workspace: ws } = strings;
   const { user } = useAuth();
-  const { activeNamespace } = useNamespace();
 
   const [useYaml, setUseYaml] = useState(false);
   // name/displayName are lifted so they survive the simple ↔ YAML toggle. Both are derived
@@ -75,8 +74,8 @@ export function WorkspaceAdvancedEditor() {
           displayName={displayName}
           setDisplayName={setDisplayNameOverride}
           notice={EditNotice}
-          onBack={() => navigate(withNamespaceParam('/', activeNamespace))}
-          onBackDetail={() => existing && navigate(withNamespaceParam(`/workspace/${existing.metadata.name}`, existing.metadata.namespace))}
+          onBack={() => navigate('/')}
+          onBackDetail={() => existing && navigate(`/workspace/${existing.metadata.name}`, { namespace: existing.metadata.namespace })}
         />
       </Stack>
     </Container>

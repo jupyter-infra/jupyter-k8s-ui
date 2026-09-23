@@ -1,4 +1,6 @@
-import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import { useNamespacedNavigate } from '../hooks';
+import { NamespacedLink } from '../components';
 import { Typography, Button, Chip, CircularProgress, Box, Stack, Paper, Tooltip } from '@mui/material';
 import {
   ArrowBack,
@@ -25,9 +27,7 @@ import {
   acceleratorLimits,
   formatCpuCores,
   formatMemoryGiB,
-  withNamespaceParam,
 } from '../utils';
-import { useNamespace } from '../context/NamespaceContext';
 import type { WorkspaceCondition } from '../types';
 import { strings, ACCELERATOR_LABELS } from '../constants';
 import styles from './WorkspaceDetail.module.css';
@@ -76,9 +76,8 @@ function InfoRow({ label, value }: { label: React.ReactNode; value: React.ReactN
 
 export function WorkspaceDetail() {
   const { name } = useParams<{ name: string }>();
-  const navigate = useNavigate();
+  const navigate = useNamespacedNavigate();
   const { user } = useAuth();
-  const { activeNamespace } = useNamespace();
   const { data: workspace, isLoading, error } = useWorkspace(name ?? '');
   const startMutation = useStartWorkspace();
   const stopMutation = useStopWorkspace();
@@ -94,7 +93,7 @@ export function WorkspaceDetail() {
   if (error || !workspace) {
     return (
       <Box className={styles.container}>
-        <Button startIcon={<ArrowBack />} onClick={() => navigate(withNamespaceParam('/', activeNamespace))}>
+        <Button startIcon={<ArrowBack />} onClick={() => navigate('/')}>
           {strings.common.back}
         </Button>
         <Paper className={styles.errorCard}>
@@ -119,7 +118,7 @@ export function WorkspaceDetail() {
 
   return (
     <Box className={styles.container}>
-      <Button startIcon={<ArrowBack />} onClick={() => navigate(withNamespaceParam('/', activeNamespace))} className={styles.backButton}>
+      <Button startIcon={<ArrowBack />} onClick={() => navigate('/')} className={styles.backButton}>
         {strings.common.back}
       </Button>
 
@@ -137,8 +136,9 @@ export function WorkspaceDetail() {
             <Button
               variant="outlined"
               startIcon={<Edit />}
-              component={RouterLink}
-              to={withNamespaceParam(`/workspace/${workspace.metadata.name}/edit`, workspace.metadata.namespace)}
+              component={NamespacedLink}
+              to={`/workspace/${workspace.metadata.name}/edit`}
+              namespace={workspace.metadata.namespace}
             >
               {strings.workspace.edit}
             </Button>

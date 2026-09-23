@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNamespacedNavigate } from '../hooks';
 import { Typography, TextField, Button, Stack, Container, Paper, Alert, CircularProgress } from '@mui/material';
 import { useCreateWorkspace, useWorkspaces, useTemplates } from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -11,7 +11,7 @@ import { WorkspaceResourceForm, type WorkspaceFormValues } from '../components/w
 import { WorkspaceSpecEditor } from '../components/workspace/yaml-editor/WorkspaceSpecEditor';
 import type { CreateWorkspaceRequest, DiscoveredTemplate } from '../types';
 import { strings } from '../constants';
-import { sanitizeK8sName, resolveTemplateControls, buildCreateResources, clamp, withNamespaceParam } from '../utils';
+import { sanitizeK8sName, resolveTemplateControls, buildCreateResources, clamp } from '../utils';
 
 function generateDefaults(username: string, existingCount: number) {
   const n = existingCount + 1;
@@ -33,7 +33,7 @@ interface Touched {
 }
 
 export function WorkspaceCreate() {
-  const navigate = useNavigate();
+  const navigate = useNamespacedNavigate();
   const createMutation = useCreateWorkspace();
   const { user } = useAuth();
   const { activeNamespace } = useNamespace();
@@ -191,7 +191,7 @@ export function WorkspaceCreate() {
 
     try {
       await createMutation.mutateAsync(request);
-      navigate(withNamespaceParam('/', activeNamespace));
+      navigate('/');
     } catch {
       // Error surfaced via createMutation.error
     }
@@ -286,7 +286,7 @@ export function WorkspaceCreate() {
             <AdvancedBox onSwitchToYaml={() => setAdvanced(true)} />
 
             <Stack direction="row" spacing={2} justifyContent="flex-end">
-              <Button variant="text" onClick={() => navigate(withNamespaceParam('/', activeNamespace))}>
+              <Button variant="text" onClick={() => navigate('/')}>
                 {strings.common.cancel}
               </Button>
               <Button type="submit" variant="contained" disabled={!name || unstartable || createMutation.isPending}>
