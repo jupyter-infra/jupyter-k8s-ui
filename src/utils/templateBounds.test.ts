@@ -456,7 +456,7 @@ describe('allResourceAxesPinned / buildCreateResources — pinned-template creat
     expect(buildCreateResources(controls, 1, 2, { 'nvidia.com/gpu': 1 })).toBeDefined();
   });
 
-  test('one editable axis yields the COMPLETE block, pinned values included', () => {
+  test('one editable axis yields the complete block, pinned values included', () => {
     // Partial blocks are stored as-is under wholesale-on-nil defaulting, so the pinned
     // memory value must ride along with the edited cpu.
     const controls = resolveTemplateControls(tmpl({ resourceBounds: { resources: { cpu: { min: '1', max: '4' }, memory: { min: '4Gi', max: '4Gi' } } } }));

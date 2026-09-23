@@ -3,8 +3,8 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
 import { expectOnPath, advertiseNodeCapacity, withdrawNodeCapacity } from './test-utils';
 
 // The #69 contract end to end, against the pinned-gpu-template fixture (every resource
-// axis min == max): the create form serializes NO spec.resources, the operator's
-// admission stamps the template defaultResources verbatim — including the accelerator
+// axis min == max): the create form serializes no spec.resources, the operator's
+// admission stamps the template defaultResources verbatim, including the accelerator
 // request the form never renders — and the pod schedules with the GPU (fake node
 // capacity, same mechanism as gpu-template.spec.ts).
 
@@ -72,7 +72,7 @@ test.describe('Pinned template create (#69)', () => {
     await page.getByRole('button', { name: /create workspace/i }).click();
     await expectOnPath(page);
 
-    // The stored spec carries the template defaults VERBATIM — strings the form can
+    // The stored spec carries the template defaults verbatim, strings the form can
     // never produce: it emits cpu as "0.5" (never "500m") and puts accelerators in
     // limits only (never requests). Both prove spec.resources was omitted on create and
     // stamped by the operator's admission.

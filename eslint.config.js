@@ -20,13 +20,7 @@ export default defineConfig([
     // useNamespacedNavigate and NamespacedLink. NamespaceContext is the one place that sets
     // the namespace itself, so it keeps the raw router API.
     files: ['src/**/*.{ts,tsx}'],
-    ignores: [
-      'src/**/*.test.{ts,tsx}',
-      'src/test-utils.tsx',
-      'src/hooks/useNamespacedNavigate.ts',
-      'src/components/ui/NamespacedLink.tsx',
-      'src/context/NamespaceContext.tsx',
-    ],
+    ignores: ['src/**/*.test.{ts,tsx}', 'src/hooks/useNamespacedNavigate.ts', 'src/components/ui/NamespacedLink.tsx', 'src/context/NamespaceContext.tsx'],
     rules: {
       'no-restricted-imports': [
         'error',
