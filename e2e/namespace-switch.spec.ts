@@ -30,6 +30,41 @@ const CONTEXT = `kind-${process.env.E2E_KIND_CLUSTER || 'jupyter-k8s-dev'}`;
 const SHARED_TEMPLATE_FIXTURE = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'optional', 'shared-template.yaml');
 const SECOND_NAMESPACE_FIXTURE = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'e2e-second-namespace.yaml');
 
+/**
+ * RBAC changes reach the API server's authorizer a moment after the RoleBinding write. Wait
+ * until the e2e user's access to e2e-team-b reads the expected way before the app is loaded.
+ */
+async function waitForTeamBAccess(allowed: boolean) {
+  await expect
+    .poll(
+      () => {
+        try {
+          return execFileSync(
+            'kubectl',
+            [
+              '--context',
+              CONTEXT,
+              'auth',
+              'can-i',
+              'list',
+              'workspaces.workspace.jupyter.org',
+              '--as=system:serviceaccount:default:e2e-test',
+              '-n',
+              'e2e-team-b',
+            ],
+            { stdio: 'pipe' },
+          )
+            .toString()
+            .trim();
+        } catch {
+          return 'no';
+        }
+      },
+      { timeout: 30_000, intervals: [1_000] },
+    )
+    .toBe(allowed ? 'yes' : 'no');
+}
+
 /** Open the namespace switcher and pick a namespace by name. */
 async function switchNamespace(page: Page, ns: string) {
   await page.getByRole('button', { name: /select namespace/i }).click();
@@ -193,10 +228,12 @@ test.describe('Namespace selection', () => {
 
     execFileSync('kubectl', ['--context', CONTEXT, 'delete', 'rolebinding', 'e2e-test-binding', '-n', 'e2e-team-b'], { stdio: 'pipe' });
     try {
+      await waitForTeamBAccess(false);
       await page.goto('/?namespace=e2e-team-b');
       await expectActiveNamespace(page, 'default', { checkUrl: true });
     } finally {
       execFileSync('kubectl', ['--context', CONTEXT, 'apply', '-f', SECOND_NAMESPACE_FIXTURE], { stdio: 'pipe' });
+      await waitForTeamBAccess(true);
     }
   });
 
