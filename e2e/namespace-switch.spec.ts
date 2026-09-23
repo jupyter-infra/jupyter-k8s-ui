@@ -25,6 +25,7 @@ import { expectOnPath } from './test-utils';
 
 const RUN_ID = `e2e-${Date.now()}`;
 const WS_NAME = `${RUN_ID}-ns-ws`;
+const DEEPLINK_WS_NAME = `${RUN_ID}-deeplink`;
 const CONTEXT = `kind-${process.env.E2E_KIND_CLUSTER || 'jupyter-k8s-dev'}`;
 const SHARED_TEMPLATE_FIXTURE = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'optional', 'shared-template.yaml');
 
@@ -112,6 +113,26 @@ test.describe('Namespace selection', () => {
     await expect(page.getByLabel(new RegExp(`${WS_NAME}.*workspace`, 'i'))).toBeHidden();
   });
 
+  test('creating through a deep link lands back on that namespace, not the cookie one', async ({ page }) => {
+    // The cookie remembers default; the deep link asks for e2e-team-b. After the create the
+    // list must stay on e2e-team-b and show the new workspace.
+    await page.goto('/');
+    await switchNamespace(page, 'default');
+    await expectActiveNamespace(page, 'default');
+
+    await page.goto('/create?namespace=e2e-team-b');
+    await expect(page.getByText(/creating in e2e-team-b/i)).toBeVisible();
+    await page.getByRole('textbox', { name: /^name$/i }).fill(DEEPLINK_WS_NAME);
+    await page.getByRole('textbox', { name: /display name/i }).fill(DEEPLINK_WS_NAME);
+    await page.getByRole('button', { name: /create workspace/i }).click();
+
+    await expectOnPath(page, { namespace: 'e2e-team-b' });
+    await expectActiveNamespace(page, 'e2e-team-b');
+    await page.getByRole('button', { name: /^all$/i }).click();
+    await page.getByRole('textbox', { name: /search workspaces/i }).fill(DEEPLINK_WS_NAME);
+    await expect(page.getByLabel(new RegExp(`${DEEPLINK_WS_NAME}.*workspace`, 'i'))).toBeVisible({ timeout: 30_000 });
+  });
+
   test('switching namespace changes the template set (default picker != e2e-team-b picker)', async ({ page }) => {
     // In `default`, the create picker shows default-ns templates + shared, NOT team-b's.
     await page.goto('/');
@@ -162,17 +183,20 @@ test.describe('Namespace selection', () => {
     await expectActiveNamespace(page, 'e2e-team-b', { checkUrl: true });
   });
 
-  test('cleanup: delete the test workspace', async ({ page }) => {
+  test('cleanup: delete the test workspaces', async ({ page }) => {
     await page.goto('/?namespace=e2e-team-b');
     await expectActiveNamespace(page, 'e2e-team-b');
     await page.getByRole('button', { name: /^all$/i }).click();
-    await page.getByRole('textbox', { name: /search workspaces/i }).fill(RUN_ID);
-    const card = page.getByLabel(new RegExp(`${WS_NAME}.*workspace`, 'i'));
-    if (await card.isVisible().catch(() => false)) {
-      await card.getByRole('button', { name: /more options/i }).click();
-      await page.getByRole('menuitem', { name: /delete/i }).click();
-      await expect(page.getByText(/are you sure you want to delete/i)).toBeVisible();
-      await page.getByRole('button', { name: /^delete$/i }).click();
+    for (const name of [WS_NAME, DEEPLINK_WS_NAME]) {
+      await page.getByRole('textbox', { name: /search workspaces/i }).fill(name);
+      const card = page.getByLabel(new RegExp(`${name}.*workspace`, 'i'));
+      if (await card.isVisible().catch(() => false)) {
+        await card.getByRole('button', { name: /more options/i }).click();
+        await page.getByRole('menuitem', { name: /delete/i }).click();
+        await expect(page.getByText(/are you sure you want to delete/i)).toBeVisible();
+        await page.getByRole('button', { name: /^delete$/i }).click();
+        await expect(card).toBeHidden({ timeout: 30_000 });
+      }
     }
   });
 });
