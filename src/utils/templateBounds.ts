@@ -70,9 +70,8 @@ export interface ResolvedTemplateControls {
   // template — accelerators are strictly template-gated, the advanced editor is the
   // escape hatch). Sorted by key for a stable render order.
   accelerators: AcceleratorControl[];
-  // True when defaultResources.limits cover cpu, memory, and every accelerator axis
-  // pinned above zero — the precondition for omission-create (#69): admission stamps
-  // defaults only when the template declares them.
+  // True when defaultResources.limits cover cpu, memory and every accelerator axis pinned
+  // above zero. The create form omits spec.resources only then (#69).
   defaultsCoverPinnedAxes: boolean;
   image: ImageControl;
   idle: IdleControls;
@@ -196,11 +195,10 @@ export function resolveTemplateControls(template: WorkspaceTemplate | null, pres
     staticDefault: STATIC_DEFAULTS.storage,
   });
 
-  // Omission-create (#69) relies on admission stamping defaultResources; the stamp only
-  // happens when the template declares them (resource_defaulter.go nil-checks both
-  // sides), and the bounds validator skips keys absent from the workspace block, so an
-  // uncovered omission stores a workspace with no limits at all. Coverage = default
-  // limits for cpu, memory, and every accelerator axis the template pins above zero.
+  // The operator's admission webhook writes defaultResources into a workspace that has no
+  // resources block, but only the defaults the template declares, and its bounds check skips
+  // keys the workspace does not set. Omitting the block against a template without them would
+  // store a workspace with no limits at all (#69).
   const accelerators = buildAcceleratorControls(spec);
   const defaultLimits = spec.defaultResources?.limits;
   const defaultsCoverPinnedAxes =
@@ -413,9 +411,9 @@ export function shouldEmitAccelerator(value: number, state: { stored: boolean; t
   return value > 0 && (state.stored || state.touched || state.min > 0);
 }
 
-// True when a template pins every resource axis (min === max on cpu, memory, and each
-// accelerator axis) — the form has nothing editable to serialize. Storage is excluded:
-// it serializes as spec.storage, not spec.resources.
+// True when a template pins every resource axis (min === max on cpu, memory and each
+// accelerator axis), so the form has nothing editable to send. Storage is not an axis here:
+// it is sent as spec.storage, not spec.resources.
 export function allResourceAxesPinned(controls: ResolvedTemplateControls): boolean {
   return (
     controls.hasTemplate &&
@@ -425,12 +423,11 @@ export function allResourceAxesPinned(controls: ResolvedTemplateControls): boole
   );
 }
 
-// Create-payload resources (#69): omit the block entirely when the template pins every
-// axis, so the operator's admission defaulting stamps the COMPLETE template
-// defaultResources — including keys the form never renders (accelerator requests).
-// Defaulting is wholesale-on-nil, not per-key: `{}` gets nothing and a partial block is
-// stored as-is, so a template with any editable axis still sends the complete block,
-// pinned values included.
+// The resources block for a create (#69). When the template pins every axis and declares
+// default limits for all of them, send no block: the operator's admission webhook then writes
+// the complete template defaults, including keys the form never renders such as accelerator
+// requests. Defaulting applies only to an absent block, `{}` gets nothing and a partial block
+// is stored as is, so any editable axis means sending the complete block, pinned values included.
 export function buildCreateResources(
   controls: ResolvedTemplateControls,
   cpuLimitCores: number,

@@ -15,11 +15,9 @@ interface NamespaceContextType {
   // active namespace is no longer visible (revoked), drop to a usable one. Returns true if
   // it changed the active namespace (caller should stop treating the 403 as fatal).
   recoverFromForbidden: () => Promise<boolean>;
-  // Initial-bootstrap resolution state. `isBootstrapLoading` covers the in-flight window
-  // (including bounded retries); `bootstrapError` is set only after they are exhausted, and
-  // never for an auth failure (that routes to re-login). While either holds, activeNamespace
-  // is undefined, so a namespaced view shows a spinner / retry rather than an empty state
-  // that reads as "you have no workspaces". `retryBootstrap` refetches the resolution.
+  // Bootstrap state while activeNamespace is still undefined: `isBootstrapLoading` covers the
+  // request and its retries, `bootstrapError` is set once they are exhausted (never for an
+  // auth failure, which routes to re-login), and `retryBootstrap` runs the request again.
   isBootstrapLoading: boolean;
   bootstrapError: Error | null;
   retryBootstrap: () => void;
@@ -54,11 +52,10 @@ export function NamespaceProvider({ children }: NamespaceProviderProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlNamespace = searchParams.get('namespace') || undefined;
 
-  // Cheap bootstrap: the server resolves cookie-remembered-else-configured (no SSAR). A
-  // single failure used to wedge the app with no namespace and no recovery (retry was off
-  // and staleTime Infinity meant no refetch): the switcher stuck on "…" and the list read
-  // "No workspaces yet". Retry transient failures a bounded number of times, but never an
-  // auth failure (that routes to re-login), mirroring the /me query.
+  // The server resolves the cookie's namespace, else the configured one, with no access
+  // check. Transient failures retry a bounded number of times; auth failures do not, they
+  // route to re-login, the same rule as the /me query. Without the retry one failed request
+  // leaves the app with no namespace and no way to recover.
   const {
     data: bootstrap,
     error: bootstrapError,

@@ -153,10 +153,8 @@ export function WorkspaceCreate() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // WYSIWYG: send exactly what the form displays. A complete resources block when any
-    // axis is editable (a partial one would wipe requests under the wholesale overlay);
-    // no block at all when the template pins every axis, so admission stamps the complete
-    // template defaults, including keys the form never renders (#69).
+    // Send the complete resources block when any axis is editable, and none when the template
+    // pins every axis, so the operator's admission webhook writes the template defaults (#69).
     const resources = buildCreateResources(controls, values.cpu, values.memory, values.accelerators);
     const request: CreateWorkspaceRequest = {
       name,
