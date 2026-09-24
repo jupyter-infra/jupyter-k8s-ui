@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process';
-import { test, expect, type Locator, type Page } from '@playwright/test';
-import { expectOnPath, advertiseNodeCapacity, withdrawNodeCapacity } from './test-utils';
+import { test, expect } from '@playwright/test';
+import { expectOnPath, advertiseNodeCapacity, withdrawNodeCapacity, waitForCardStatus, waitForCardGone } from './test-utils';
 
 // Accelerator axes end to end, against the real cluster with the gpu-template fixture
 // (e2e/fixtures/gpu-template.yaml: nvidia.com/gpu 0–2 default 1, plus a MIG profile key
@@ -21,35 +21,6 @@ const WS_NAME = `${RUN_ID}-ws`;
 const CLUSTER = process.env.E2E_KIND_CLUSTER || 'jupyter-k8s-dev';
 const NODE = `${CLUSTER}-control-plane`;
 const KUBECTL = `kubectl --context kind-${CLUSTER}`;
-
-async function waitForCardStatus(page: Page, card: Locator, text: string) {
-  await expect
-    .poll(
-      async () => {
-        await page.getByRole('button', { name: /refresh/i }).click();
-        return card
-          .getByText(text, { exact: true })
-          .isVisible()
-          .catch(() => false);
-      },
-      { timeout: 30_000, intervals: [2_000] },
-    )
-    .toBeTruthy();
-}
-
-// Deletion is finalized asynchronously (the CR lists with a deletionTimestamp until the
-// operator's finalizer runs), so poll with explicit refreshes like workspace-crud does.
-async function waitForCardGone(page: Page, card: Locator) {
-  await expect
-    .poll(
-      async () => {
-        await page.getByRole('button', { name: /refresh/i }).click();
-        return card.isVisible().catch(() => false);
-      },
-      { timeout: 30_000, intervals: [2_000] },
-    )
-    .toBeFalsy();
-}
 
 test.describe('Accelerator axes (gpu-template)', () => {
   test.describe.configure({ mode: 'serial' });
