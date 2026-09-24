@@ -325,9 +325,9 @@ describe('template-aware simple create', () => {
   });
 
   test('post-create returns to the list carrying the page namespace, not the cookie active', async () => {
-    // The create page's ?namespace= (deep link / second tab) wins over the bootstrap
-    // active for the create itself; the redirect must carry the same namespace — a bare
-    // '/' canonicalizes back to the bootstrap active and hides the just-created workspace.
+    // The create page's ?namespace= (deep link, second tab) wins over the bootstrap active
+    // for the create itself, and the redirect must carry the same namespace: a bare '/'
+    // falls back to the bootstrap active and hides the just-created workspace.
     await renderCreate('/create?namespace=other-ns');
     await screen.findByText(/^resources$/i);
     fireEvent.change(screen.getByRole('combobox', { name: /image/i }), { target: { value: 'nginx:latest' } });

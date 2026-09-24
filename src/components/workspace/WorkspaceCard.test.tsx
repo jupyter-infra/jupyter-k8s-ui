@@ -7,7 +7,7 @@ import { TestProviders, makeWorkspace, makeQueryClient } from '../../test-utils'
 // against it. Mocking the ../../api or ../../context barrels instead leaks into every
 // test file that runs after this one: bun module mocks are process-global and never
 // restored, and file order varies by filesystem, so a barrel mock breaks other suites
-// only on some machines (the CI-only SimpleWorkspaceEditor failures).
+// only on some machines.
 mock.module('../../api/client', () => ({
   apiClient: {
     startWorkspace: mock(async () => ({})),
@@ -21,11 +21,10 @@ const { WorkspaceCard } = await import('./WorkspaceCard');
 const { AuthProvider, authKeys } = await import('../../context/AuthContext');
 
 // The signed-in user. `displayUser` (raw OIDC claim, display-only) and `k8sUser` (the
-// authoritative K8s username `created-by` holds) are DELIBERATELY DIFFERENT: ownership
+// authoritative K8s username `created-by` holds) are deliberately different: ownership
 // must compare against k8sUser, so the owner annotations in these tests use 'alice'
-// (== k8sUser) while displayUser is a distinct claim. This makes the owner-gating tests
-// a real regression guard for #57 — reverting the call site to user?.displayUser would
-// break them.
+// (== k8sUser) while displayUser is a distinct claim. Comparing against displayUser
+// instead would fail the owner-gating tests (#57).
 const alice = { displayUser: 'alice-raw-claim', k8sUser: 'alice' };
 
 function LocationProbe() {
@@ -36,7 +35,7 @@ function LocationProbe() {
 async function renderCard(ws: ReturnType<typeof makeWorkspace>, extra?: React.ReactNode) {
   const queryClient = makeQueryClient();
   // Seed the me-query (fresh for its 5-minute staleTime), so AuthProvider resolves
-  // without a fetch — the same trick TestProviders uses for the namespace bootstrap.
+  // without a fetch, the same trick TestProviders uses for the namespace bootstrap.
   queryClient.setQueryData(authKeys.me, alice);
   let result!: ReturnType<typeof render>;
   // Render, then flush a second act() scope: react-query's batched notify lands after the

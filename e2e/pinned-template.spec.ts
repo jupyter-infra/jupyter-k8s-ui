@@ -5,7 +5,7 @@ import { expectOnPath, advertiseNodeCapacity, withdrawNodeCapacity, waitForCardS
 // The #69 contract end to end, against the pinned-gpu-template fixture (every resource
 // axis min == max): the create form serializes no spec.resources, the operator's
 // admission stamps the template defaultResources verbatim, including the accelerator
-// request the form never renders — and the pod schedules with the GPU (fake node
+// request the form never renders, and the pod schedules with the GPU (fake node
 // capacity, same mechanism as gpu-template.spec.ts).
 
 const RUN_ID = `e2e-pinned-${Date.now()}`;
