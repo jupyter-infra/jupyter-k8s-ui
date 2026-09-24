@@ -18,6 +18,17 @@ describe('handleK8sError', () => {
     expect(body.error.toLowerCase()).toContain(expectedText.toLowerCase());
   });
 
+  // 409 is AlreadyExists on a create but Conflict on a stale replace; the Status body's
+  // reason picks the message so a failed Stop does not read as a duplicate.
+  test('maps a 409 with reason Conflict to a concurrent-modification message', async () => {
+    const err = Object.assign(new Error('x'), { statusCode: 409, body: { reason: 'Conflict', message: 'the object has been modified' } });
+    const res = handleK8sError(err, 'fallback');
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string; details: string };
+    expect(body.error).toContain('modified concurrently');
+    expect(body.details).toBe('the object has been modified');
+  });
+
   test('returns 500 with fallback message for unmapped status', async () => {
     const err = Object.assign(new Error('weird'), { statusCode: 999 });
     const res = handleK8sError(err, 'Something broke');

@@ -52,6 +52,11 @@ interface K8sError {
   message?: string;
 }
 
+// The API server answers 409 for two different failures: AlreadyExists on a create, and
+// Conflict on a replace whose resourceVersion is stale. The Status body's `reason` tells
+// them apart; the map above keeps the AlreadyExists wording as the default.
+const K8S_409_MESSAGE_BY_REASON: ReadonlyMap<string, string> = new Map([['Conflict', 'Conflict — the resource was modified concurrently, try again']]);
+
 // The K8s API server returns a metav1.Status body on errors. For validation (422)
 // and admission-webhook rejections, `message` carries the human-readable reason
 // (e.g. "image X not permitted by template gpu-small") and `details.causes[]` the
@@ -102,10 +107,11 @@ export function handleK8sError(error: unknown, fallbackMessage: string): Respons
   const details = formatK8sDetails(statusBody);
   const mapped = err.statusCode ? K8S_STATUS_MAP.get(err.statusCode) : undefined;
   if (mapped) {
+    const byReason = err.statusCode === 409 && statusBody?.reason ? K8S_409_MESSAGE_BY_REASON.get(statusBody.reason) : undefined;
     // Surface the webhook/API-server message as `details` alongside the mapped
     // human-friendly `error`. Existing consumers ignore `details`; the advanced
     // editor renders it.
-    return errorResponse(mapped.status, mapped.message, details);
+    return errorResponse(mapped.status, byReason ?? mapped.message, details);
   }
 
   return errorResponse(500, fallbackMessage, details ?? err.message);
