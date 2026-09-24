@@ -117,6 +117,51 @@ export async function handleCreateWorkspace(jwt: string, namespace: string, req:
   }
 }
 
+// A replace carries the resourceVersion of the object read just before it, and the operator
+// writes status to the same object, so a write landing between the read and the replace fails
+// with 409 Conflict. The update is re-read and re-applied, as client-go's RetryOnConflict does.
+const UPDATE_CONFLICT_RETRIES = 3;
+
+function isConflict(error: unknown): boolean {
+  return (error as { statusCode?: number } | null)?.statusCode === 409;
+}
+
+// Apply an update body to a copy of the live object. A raw-spec body (advanced editor) replaces
+// the whole spec, so a field removed in YAML disappears. A field-shaped body (simple form, start
+// and stop) overlays only the fields it carries. The path is chosen by body shape, not HTTP verb:
+// PUT and PATCH both route here.
+function applyUpdateBody(existing: K8sWorkspace, rawBody: unknown): K8sWorkspace {
+  const updated = JSON.parse(JSON.stringify(existing)) as K8sWorkspace;
+  if (isAdvancedCreateOrEditWorkspaceBody(rawBody)) {
+    // templateRef comes from its own control, not from the YAML buffer.
+    const nextSpec = { ...rawBody.spec } as K8sWorkspace['spec'];
+    if (rawBody.templateRef) nextSpec.templateRef = rawBody.templateRef;
+    updated.spec = nextSpec;
+    return updated;
+  }
+  const body = rawBody as UpdateWorkspaceBody;
+  if (body.displayName !== undefined) updated.spec.displayName = body.displayName;
+  if (body.image !== undefined) updated.spec.image = body.image;
+  if (body.desiredStatus !== undefined) updated.spec.desiredStatus = body.desiredStatus;
+  if (body.accessType !== undefined) updated.spec.accessType = body.accessType;
+  if (body.ownershipType !== undefined) updated.spec.ownershipType = body.ownershipType;
+  if (body.resources !== undefined) updated.spec.resources = body.resources;
+  if (body.storage !== undefined) updated.spec.storage = body.storage;
+  if (body.templateRef !== undefined) updated.spec.templateRef = body.templateRef;
+  if (body.podSecurityContext !== undefined) updated.spec.podSecurityContext = body.podSecurityContext;
+  if (body.accessStrategy !== undefined) updated.spec.accessStrategy = body.accessStrategy;
+  if (body.idleShutdown !== undefined) {
+    // Wholesale replace of the idleShutdown block (correct because the client sends
+    // the COMPLETE object, echoing the workspace's own `detection` verbatim).
+    updated.spec.idleShutdown = {
+      enabled: body.idleShutdown.enabled,
+      idleTimeoutInMinutes: body.idleShutdown.timeoutInMinutes,
+      ...(body.idleShutdown.detection !== undefined && { detection: body.idleShutdown.detection }),
+    };
+  }
+  return updated;
+}
+
 export async function handleUpdateWorkspace(jwt: string, namespace: string, workspaceName: string, req: Request): Promise<Response> {
   let rawBody: unknown;
   try {
@@ -134,56 +179,23 @@ export async function handleUpdateWorkspace(jwt: string, namespace: string, work
 
   try {
     const k8sClient = await reuseOrCreateUserK8sClient(jwt);
-
-    // Always fetch the live object first: we need its fresh metadata +
-    // resourceVersion for the replace, and (for the simple form) its current spec to
-    // overlay onto.
-    const existing = await k8sClient.getNamespacedCustomObject(CRD_GROUP, CRD_VERSION, namespace, WORKSPACE_PLURAL, workspaceName);
-    const updated = JSON.parse(JSON.stringify(existing.body)) as K8sWorkspace;
-
-    if (isAdvancedCreateOrEditWorkspaceBody(rawBody)) {
-      // Full-spec REPLACE: the editor buffer IS the desired spec, so a field the user
-      // removed in YAML must actually disappear. templateRef comes from its own control.
-      const nextSpec = { ...rawBody.spec } as K8sWorkspace['spec'];
-      if (rawBody.templateRef) nextSpec.templateRef = rawBody.templateRef;
-      updated.spec = nextSpec;
-    } else {
-      // Simple form / start-stop: selective field overlay. This code path is chosen by the
-      // BODY SHAPE (field-shaped, no `spec`), not the HTTP verb — both PUT and PATCH route
-      // here (see middleware/router.ts) and behave identically; only the raw-spec body
-      // above takes the full-replace path.
-      const body = rawBody as UpdateWorkspaceBody;
-      if (body.displayName !== undefined) updated.spec.displayName = body.displayName;
-      if (body.image !== undefined) updated.spec.image = body.image;
-      if (body.desiredStatus !== undefined) updated.spec.desiredStatus = body.desiredStatus;
-      if (body.accessType !== undefined) updated.spec.accessType = body.accessType;
-      if (body.ownershipType !== undefined) updated.spec.ownershipType = body.ownershipType;
-      if (body.resources !== undefined) updated.spec.resources = body.resources;
-      if (body.storage !== undefined) updated.spec.storage = body.storage;
-      if (body.templateRef !== undefined) updated.spec.templateRef = body.templateRef;
-      if (body.podSecurityContext !== undefined) updated.spec.podSecurityContext = body.podSecurityContext;
-      if (body.accessStrategy !== undefined) updated.spec.accessStrategy = body.accessStrategy;
-      if (body.idleShutdown !== undefined) {
-        // Wholesale replace of the idleShutdown block (correct because the client sends
-        // the COMPLETE object, echoing the workspace's own `detection` verbatim).
-        updated.spec.idleShutdown = {
-          enabled: body.idleShutdown.enabled,
-          idleTimeoutInMinutes: body.idleShutdown.timeoutInMinutes,
-          ...(body.idleShutdown.detection !== undefined && { detection: body.idleShutdown.detection }),
-        };
+    for (let attempt = 0; ; attempt++) {
+      const existing = await k8sClient.getNamespacedCustomObject(CRD_GROUP, CRD_VERSION, namespace, WORKSPACE_PLURAL, workspaceName);
+      const updated = applyUpdateBody(existing.body as K8sWorkspace, rawBody);
+      try {
+        const response = await k8sClient.replaceNamespacedCustomObject(CRD_GROUP, CRD_VERSION, namespace, WORKSPACE_PLURAL, workspaceName, updated, dryRun);
+        if (dryRun) {
+          log('info', `Validated (dry-run) workspace: ${workspaceName}`);
+          return jsonResponse({ valid: true });
+        }
+        const workspace = workspaceToResponse(response.body as K8sWorkspace);
+        log('info', `Updated workspace: ${workspaceName}`);
+        return jsonResponse(workspace);
+      } catch (error) {
+        if (!isConflict(error) || attempt >= UPDATE_CONFLICT_RETRIES) throw error;
+        log('info', `Conflict updating workspace ${workspaceName}, retrying (${attempt + 1}/${UPDATE_CONFLICT_RETRIES})`);
       }
     }
-
-    const response = await k8sClient.replaceNamespacedCustomObject(CRD_GROUP, CRD_VERSION, namespace, WORKSPACE_PLURAL, workspaceName, updated, dryRun);
-
-    if (dryRun) {
-      log('info', `Validated (dry-run) workspace: ${workspaceName}`);
-      return jsonResponse({ valid: true });
-    }
-
-    const workspace = workspaceToResponse(response.body as K8sWorkspace);
-    log('info', `Updated workspace: ${workspaceName}`);
-    return jsonResponse(workspace);
   } catch (error) {
     return handleK8sError(error, `Failed to update workspace ${workspaceName}`);
   }

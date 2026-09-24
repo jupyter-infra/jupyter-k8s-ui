@@ -58,7 +58,7 @@ interface CreatedObj {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const lastCreated = (): CreatedObj => (mockedK8s.create.mock.calls.at(-1) as any)[4];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const lastReplaced = (): { spec: Record<string, unknown> } => (mockedK8s.replace.mock.calls.at(-1) as any)[5];
+const lastReplaced = (): { metadata: Record<string, unknown>; spec: Record<string, unknown> } => (mockedK8s.replace.mock.calls.at(-1) as any)[5];
 
 beforeEach(() => {
   mockedK8s.list.mockClear();
@@ -239,6 +239,41 @@ describe('handleUpdateWorkspace', () => {
     const res = await handleUpdateWorkspace('jwt', 'test-ns', 'missing', jsonRequest({ displayName: 'x' }, 'PUT'));
     expect(res.status).toBe(404);
     expect(mockedK8s.replace).not.toHaveBeenCalled();
+  });
+
+  // The replace carries the resourceVersion of the read just before it, and the operator's
+  // status writes bump it, so a 409 Conflict is re-read and re-applied rather than surfaced.
+  test('re-reads and retries the replace after a 409 conflict', async () => {
+    const withVersion = (resourceVersion: string) => ({
+      body: { ...buildK8sWorkspace('ws'), metadata: { name: 'ws', namespace: 'test-ns', resourceVersion } },
+    });
+    mockedK8s.get.mockImplementationOnce(async () => withVersion('1')).mockImplementationOnce(async () => withVersion('2'));
+    mockedK8s.replace.mockImplementationOnce(async () => {
+      throw Object.assign(new Error('conflict'), { statusCode: 409, body: { reason: 'Conflict', message: 'the object has been modified' } });
+    });
+
+    const res = await handleUpdateWorkspace('jwt', 'test-ns', 'ws', jsonRequest({ desiredStatus: 'Stopped' }, 'PATCH'));
+
+    expect(res.status).toBe(200);
+    expect(mockedK8s.get).toHaveBeenCalledTimes(2);
+    expect(mockedK8s.replace).toHaveBeenCalledTimes(2);
+    expect(lastReplaced().metadata.resourceVersion).toBe('2');
+    expect(lastReplaced().spec.desiredStatus).toBe('Stopped');
+  });
+
+  test('gives up after repeated conflicts with a 409 that names the conflict, not a duplicate', async () => {
+    const conflict = async () => {
+      throw Object.assign(new Error('conflict'), { statusCode: 409, body: { reason: 'Conflict', message: 'the object has been modified' } });
+    };
+    mockedK8s.replace.mockImplementationOnce(conflict).mockImplementationOnce(conflict).mockImplementationOnce(conflict).mockImplementationOnce(conflict);
+
+    const res = await handleUpdateWorkspace('jwt', 'test-ns', 'ws', jsonRequest({ desiredStatus: 'Stopped' }, 'PATCH'));
+
+    expect(res.status).toBe(409);
+    expect(mockedK8s.replace).toHaveBeenCalledTimes(4);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('modified concurrently');
+    expect(body.error).not.toContain('already exists');
   });
 });
 
