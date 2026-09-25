@@ -407,7 +407,7 @@ describe('buildResourcesBlock — accelerator emission', () => {
   });
 });
 
-describe('allResourceAxesPinned / buildCreateResources — pinned-template create payload (#69)', () => {
+describe('allResourceAxesPinned / buildCreateResources — pinned-template create payload', () => {
   const pinnedSpec: WorkspaceTemplateSpec = {
     resourceBounds: { resources: { cpu: { min: '3', max: '3' }, memory: { min: '12Gi', max: '12Gi' }, 'nvidia.com/gpu': { min: '1', max: '1' } } },
     defaultResources: { requests: { cpu: '3', memory: '12Gi', 'nvidia.com/gpu': '1' }, limits: { cpu: '3', memory: '12Gi', 'nvidia.com/gpu': '1' } },

@@ -452,7 +452,7 @@ describe('accelerator axes in simple create', () => {
       'pinned-gpu',
     );
 
-  test('a fully pinned template submits without spec.resources; templateRef, image, and storage still ride (#69)', async () => {
+  test('a fully pinned template submits without spec.resources and still sends templateRef, image and storage', async () => {
     templatesResponse = { items: [pinnedGpuTemplate()], access: { user: 'ok', shared: 'ok' }, namespaces: { own: 'user-ns', shared: 'shared-ns' } };
     await renderCreate();
     fireEvent.click(await screen.findByRole('button', { name: /select pinned-gpu template/i }));
@@ -468,7 +468,7 @@ describe('accelerator axes in simple create', () => {
     expect(p.image).toBe('jupyter/pytorch:latest');
   });
 
-  test('touching sliders on an editable template then switching to a pinned one still omits resources (#69)', async () => {
+  test('touching sliders on an editable template then switching to a pinned one still omits resources', async () => {
     templatesResponse = {
       items: [gpuTemplate(), pinnedGpuTemplate()],
       access: { user: 'ok', shared: 'ok' },

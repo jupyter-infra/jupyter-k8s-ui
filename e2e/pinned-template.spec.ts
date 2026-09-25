@@ -10,7 +10,7 @@ import { expectOnPath, advertiseNodeCapacity, withdrawNodeCapacity, waitForCardS
 const RUN_ID = `e2e-pinned-${Date.now()}`;
 const WS_NAME = `${RUN_ID}-ws`;
 
-test.describe('Pinned template create (#69)', () => {
+test.describe('Create from a fully pinned template', () => {
   test.describe.configure({ mode: 'serial' });
 
   test.beforeAll(() => advertiseNodeCapacity(KUBECTL, KIND_NODE, { 'nvidia.com/gpu': '4' }));
