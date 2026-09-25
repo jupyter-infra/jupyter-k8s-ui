@@ -117,50 +117,46 @@ export async function handleCreateWorkspace(jwt: string, namespace: string, req:
   }
 }
 
-// A replace carries the resourceVersion of the object read just before it, and the operator
-// writes status to the same object, so a write landing between the read and the replace fails
-// with 409 Conflict. The update is re-read and re-applied, as client-go's RetryOnConflict does.
-const UPDATE_CONFLICT_RETRIES = 3;
-const UPDATE_CONFLICT_BACKOFF_MS = 50;
+type JsonPatchOp = { op: 'add'; path: string; value: unknown };
+const JSON_PATCH_OPTIONS = { headers: { 'Content-Type': 'application/json-patch+json' } };
 
-function isConflict(error: unknown): boolean {
-  return (error as { statusCode?: number } | null)?.statusCode === 409;
-}
-
-// Apply an update body to a copy of the live object. A raw-spec body (advanced editor) replaces
-// the whole spec, so a field removed in YAML disappears. A field-shaped body (simple form, start
-// and stop) overlays only the fields it carries. The path is chosen by body shape, not HTTP verb:
-// PUT and PATCH both route here.
-function applyUpdateBody(existing: K8sWorkspace, rawBody: unknown): K8sWorkspace {
-  const updated = JSON.parse(JSON.stringify(existing)) as K8sWorkspace;
+// Turn an update body into a JSON Patch. `add` on a spec path creates or replaces that field, so a
+// field-shaped body (simple form, start and stop) touches only the fields it carries, and a raw-spec
+// body (advanced editor) replaces the whole spec, so a field removed in YAML disappears. A patch
+// carries no resourceVersion, so the operator's status writes on the same object cannot conflict
+// with it. The path is chosen by body shape, not HTTP verb: PUT and PATCH both route here.
+function buildUpdatePatch(rawBody: unknown): JsonPatchOp[] {
   if (isAdvancedCreateOrEditWorkspaceBody(rawBody)) {
     // templateRef comes from its own control, not from the YAML buffer.
     const nextSpec = { ...rawBody.spec } as K8sWorkspace['spec'];
     if (rawBody.templateRef) nextSpec.templateRef = rawBody.templateRef;
-    updated.spec = nextSpec;
-    return updated;
+    return [{ op: 'add', path: '/spec', value: nextSpec }];
   }
   const body = rawBody as UpdateWorkspaceBody;
-  if (body.displayName !== undefined) updated.spec.displayName = body.displayName;
-  if (body.image !== undefined) updated.spec.image = body.image;
-  if (body.desiredStatus !== undefined) updated.spec.desiredStatus = body.desiredStatus;
-  if (body.accessType !== undefined) updated.spec.accessType = body.accessType;
-  if (body.ownershipType !== undefined) updated.spec.ownershipType = body.ownershipType;
-  if (body.resources !== undefined) updated.spec.resources = body.resources;
-  if (body.storage !== undefined) updated.spec.storage = body.storage;
-  if (body.templateRef !== undefined) updated.spec.templateRef = body.templateRef;
-  if (body.podSecurityContext !== undefined) updated.spec.podSecurityContext = body.podSecurityContext;
-  if (body.accessStrategy !== undefined) updated.spec.accessStrategy = body.accessStrategy;
+  const ops: JsonPatchOp[] = [];
+  const set = (field: string, value: unknown) => {
+    if (value !== undefined) ops.push({ op: 'add', path: `/spec/${field}`, value });
+  };
+  set('displayName', body.displayName);
+  set('image', body.image);
+  set('desiredStatus', body.desiredStatus);
+  set('accessType', body.accessType);
+  set('ownershipType', body.ownershipType);
+  set('resources', body.resources);
+  set('storage', body.storage);
+  set('templateRef', body.templateRef);
+  set('podSecurityContext', body.podSecurityContext);
+  set('accessStrategy', body.accessStrategy);
   if (body.idleShutdown !== undefined) {
     // Wholesale replace of the idleShutdown block: the client sends the complete object,
     // echoing the workspace's own `detection` verbatim.
-    updated.spec.idleShutdown = {
+    set('idleShutdown', {
       enabled: body.idleShutdown.enabled,
       idleTimeoutInMinutes: body.idleShutdown.timeoutInMinutes,
       ...(body.idleShutdown.detection !== undefined && { detection: body.idleShutdown.detection }),
-    };
+    });
   }
-  return updated;
+  return ops;
 }
 
 export async function handleUpdateWorkspace(jwt: string, namespace: string, workspaceName: string, req: Request): Promise<Response> {
@@ -180,25 +176,27 @@ export async function handleUpdateWorkspace(jwt: string, namespace: string, work
 
   try {
     const k8sClient = await reuseOrCreateUserK8sClient(jwt);
-    for (let attempt = 0; ; attempt++) {
-      const existing = await k8sClient.getNamespacedCustomObject(CRD_GROUP, CRD_VERSION, namespace, WORKSPACE_PLURAL, workspaceName);
-      const updated = applyUpdateBody(existing.body as K8sWorkspace, rawBody);
-      try {
-        const response = await k8sClient.replaceNamespacedCustomObject(CRD_GROUP, CRD_VERSION, namespace, WORKSPACE_PLURAL, workspaceName, updated, dryRun);
-        if (dryRun) {
-          log('info', `Validated (dry-run) workspace: ${workspaceName}`);
-          return jsonResponse({ valid: true });
-        }
-        const workspace = workspaceToResponse(response.body as K8sWorkspace);
-        log('info', `Updated workspace: ${workspaceName}`);
-        return jsonResponse(workspace);
-      } catch (error) {
-        if (!isConflict(error) || attempt >= UPDATE_CONFLICT_RETRIES) throw error;
-        log('info', `Conflict updating workspace ${workspaceName}, retrying (${attempt + 1}/${UPDATE_CONFLICT_RETRIES})`);
-        // The operator's status writes come in bursts, so an immediate re-read tends to collide again.
-        await new Promise((resolve) => setTimeout(resolve, UPDATE_CONFLICT_BACKOFF_MS * (attempt + 1) + Math.random() * UPDATE_CONFLICT_BACKOFF_MS));
-      }
+    const response = await k8sClient.patchNamespacedCustomObject(
+      CRD_GROUP,
+      CRD_VERSION,
+      namespace,
+      WORKSPACE_PLURAL,
+      workspaceName,
+      buildUpdatePatch(rawBody),
+      dryRun,
+      undefined,
+      undefined,
+      JSON_PATCH_OPTIONS,
+    );
+
+    if (dryRun) {
+      log('info', `Validated (dry-run) workspace: ${workspaceName}`);
+      return jsonResponse({ valid: true });
     }
+
+    const workspace = workspaceToResponse(response.body as K8sWorkspace);
+    log('info', `Updated workspace: ${workspaceName}`);
+    return jsonResponse(workspace);
   } catch (error) {
     return handleK8sError(error, `Failed to update workspace ${workspaceName}`);
   }

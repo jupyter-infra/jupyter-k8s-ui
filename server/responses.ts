@@ -53,7 +53,7 @@ interface K8sError {
 }
 
 // The API server answers 409 for two different failures: AlreadyExists on a create, and
-// Conflict on a replace whose resourceVersion is stale. The Status body's `reason` tells
+// Conflict on a write that carries a stale resourceVersion. The Status body's `reason` tells
 // them apart; the map above keeps the AlreadyExists wording as the default.
 const K8S_409_MESSAGE_BY_REASON: ReadonlyMap<string, string> = new Map([['Conflict', 'Conflict — the resource was modified concurrently, try again']]);
 
