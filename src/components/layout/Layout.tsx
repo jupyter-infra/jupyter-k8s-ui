@@ -4,6 +4,7 @@ import { Terminal } from '@mui/icons-material';
 import { useAuth } from '../../context';
 import { ThemeSwitcher } from '../ui/ThemeSwitcher';
 import { NamespacedLink } from '../ui/NamespacedLink';
+import { NamespaceGate } from './NamespaceGate';
 import { UserMenu } from './UserMenu';
 import { NamespaceSwitcher } from './NamespaceSwitcher';
 import { strings } from '../../constants';
@@ -56,7 +57,9 @@ export function Layout() {
 
       <Box component="main" sx={{ flex: 1 }}>
         <Container maxWidth="lg" className={styles.container}>
-          <Outlet />
+          <NamespaceGate>
+            <Outlet />
+          </NamespaceGate>
         </Container>
       </Box>
     </Box>
