@@ -1,7 +1,7 @@
 import { describe, test, expect, mock, beforeEach, afterEach } from 'bun:test';
 import { renderHook, act, cleanup, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import React from 'react';
 import { AuthError } from '../api/auth-interceptor';
 
@@ -186,5 +186,30 @@ describe('NamespaceContext bootstrap resilience', () => {
 
     await waitFor(() => expect(result.current.bootstrapError).not.toBeNull());
     expect(attempts).toBe(1);
+  });
+});
+
+describe('NamespaceContext switch navigation', () => {
+  const useProbe = () => {
+    const ns = useNamespace();
+    const { pathname, search } = useLocation();
+    return { ns, location: pathname + search };
+  };
+
+  test('switching on a detail page returns to the list in the new namespace', async () => {
+    // A same-named workspace in the new namespace would be a different object.
+    const { result } = renderHook(useProbe, { wrapper: wrapper(['/workspace/ws-a?namespace=team-a'], 'team-a') });
+    await waitFor(() => expect(result.current.ns.activeNamespace).toBe('team-a'));
+    act(() => result.current.ns.setActiveNamespace('team-b'));
+    await waitFor(() => expect(result.current.location).toBe('/?namespace=team-b'));
+    expect(result.current.ns.activeNamespace).toBe('team-b');
+  });
+
+  test('switching on the list keeps the route and rewrites the namespace param', async () => {
+    const { result } = renderHook(useProbe, { wrapper: wrapper(['/?namespace=team-a'], 'team-a') });
+    await waitFor(() => expect(result.current.ns.activeNamespace).toBe('team-a'));
+    act(() => result.current.ns.setActiveNamespace('team-b'));
+    await waitFor(() => expect(result.current.location).toBe('/?namespace=team-b'));
+    expect(setMyNamespace).toHaveBeenCalledWith('team-b');
   });
 });
