@@ -136,10 +136,10 @@ export function SimpleWorkspaceEditor({ workspace, displayName, onDisplayNameCha
 
   const storedRef = workspace.spec.templateRef;
 
-  // Resolve the workspace's template from the shared cache. Unresolvable
+  // Resolve the workspace's template from the templates query. Unresolvable
   // (RBAC-invisible / deleted) → null template but preserve the ref.
   const resolvedTemplate = useMemo<DiscoveredTemplate | null>(
-    () => findTemplateByRef(templatesQuery.data?.items, storedRef, workspace.metadata.namespace),
+    () => findTemplateByRef(templatesQuery.data?.items, storedRef, workspace.metadata.namespace, templatesQuery.data?.namespaces?.shared),
     [storedRef, templatesQuery.data, workspace.metadata.namespace],
   );
 

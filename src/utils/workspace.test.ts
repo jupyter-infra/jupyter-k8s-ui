@@ -220,11 +220,16 @@ describe('findTemplateByRef', () => {
     expect(findTemplateByRef(items, { name: 'tmpl-a', namespace: 'shared' }, 'user-ns')?.metadata.namespace).toBe('shared');
   });
 
-  test('a ref without a namespace resolves in the workspace namespace', () => {
-    expect(findTemplateByRef(items, { name: 'tmpl-a' }, 'user-ns')?.metadata.namespace).toBe('user-ns');
+  test('a ref without a namespace resolves in the workspace namespace first', () => {
+    expect(findTemplateByRef(items, { name: 'tmpl-a' }, 'user-ns', 'shared')?.metadata.namespace).toBe('user-ns');
   });
 
-  test('a ref without a namespace does not match a same-named template elsewhere', () => {
+  test('a ref without a namespace falls back to the shared template namespace', () => {
+    expect(findTemplateByRef(items, { name: 'tmpl-b' }, 'user-ns', 'shared')?.metadata.namespace).toBe('shared');
+  });
+
+  test('a ref without a namespace does not match a same-named template in any other namespace', () => {
+    expect(findTemplateByRef(items, { name: 'tmpl-b' }, 'user-ns', 'other')).toBeNull();
     expect(findTemplateByRef(items, { name: 'tmpl-b' }, 'user-ns')).toBeNull();
   });
 
