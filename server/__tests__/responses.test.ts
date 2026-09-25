@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { handleK8sError } from '../responses';
+import { get409ErrorMessage, handleK8sError } from '../responses';
 
 describe('handleK8sError', () => {
   // Each mapped status code is a contract with the frontend — if the map changes,
@@ -18,8 +18,6 @@ describe('handleK8sError', () => {
     expect(body.error.toLowerCase()).toContain(expectedText.toLowerCase());
   });
 
-  // 409 is AlreadyExists on a create but Conflict on a stale replace; the Status body's
-  // reason picks the message so a failed Stop does not read as a duplicate.
   test('maps a 409 with reason Conflict to a concurrent-modification message', async () => {
     const err = Object.assign(new Error('x'), { statusCode: 409, body: { reason: 'Conflict', message: 'the object has been modified' } });
     const res = handleK8sError(err, 'fallback');
@@ -77,5 +75,15 @@ describe('handleK8sError', () => {
     const res = handleK8sError(err, 'fallback');
     const body = (await res.json()) as { details: string };
     expect(body.details).toContain('bad thing happened');
+  });
+});
+
+describe('get409ErrorMessage', () => {
+  test('reason Conflict reads as a concurrent modification', () => {
+    expect(get409ErrorMessage('Conflict')).toBe('Conflict — the resource was modified concurrently, try again');
+  });
+
+  test('reason AlreadyExists reads as an existing resource', () => {
+    expect(get409ErrorMessage('AlreadyExists')).toBe('Resource already exists');
   });
 });

@@ -43,7 +43,6 @@ const K8S_STATUS_MAP: ReadonlyMap<number, { status: number; message: string }> =
   [401, { status: 401, message: 'Unauthorized — invalid or expired token' }],
   [403, { status: 403, message: 'Forbidden — insufficient permissions' }],
   [404, { status: 404, message: 'Resource not found' }],
-  [409, { status: 409, message: 'Resource already exists' }],
   [422, { status: 422, message: 'Unprocessable entity — validation failed' }],
 ]);
 
@@ -52,10 +51,11 @@ interface K8sError {
   message?: string;
 }
 
-// The API server answers 409 for two different failures: AlreadyExists on a create, and
-// Conflict on a write that carries a stale resourceVersion. The Status body's `reason` tells
-// them apart; the map above keeps the AlreadyExists wording as the default.
-const K8S_409_MESSAGE_BY_REASON: ReadonlyMap<string, string> = new Map([['Conflict', 'Conflict — the resource was modified concurrently, try again']]);
+// The API server answers 409 for AlreadyExists on a create and for Conflict on a write whose
+// resourceVersion is stale. The Status body's `reason` tells them apart.
+export function get409ErrorMessage(reason: string | undefined): string {
+  return reason === 'Conflict' ? 'Conflict — the resource was modified concurrently, try again' : 'Resource already exists';
+}
 
 // The K8s API server returns a metav1.Status body on errors. For validation (422)
 // and admission-webhook rejections, `message` carries the human-readable reason
@@ -105,13 +105,13 @@ export function handleK8sError(error: unknown, fallbackMessage: string): Respons
   log('error', fallbackMessage, err.message || error, ...(statusBody ? [JSON.stringify(statusBody)] : []));
 
   const details = formatK8sDetails(statusBody);
+  if (err.statusCode === 409) return errorResponse(409, get409ErrorMessage(statusBody?.reason), details);
   const mapped = err.statusCode ? K8S_STATUS_MAP.get(err.statusCode) : undefined;
   if (mapped) {
-    const byReason = err.statusCode === 409 && statusBody?.reason ? K8S_409_MESSAGE_BY_REASON.get(statusBody.reason) : undefined;
     // Surface the webhook/API-server message as `details` alongside the mapped
     // human-friendly `error`. Existing consumers ignore `details`; the advanced
     // editor renders it.
-    return errorResponse(mapped.status, byReason ?? mapped.message, details);
+    return errorResponse(mapped.status, mapped.message, details);
   }
 
   return errorResponse(500, fallbackMessage, details ?? err.message);
