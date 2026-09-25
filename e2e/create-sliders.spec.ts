@@ -1,6 +1,5 @@
-import { execSync } from 'node:child_process';
 import { test, expect } from '@playwright/test';
-import { expectOnPath, waitForCardStatus, waitForCardGone } from './test-utils';
+import { expectOnPath, waitForCardStatus, waitForCardGone, kubectlGet } from './test-utils';
 
 // The create form's sliders set the limits a workspace is created with. Against the e2e
 // default template (cpu 100m to 2, memory 128Mi to 2Gi, storage 1Gi to 10Gi, requests declared)
@@ -9,12 +8,6 @@ import { expectOnPath, waitForCardStatus, waitForCardGone } from './test-utils';
 
 const RUN_ID = `e2e-sliders-${Date.now()}`;
 const WS_NAME = `${RUN_ID}-ws`;
-const CLUSTER = process.env.E2E_KIND_CLUSTER || 'jupyter-k8s-dev';
-const KUBECTL = `kubectl --context kind-${CLUSTER}`;
-
-function kubectlGet(resource: string, jsonpath: string): string {
-  return execSync(`${KUBECTL} get ${resource} -o jsonpath='${jsonpath}'`, { stdio: 'pipe' }).toString();
-}
 
 test.describe('Create form sliders', () => {
   test.describe.configure({ mode: 'serial' });

@@ -1,6 +1,16 @@
 import { execSync } from 'node:child_process';
 import { expect, type Locator, type Page } from '@playwright/test';
 
+// The e2e Kind cluster, addressed through its kubectl context, so a spec can never target
+// another context by accident.
+export const KIND_CLUSTER = process.env.E2E_KIND_CLUSTER || 'jupyter-k8s-dev';
+export const KIND_NODE = `${KIND_CLUSTER}-control-plane`;
+export const KUBECTL = `kubectl --context kind-${KIND_CLUSTER}`;
+
+export function kubectlGet(resource: string, jsonpath: string): string {
+  return execSync(`${KUBECTL} get ${resource} -o jsonpath='${jsonpath}'`, { stdio: 'pipe' }).toString();
+}
+
 // Advertise fake extended-resource capacity on a Kind node by patching node status (the
 // documented mechanism, no device plugin needed:
 // https://kubernetes.io/docs/tasks/administer-cluster/extended-resource-node/).

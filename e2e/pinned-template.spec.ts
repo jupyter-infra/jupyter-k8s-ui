@@ -1,6 +1,5 @@
-import { execSync } from 'node:child_process';
 import { test, expect } from '@playwright/test';
-import { expectOnPath, advertiseNodeCapacity, withdrawNodeCapacity, waitForCardStatus, waitForCardGone } from './test-utils';
+import { expectOnPath, advertiseNodeCapacity, withdrawNodeCapacity, waitForCardStatus, waitForCardGone, KUBECTL, KIND_NODE, kubectlGet } from './test-utils';
 
 // The #69 contract end to end, against the pinned-gpu-template fixture (every resource
 // axis min == max): the create form serializes no spec.resources, the operator's
@@ -11,15 +10,11 @@ import { expectOnPath, advertiseNodeCapacity, withdrawNodeCapacity, waitForCardS
 const RUN_ID = `e2e-pinned-${Date.now()}`;
 const WS_NAME = `${RUN_ID}-ws`;
 
-const CLUSTER = process.env.E2E_KIND_CLUSTER || 'jupyter-k8s-dev';
-const NODE = `${CLUSTER}-control-plane`;
-const KUBECTL = `kubectl --context kind-${CLUSTER}`;
-
 test.describe('Pinned template create (#69)', () => {
   test.describe.configure({ mode: 'serial' });
 
-  test.beforeAll(() => advertiseNodeCapacity(KUBECTL, NODE, { 'nvidia.com/gpu': '4' }));
-  test.afterAll(() => withdrawNodeCapacity(KUBECTL, NODE, ['nvidia.com/gpu']));
+  test.beforeAll(() => advertiseNodeCapacity(KUBECTL, KIND_NODE, { 'nvidia.com/gpu': '4' }));
+  test.afterAll(() => withdrawNodeCapacity(KUBECTL, KIND_NODE, ['nvidia.com/gpu']));
 
   test('create renders disabled sliders and stores the webhook-stamped defaults', async ({ page }) => {
     await page.goto('/create');
@@ -47,12 +42,12 @@ test.describe('Pinned template create (#69)', () => {
     // never produce: it emits cpu as "0.5" (never "500m") and puts accelerators in
     // limits only (never requests). Both prove spec.resources was omitted on create and
     // stamped by the operator's admission.
-    const stored = JSON.parse(execSync(`${KUBECTL} get workspace ${WS_NAME} -o jsonpath='{.spec.resources}'`, { stdio: 'pipe' }).toString());
+    const stored = JSON.parse(kubectlGet(`workspace ${WS_NAME}`, '{.spec.resources}'));
     expect(stored.limits.cpu).toBe('500m');
     expect(stored.requests['nvidia.com/gpu']).toBe('1');
     expect(stored.limits['nvidia.com/gpu']).toBe('1');
     // Storage still rides on the same submit (spec.storage, not spec.resources).
-    const size = execSync(`${KUBECTL} get workspace ${WS_NAME} -o jsonpath='{.spec.storage.size}'`, { stdio: 'pipe' }).toString();
+    const size = kubectlGet(`workspace ${WS_NAME}`, '{.spec.storage.size}');
     expect(size).toBe('5Gi');
   });
 
@@ -67,11 +62,7 @@ test.describe('Pinned template create (#69)', () => {
     await expect(card.getByText('1 GPU')).toBeVisible();
 
     // The stamped GPU limit flows through to the workspace deployment's pod template.
-    const limits = JSON.parse(
-      execSync(`${KUBECTL} get deployment workspace-${WS_NAME} -o jsonpath='{.spec.template.spec.containers[0].resources.limits}'`, {
-        stdio: 'pipe',
-      }).toString(),
-    );
+    const limits = JSON.parse(kubectlGet(`deployment workspace-${WS_NAME}`, '{.spec.template.spec.containers[0].resources.limits}'));
     expect(limits['nvidia.com/gpu']).toBe('1');
   });
 

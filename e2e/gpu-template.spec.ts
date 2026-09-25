@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process';
 import { test, expect } from '@playwright/test';
-import { expectOnPath, advertiseNodeCapacity, withdrawNodeCapacity, waitForCardStatus, waitForCardGone } from './test-utils';
+import { expectOnPath, advertiseNodeCapacity, withdrawNodeCapacity, waitForCardStatus, waitForCardGone, KUBECTL, KIND_NODE, kubectlGet } from './test-utils';
 
 // Accelerator axes end to end, against the real cluster with the gpu-template fixture
 // (e2e/fixtures/gpu-template.yaml: nvidia.com/gpu 0–2 default 1, plus a MIG profile key
@@ -18,15 +18,11 @@ import { expectOnPath, advertiseNodeCapacity, withdrawNodeCapacity, waitForCardS
 const RUN_ID = `e2e-gpu-${Date.now()}`;
 const WS_NAME = `${RUN_ID}-ws`;
 
-const CLUSTER = process.env.E2E_KIND_CLUSTER || 'jupyter-k8s-dev';
-const NODE = `${CLUSTER}-control-plane`;
-const KUBECTL = `kubectl --context kind-${CLUSTER}`;
-
 test.describe('Accelerator axes (gpu-template)', () => {
   test.describe.configure({ mode: 'serial' });
 
-  test.beforeAll(() => advertiseNodeCapacity(KUBECTL, NODE, { 'nvidia.com/gpu': '4', 'nvidia.com/mig-1g.5gb': '4' }));
-  test.afterAll(() => withdrawNodeCapacity(KUBECTL, NODE, ['nvidia.com/gpu', 'nvidia.com/mig-1g.5gb']));
+  test.beforeAll(() => advertiseNodeCapacity(KUBECTL, KIND_NODE, { 'nvidia.com/gpu': '4', 'nvidia.com/mig-1g.5gb': '4' }));
+  test.afterAll(() => withdrawNodeCapacity(KUBECTL, KIND_NODE, ['nvidia.com/gpu', 'nvidia.com/mig-1g.5gb']));
 
   test('template-gated axes render and create emits the default GPU limit', async ({ page }) => {
     await page.goto('/create');
@@ -121,7 +117,7 @@ test.describe('Accelerator axes (gpu-template)', () => {
 
     // The form save rebuilds only the resource keys it models; a stored limit it does
     // not model must pass through the same save verbatim.
-    const limits = JSON.parse(execSync(`${KUBECTL} get workspace ${WS_NAME} -o jsonpath='{.spec.resources.limits}'`, { stdio: 'pipe' }).toString());
+    const limits = JSON.parse(kubectlGet(`workspace ${WS_NAME}`, '{.spec.resources.limits}'));
     expect(limits['nvidia.com/gpu']).toBeUndefined();
     expect(limits['ephemeral-storage']).toBe('1073741824');
   });
