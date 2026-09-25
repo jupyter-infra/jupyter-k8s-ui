@@ -441,7 +441,7 @@ describe('allResourceAxesPinned / buildCreateResources — pinned-template creat
     // so omission here would store a workspace with no limits at all.
     const controls = resolveTemplateControls(tmpl({ resourceBounds: { resources: { cpu: { min: '1', max: '1' }, memory: { min: '2Gi', max: '2Gi' } } } }));
     expect(allResourceAxesPinned(controls)).toBe(true);
-    expect(controls.defaultsCoverPinnedAxes).toBe(false);
+    expect(controls.defaultsMatchPinnedAxes).toBe(false);
     expect(buildCreateResources(controls, 1, 2)).toBeDefined();
   });
 
@@ -452,8 +452,21 @@ describe('allResourceAxesPinned / buildCreateResources — pinned-template creat
         defaultResources: { requests: { cpu: '1', memory: '2Gi' }, limits: { cpu: '1', memory: '2Gi' } },
       }),
     );
-    expect(controls.defaultsCoverPinnedAxes).toBe(false);
+    expect(controls.defaultsMatchPinnedAxes).toBe(false);
     expect(buildCreateResources(controls, 1, 2, { 'nvidia.com/gpu': 1 })).toBeDefined();
+  });
+
+  test('default limits that differ from the pinned bound send the block', () => {
+    // The webhook would stamp cpu 2 and then reject it against the 3/3 bound.
+    const controls = resolveTemplateControls(
+      tmpl({
+        resourceBounds: { resources: { cpu: { min: '3', max: '3' }, memory: { min: '12Gi', max: '12Gi' } } },
+        defaultResources: { requests: { cpu: '2', memory: '12Gi' }, limits: { cpu: '2', memory: '12Gi' } },
+      }),
+    );
+    expect(allResourceAxesPinned(controls)).toBe(true);
+    expect(controls.defaultsMatchPinnedAxes).toBe(false);
+    expect(buildCreateResources(controls, 3, 12)).toBeDefined();
   });
 
   test('one editable axis yields the complete block, pinned values included', () => {

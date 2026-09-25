@@ -70,9 +70,9 @@ export interface ResolvedTemplateControls {
   // template — accelerators are strictly template-gated, the advanced editor is the
   // escape hatch). Sorted by key for a stable render order.
   accelerators: AcceleratorControl[];
-  // True when defaultResources.limits cover cpu, memory and every accelerator axis pinned
-  // above zero. The create form omits spec.resources only then (#69).
-  defaultsCoverPinnedAxes: boolean;
+  // True when defaultResources.limits equal the pinned bound on cpu, memory and every
+  // accelerator axis. The create form omits spec.resources only then (#69).
+  defaultsMatchPinnedAxes: boolean;
   image: ImageControl;
   idle: IdleControls;
   accessType: AccessType; // seed for the Public/Private toggle
@@ -196,13 +196,16 @@ export function resolveTemplateControls(template: WorkspaceTemplate | null, pres
   });
 
   // The operator's admission webhook writes defaultResources into a workspace that has no
-  // resources block, but only the defaults the template declares, and its bounds check skips
-  // keys the workspace does not set. Omitting the block against a template without them would
-  // store a workspace with no limits at all (#69).
+  // resources block and then validates them against the bounds; template admission does not
+  // check the defaults against the bounds. So the form omits the block only when the stamped
+  // defaults would equal what it would have sent: default limits present and equal to the pinned
+  // bound on every axis, an absent accelerator default counting as zero (#69).
   const accelerators = buildAcceleratorControls(spec);
   const defaultLimits = spec.defaultResources?.limits;
-  const defaultsCoverPinnedAxes =
-    defaultLimits?.cpu !== undefined && defaultLimits?.memory !== undefined && accelerators.every((a) => a.axis.min <= 0 || defaultLimits[a.key] !== undefined);
+  const defaultsMatchPinnedAxes =
+    parseCpuCores(defaultLimits?.cpu, NaN) === cpu.max &&
+    parseMemoryGi(defaultLimits?.memory, NaN) === memory.max &&
+    accelerators.every((a) => parseResourceValue(defaultLimits?.[a.key], 0) === a.axis.max);
 
   return {
     hasTemplate: true,
@@ -210,7 +213,7 @@ export function resolveTemplateControls(template: WorkspaceTemplate | null, pres
     memory,
     storage,
     accelerators,
-    defaultsCoverPinnedAxes,
+    defaultsMatchPinnedAxes,
     image: resolveImage(template),
     idle: resolveIdle(template),
     accessType: normalizeAccess(spec.defaultAccessType) ?? 'Public',
@@ -231,7 +234,7 @@ function noTemplateControls(preservedRef?: { name: string; namespace?: string })
     memory: axis(resourceBounds.memory, STATIC_DEFAULTS.memory),
     storage: axis(resourceBounds.storage, STATIC_DEFAULTS.storage),
     accelerators: [],
-    defaultsCoverPinnedAxes: false,
+    defaultsMatchPinnedAxes: false,
     image: { mode: 'free', value: '', options: [] },
     idle: { available: false },
     accessType: 'Public',
@@ -423,8 +426,8 @@ export function allResourceAxesPinned(controls: ResolvedTemplateControls): boole
   );
 }
 
-// The resources block for a create (#69). When the template pins every axis and declares
-// default limits for all of them, send no block: the operator's admission webhook then writes
+// The resources block for a create (#69). When the template pins every axis and its default
+// limits equal the pinned values, send no block: the operator's admission webhook then writes
 // the complete template defaults, including keys the form never renders such as accelerator
 // requests. Defaulting applies only to an absent block, `{}` gets nothing and a partial block
 // is stored as is, so any editable axis means sending the complete block, pinned values included.
@@ -434,6 +437,6 @@ export function buildCreateResources(
   memoryLimitGi: number,
   acceleratorCounts: Record<string, number> = {},
 ): ReturnType<typeof buildResourcesBlock> | undefined {
-  if (allResourceAxesPinned(controls) && controls.defaultsCoverPinnedAxes) return undefined;
+  if (allResourceAxesPinned(controls) && controls.defaultsMatchPinnedAxes) return undefined;
   return buildResourcesBlock(controls, cpuLimitCores, memoryLimitGi, acceleratorCounts);
 }
