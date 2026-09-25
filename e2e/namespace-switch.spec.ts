@@ -101,6 +101,15 @@ test.describe('Namespace selection', () => {
     execFileSync('kubectl', ['--context', CONTEXT, 'delete', '-f', SHARED_TEMPLATE_FIXTURE, '--ignore-not-found'], { stdio: 'pipe' });
   });
 
+  // Restores e2e-team-b access right after the revoke test, since the cleanup test needs it.
+  let teamBRevoked = false;
+  test.afterEach(async () => {
+    if (!teamBRevoked) return;
+    teamBRevoked = false;
+    execFileSync('kubectl', ['--context', CONTEXT, 'apply', '-f', SECOND_NAMESPACE_FIXTURE], { stdio: 'pipe' });
+    await waitForTeamBAccess(true);
+  });
+
   test('switcher lists both accessible namespaces', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /select namespace/i }).click();
@@ -226,14 +235,10 @@ test.describe('Namespace selection', () => {
     await expectActiveNamespace(page, 'e2e-team-b');
 
     execFileSync('kubectl', ['--context', CONTEXT, 'delete', 'rolebinding', 'e2e-test-binding', '-n', 'e2e-team-b'], { stdio: 'pipe' });
-    try {
-      await waitForTeamBAccess(false);
-      await page.goto('/?namespace=e2e-team-b');
-      await expectActiveNamespace(page, 'default', { checkUrl: true });
-    } finally {
-      execFileSync('kubectl', ['--context', CONTEXT, 'apply', '-f', SECOND_NAMESPACE_FIXTURE], { stdio: 'pipe' });
-      await waitForTeamBAccess(true);
-    }
+    teamBRevoked = true;
+    await waitForTeamBAccess(false);
+    await page.goto('/?namespace=e2e-team-b');
+    await expectActiveNamespace(page, 'default', { checkUrl: true });
   });
 
   test('cleanup: delete the test workspaces', async ({ page }) => {
