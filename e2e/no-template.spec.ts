@@ -89,7 +89,7 @@ test.describe('No-template create', () => {
 
     // No template → no idle-shutdown source (the form can't infer detection), so the idle
     // toggle is not rendered at all.
-    await expect(page.getByRole('checkbox', { name: /enable automatic shutdown when idle/i })).toHaveCount(0);
+    await expect(page.getByRole('switch', { name: /enable automatic shutdown when idle/i })).toHaveCount(0);
 
     // No template + empty image is unstartable → the Create button is disabled until an
     // image is typed (the edge Gaurav caught: no templateRef AND no image = can't start).

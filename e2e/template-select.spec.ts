@@ -168,7 +168,7 @@ test.describe('Template selection', () => {
 
     // The idle on/off toggle is present but DISABLED — the user can't turn idle shutdown off.
     // Idle is enabled by default on this template, so the switch is checked-but-frozen.
-    const idleToggle = page.getByRole('checkbox', { name: /enable automatic shutdown when idle/i });
+    const idleToggle = page.getByRole('switch', { name: /enable automatic shutdown when idle/i });
     await expect(idleToggle).toBeVisible();
     await expect(idleToggle).toBeDisabled();
     await expect(idleToggle).toBeChecked();
@@ -198,7 +198,7 @@ test.describe('Template selection', () => {
     await page.getByRole('button', { name: /select Alt Template template/i }).click();
 
     // Idle is enabled-by-default here; flip it off (the toggle is interactive, not frozen).
-    const createToggle = page.getByRole('checkbox', { name: /enable automatic shutdown when idle/i });
+    const createToggle = page.getByRole('switch', { name: /enable automatic shutdown when idle/i });
     await expect(createToggle).toBeChecked();
     await expect(createToggle).toBeEnabled();
     await createToggle.uncheck();
@@ -225,7 +225,7 @@ test.describe('Template selection', () => {
 
     // The idle controls are visible (template is idle-capable) and the toggle is currently
     // off; turn it on and save.
-    const editToggle = page.getByRole('checkbox', { name: /enable automatic shutdown when idle/i });
+    const editToggle = page.getByRole('switch', { name: /enable automatic shutdown when idle/i });
     await expect(editToggle).toBeVisible();
     await expect(editToggle).not.toBeChecked();
     await editToggle.check();

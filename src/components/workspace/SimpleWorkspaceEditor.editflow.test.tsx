@@ -253,7 +253,7 @@ describe('SimpleWorkspaceEditor', () => {
     await renderEditor(baseWorkspace({ templateRef: { name: 'eks-oidc', namespace: 'shared-ns' } }));
     await screen.findByText(/^resources$/i);
     // The toggle is visible and seeded OFF.
-    const toggle = screen.getByRole('checkbox', { name: /idle/i });
+    const toggle = screen.getByRole('switch', { name: /idle/i });
     expect((toggle as HTMLInputElement).checked).toBe(false);
     // Turn idle on and save.
     fireEvent.click(toggle);
@@ -315,7 +315,7 @@ describe('SimpleWorkspaceEditor', () => {
     expect(screen.getByText(strings.workspace.editConformIdleEnabled)).toBeTruthy();
     // The frozen toggle is disabled + checked, with a lock icon whose tooltip carries the
     // locked-idle copy (asserted via strings, not a hardcoded literal).
-    const idleToggle = screen.getByRole('checkbox', { name: strings.workspace.idleShutdownEnable });
+    const idleToggle = screen.getByRole('switch', { name: strings.workspace.idleShutdownEnable });
     expect((idleToggle as HTMLInputElement).disabled).toBe(true);
     expect((idleToggle as HTMLInputElement).checked).toBe(true);
     const lockIcon = screen.getByTestId('idle-locked-icon');

@@ -42,7 +42,7 @@ test.describe('Template-aware simple create + edit', () => {
 
     // The `default` template has NO defaultIdleShutdown → the simple form can't author idle
     // (no detection to echo), so the idle toggle is not rendered at all.
-    await expect(page.getByRole('checkbox', { name: /enable automatic shutdown when idle/i })).toHaveCount(0);
+    await expect(page.getByRole('switch', { name: /enable automatic shutdown when idle/i })).toHaveCount(0);
 
     // Submit — the operator resolves the (auto-used) default template and admits.
     await page.getByRole('button', { name: /create workspace/i }).click();

@@ -75,7 +75,7 @@ test.describe('Idle-override drift on edit', () => {
 
     // Idle is disabled by default on this template and overrides are allowed → the toggle is
     // interactive and off. Leave it off.
-    const toggle = page.getByRole('checkbox', { name: /enable automatic shutdown when idle/i });
+    const toggle = page.getByRole('switch', { name: /enable automatic shutdown when idle/i });
     await expect(toggle).not.toBeChecked();
     await expect(toggle).toBeEnabled();
 
@@ -108,7 +108,7 @@ test.describe('Idle-override drift on edit', () => {
     // Match a stable fragment of the conform copy (idleShutdownEnable banner) rather than
     // the full sentence, so wording tweaks don't break the assertion.
     await expect(page.getByText(/idle shutdown was enabled/i)).toBeVisible();
-    const toggle = page.getByRole('checkbox', { name: /enable automatic shutdown when idle/i });
+    const toggle = page.getByRole('switch', { name: /enable automatic shutdown when idle/i });
     await expect(toggle).toBeChecked();
     await expect(toggle).toBeDisabled();
 

@@ -306,7 +306,7 @@ describe('template-aware simple create', () => {
     await renderCreate();
     fireEvent.click(await screen.findByRole('button', { name: /select idle-tmpl template/i }));
     // Toggle idle off (default is enabled for this template).
-    fireEvent.click(await screen.findByRole('checkbox', { name: /idle/i }));
+    fireEvent.click(await screen.findByRole('switch', { name: /idle/i }));
     submit();
 
     await waitFor(() => expect(createSimpleSpy).toHaveBeenCalledTimes(1));
