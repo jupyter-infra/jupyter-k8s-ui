@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { expectOnPath } from './test-utils';
+import { expectOnPath, waitForCardStatusByName } from './test-utils';
 import { execFileSync } from 'node:child_process';
 
 // Idle-override DRIFT on edit: a template can flip from permissive (idle optional) to
@@ -25,22 +25,6 @@ function patchIdlePolicy(allow: boolean, defaultEnabled: boolean) {
   execFileSync('kubectl', ['--context', CONTEXT, 'patch', 'workspacetemplate', TEMPLATE, '-n', 'default', '--type', 'merge', '-p', JSON.stringify(patch)], {
     stdio: 'pipe',
   });
-}
-
-async function waitForCardStatus(page: Page, name: string, statusText: string) {
-  const card = page.getByLabel(new RegExp(`${name}.*workspace`, 'i'));
-  await expect
-    .poll(
-      async () => {
-        await page.getByRole('button', { name: /refresh/i }).click();
-        return card
-          .getByText(statusText, { exact: true })
-          .isVisible()
-          .catch(() => false);
-      },
-      { timeout: 30_000, intervals: [2_000] },
-    )
-    .toBeTruthy();
 }
 
 async function deleteWorkspace(page: Page, name: string) {
@@ -82,7 +66,7 @@ test.describe('Idle-override drift on edit', () => {
     await page.getByRole('button', { name: /create workspace/i }).click();
     await expectOnPath(page);
     await page.getByRole('button', { name: /all/i }).click();
-    await waitForCardStatus(page, WS_NAME, 'Running');
+    await waitForCardStatusByName(page, WS_NAME, 'Running');
 
     // Confirm the stored state is idle-off.
     await page.goto(`/workspace/${WS_NAME}`);

@@ -1,5 +1,5 @@
 import { test, expect, request as playwrightRequest, type Page } from '@playwright/test';
-import { expectOnPath } from './test-utils';
+import { expectOnPath, waitForCardStatusByName } from './test-utils';
 
 // Unique prefix per run to avoid collisions with other specs / prior runs.
 const RUN_ID = `e2e-adv-${Date.now()}`;
@@ -70,26 +70,6 @@ async function waitForEditor(page: Page) {
 }
 
 /** Click Refresh on the list until the named card shows the expected status. */
-async function waitForCardStatus(page: Page, name: string, statusText: string) {
-  const card = page.getByLabel(new RegExp(`${name}.*workspace`, 'i'));
-  // Match the status badge EXACTLY: getByText's default substring match would also
-  // hit the card's description line (the resource name ends in "-stopped"), and the
-  // resulting strict-mode violation would be swallowed by the catch below — so the
-  // poll would never go truthy for a Stopped workspace.
-  await expect
-    .poll(
-      async () => {
-        await page.getByRole('button', { name: /refresh/i }).click();
-        return card
-          .getByText(statusText, { exact: true })
-          .isVisible()
-          .catch(() => false);
-      },
-      { timeout: 30_000, intervals: [2_000] },
-    )
-    .toBeTruthy();
-}
-
 /**
  * Open the advanced create editor. There is no `/create-advanced` route anymore — the
  * YAML editor is an inline toggle on the `/create` page (the simple form and the editor
@@ -157,7 +137,7 @@ test.describe('Advanced YAML editor', () => {
 
     await page.getByRole('button', { name: /all/i }).click();
     await expect(page.getByLabel(new RegExp(`${name}.*workspace`, 'i'))).toBeVisible({ timeout: 10_000 });
-    await waitForCardStatus(page, name, 'Running');
+    await waitForCardStatusByName(page, name, 'Running');
   });
 
   test('editing a Running workspace is blocked (direct URL does not restart it)', async ({ page }) => {
@@ -180,7 +160,7 @@ test.describe('Advanced YAML editor', () => {
     const card = page.getByLabel(new RegExp(`${name}.*workspace`, 'i'));
     await expect(card).toBeVisible({ timeout: 10_000 });
     await card.getByRole('button', { name: /stop/i }).click();
-    await waitForCardStatus(page, name, 'Stopped');
+    await waitForCardStatusByName(page, name, 'Stopped');
   });
 
   test('edit route pre-populates the fields and freezes the name', async ({ page }) => {
@@ -458,7 +438,7 @@ test.describe('Advanced editor — entry points', () => {
     await createBtn.click();
     await expectOnPath(page);
     await page.getByRole('button', { name: /all/i }).click();
-    await waitForCardStatus(page, STOPPED_WS, 'Stopped');
+    await waitForCardStatusByName(page, STOPPED_WS, 'Stopped');
     await page.close();
   });
 

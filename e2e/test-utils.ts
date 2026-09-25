@@ -67,9 +67,17 @@ export async function expectOnPath(page: Page, opts: { path?: string; namespace?
   }
 }
 
+/** The workspace card for `name`; the card's aria-label carries the name. */
+export function cardByName(page: Page, name: string): Locator {
+  return page.getByLabel(new RegExp(`${name}.*workspace`, 'i'));
+}
+
 /**
  * Click Refresh until the card shows `text`. The list only auto-polls every 60s and the
  * operator reconciles in seconds, so the refresh mirrors what a user waiting on a card does.
+ * The status is matched exactly: a substring match would also hit the card's description when
+ * the resource name ends in the status word, and the strict-mode error that raises is swallowed
+ * by the catch below, so the poll would never go truthy.
  */
 export async function waitForCardStatus(page: Page, card: Locator, text: string) {
   await expect
@@ -100,4 +108,8 @@ export async function waitForCardGone(page: Page, card: Locator) {
       { timeout: 30_000, intervals: [2_000] },
     )
     .toBeFalsy();
+}
+
+export async function waitForCardStatusByName(page: Page, name: string, text: string) {
+  await waitForCardStatus(page, cardByName(page, name), text);
 }
