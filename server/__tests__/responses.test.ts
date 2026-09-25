@@ -8,7 +8,6 @@ describe('handleK8sError', () => {
     [401, 'Unauthorized'],
     [403, 'Forbidden'],
     [404, 'not found'],
-    [409, 'already exists'],
     [422, 'Unprocessable'],
   ])('maps K8s %d to matching message', async (statusCode, expectedText) => {
     const err = Object.assign(new Error('x'), { statusCode });
@@ -85,5 +84,9 @@ describe('get409ErrorMessage', () => {
 
   test('reason AlreadyExists reads as an existing resource', () => {
     expect(get409ErrorMessage('AlreadyExists')).toBe('Resource already exists');
+  });
+
+  test('a missing reason reads as an existing resource', () => {
+    expect(get409ErrorMessage(undefined)).toBe('Resource already exists');
   });
 });
