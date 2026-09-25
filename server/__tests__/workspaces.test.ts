@@ -59,7 +59,7 @@ interface CreatedObj {
 // two helpers — call sites get full type safety via the return types.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const lastCreated = (): CreatedObj => (mockedK8s.create.mock.calls.at(-1) as any)[4];
- 
+
 type PatchOp = { op: string; path: string; value?: unknown };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const lastPatch = (): PatchOp[] => (mockedK8s.patch.mock.calls.at(-1) as any)[5];
