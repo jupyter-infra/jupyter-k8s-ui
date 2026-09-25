@@ -292,7 +292,7 @@ describe('advanced create (raw spec)', () => {
     expect(obj.spec).not.toHaveProperty('ownershipType');
   });
 
-  test('merges the hoisted templateRef into the spec', async () => {
+  test('merges the top-level templateRef into the spec', async () => {
     await handleCreateWorkspace('jwt', 'test-ns', advancedRequest({ name: 'adv-ws', templateRef: { name: 'gpu-small' }, spec: { displayName: 'Adv' } }));
     const obj = lastCreated();
     expect(obj.spec.templateRef).toEqual({ name: 'gpu-small' });
@@ -333,7 +333,7 @@ describe('advanced update replaces the whole spec', () => {
     expect(lastPatch()).toEqual([{ op: 'add', path: '/spec', value: { displayName: 'only-this' } }]);
   });
 
-  test('merges the hoisted templateRef into the replaced spec', async () => {
+  test('merges the top-level templateRef into the replaced spec', async () => {
     await handleUpdateWorkspace(
       'jwt',
       'test-ns',
