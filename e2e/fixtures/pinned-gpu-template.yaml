@@ -2,8 +2,8 @@
 # axis has min == max, so the create form has nothing editable to serialize and must omit
 # spec.resources entirely. The operator's admission then stamps defaultResources
 # verbatim, including the accelerator request the form never renders. Storage stays
-# editable to prove spec.storage still rides on the same submit. Kind-scale mirror of the
-# jupyter-deploy GPU card's shape.
+# editable to prove spec.storage still rides on the same submit. The bounds and defaults
+# mirror the eks-oidc template's GPU card.
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
