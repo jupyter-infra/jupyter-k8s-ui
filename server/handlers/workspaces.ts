@@ -121,6 +121,7 @@ export async function handleCreateWorkspace(jwt: string, namespace: string, req:
 // writes status to the same object, so a write landing between the read and the replace fails
 // with 409 Conflict. The update is re-read and re-applied, as client-go's RetryOnConflict does.
 const UPDATE_CONFLICT_RETRIES = 3;
+const UPDATE_CONFLICT_BACKOFF_MS = 50;
 
 function isConflict(error: unknown): boolean {
   return (error as { statusCode?: number } | null)?.statusCode === 409;
@@ -151,8 +152,8 @@ function applyUpdateBody(existing: K8sWorkspace, rawBody: unknown): K8sWorkspace
   if (body.podSecurityContext !== undefined) updated.spec.podSecurityContext = body.podSecurityContext;
   if (body.accessStrategy !== undefined) updated.spec.accessStrategy = body.accessStrategy;
   if (body.idleShutdown !== undefined) {
-    // Wholesale replace of the idleShutdown block (correct because the client sends
-    // the COMPLETE object, echoing the workspace's own `detection` verbatim).
+    // Wholesale replace of the idleShutdown block: the client sends the complete object,
+    // echoing the workspace's own `detection` verbatim.
     updated.spec.idleShutdown = {
       enabled: body.idleShutdown.enabled,
       idleTimeoutInMinutes: body.idleShutdown.timeoutInMinutes,
@@ -194,6 +195,8 @@ export async function handleUpdateWorkspace(jwt: string, namespace: string, work
       } catch (error) {
         if (!isConflict(error) || attempt >= UPDATE_CONFLICT_RETRIES) throw error;
         log('info', `Conflict updating workspace ${workspaceName}, retrying (${attempt + 1}/${UPDATE_CONFLICT_RETRIES})`);
+        // The operator's status writes come in bursts, so an immediate re-read tends to collide again.
+        await new Promise((resolve) => setTimeout(resolve, UPDATE_CONFLICT_BACKOFF_MS * (attempt + 1) + Math.random() * UPDATE_CONFLICT_BACKOFF_MS));
       }
     }
   } catch (error) {
