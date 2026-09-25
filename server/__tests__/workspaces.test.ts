@@ -229,6 +229,12 @@ describe('handleUpdateWorkspace', () => {
     expect(mockedK8s.patch).not.toHaveBeenCalled();
   });
 
+  test('rejects a body with no updatable field with 400 before touching K8s', async () => {
+    const res = await handleUpdateWorkspace('jwt', 'test-ns', 'ws', jsonRequest({ desired_status: 'Stopped' }, 'PATCH'));
+    expect(res.status).toBe(400);
+    expect(mockedK8s.patch).not.toHaveBeenCalled();
+  });
+
   test('returns 404 when workspace does not exist', async () => {
     mockedK8s.patch.mockImplementationOnce(async () => {
       throw Object.assign(new Error('not found'), { statusCode: 404 });

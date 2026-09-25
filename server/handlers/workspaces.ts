@@ -174,6 +174,9 @@ export async function handleUpdateWorkspace(jwt: string, namespace: string, work
     if (enumError) return errorResponse(400, enumError);
   }
 
+  const ops = buildUpdatePatch(rawBody);
+  if (ops.length === 0) return errorResponse(400, 'No updatable fields in request body');
+
   try {
     const k8sClient = await reuseOrCreateUserK8sClient(jwt);
     const response = await k8sClient.patchNamespacedCustomObject(
@@ -182,7 +185,7 @@ export async function handleUpdateWorkspace(jwt: string, namespace: string, work
       namespace,
       WORKSPACE_PLURAL,
       workspaceName,
-      buildUpdatePatch(rawBody),
+      ops,
       dryRun,
       undefined,
       undefined,
