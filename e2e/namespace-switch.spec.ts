@@ -31,8 +31,9 @@ const SHARED_TEMPLATE_FIXTURE = join(dirname(fileURLToPath(import.meta.url)), 'f
 const SECOND_NAMESPACE_FIXTURE = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'e2e-second-namespace.yaml');
 
 /**
- * RBAC changes reach the API server's authorizer a moment after the RoleBinding write. Wait
- * until the e2e user's access to e2e-team-b reads the expected way before the app is loaded.
+ * RBAC changes reach the API server's authorizer a moment after the RoleBinding write; wait
+ * until `kubectl auth can-i` gives the expected answer for the e2e user in e2e-team-b before
+ * loading the app.
  */
 async function waitForTeamBAccess(allowed: boolean) {
   await expect
@@ -150,8 +151,6 @@ test.describe('Namespace selection', () => {
   });
 
   test('creating through a deep link lands back on that namespace, not the cookie one', async ({ page }) => {
-    // The cookie remembers default; the deep link asks for e2e-team-b. After the create the
-    // list must stay on e2e-team-b and show the new workspace.
     await page.goto('/');
     await switchNamespace(page, 'default');
     await expectActiveNamespace(page, 'default');
@@ -220,8 +219,8 @@ test.describe('Namespace selection', () => {
   });
 
   test('losing access to the active namespace drops the app back to the default one', async ({ page }) => {
-    // Revoke the e2e user's access to e2e-team-b and open the app there: the workspace list
-    // returns 403, the app recomputes the visible namespaces and switches to the default one.
+    // Without the RoleBinding the workspace list returns 403, and the app recomputes the
+    // visible namespaces and falls back to the default one.
     await page.goto('/');
     await switchNamespace(page, 'e2e-team-b');
     await expectActiveNamespace(page, 'e2e-team-b');

@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { expectOnPath, waitForCardStatus, waitForCardGone, kubectlGet } from './test-utils';
 
-// The create form's sliders set the limits a workspace is created with. Against the e2e
-// default template (cpu 100m to 2, memory 128Mi to 2Gi, storage 1Gi to 10Gi, requests declared)
+// The create form's sliders set the limits a workspace is created with. Against the e2e default
+// template (cpu 100m to 2, memory 128Mi to 2Gi, storage 1Gi to 10Gi, with requests declared),
 // moving each slider to its maximum must store those limits, keep the template's requests,
 // size the PVC accordingly, and reach Running.
 

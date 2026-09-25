@@ -1,9 +1,8 @@
-# Fully pinned template for the #69 e2e (e2e/pinned-template.spec.ts): every resource
-# axis has min == max, so the create form has nothing editable to serialize and must omit
-# spec.resources entirely. The operator's admission then stamps defaultResources
-# verbatim, including the accelerator request the form never renders. Storage stays
-# editable to prove spec.storage still rides on the same submit. The bounds and defaults
-# mirror the eks-oidc template's GPU card.
+# GPU template with every resource axis pinned (min equals max on cpu, memory and the GPU), for
+# e2e/pinned-template.spec.ts: the create form has nothing editable, so it must omit
+# spec.resources and let the operator stamp defaultResources, accelerator request included.
+# Storage keeps a range so the spec can check spec.storage still rides on the same submit. The
+# bounds and defaults mirror the eks-oidc template's GPU card.
 apiVersion: workspace.jupyter.org/v1alpha1
 kind: WorkspaceTemplate
 metadata:
