@@ -153,8 +153,8 @@ export function WorkspaceCreate() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Send the complete resources block when any axis is editable, and none when the template
-    // pins every axis, so the operator's admission webhook writes the template defaults (#69).
+    // No resources block when the template pins every axis with matching defaults, so the
+    // operator's admission webhook writes them; the complete block otherwise (#69).
     const resources = buildCreateResources(controls, values.cpu, values.memory, values.accelerators);
     const request: CreateWorkspaceRequest = {
       name,

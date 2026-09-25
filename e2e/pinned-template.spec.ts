@@ -20,8 +20,6 @@ test.describe('Pinned template create (#69)', () => {
     await page.goto('/create');
     await page.getByRole('button', { name: /select pinned gpu template/i }).click();
 
-    // Every resource axis is pinned → disabled sliders at the template values; storage
-    // keeps its range and stays editable.
     const cpu = page.getByRole('slider', { name: 'CPU' });
     await expect(cpu).toBeDisabled();
     await expect(cpu).toHaveValue('0.5');
@@ -61,7 +59,6 @@ test.describe('Pinned template create (#69)', () => {
     await expect(card.getByText('1 GiB')).toBeVisible();
     await expect(card.getByText('1 GPU')).toBeVisible();
 
-    // The stamped GPU limit flows through to the workspace deployment's pod template.
     const limits = JSON.parse(kubectlGet(`deployment workspace-${WS_NAME}`, '{.spec.template.spec.containers[0].resources.limits}'));
     expect(limits['nvidia.com/gpu']).toBe('1');
   });

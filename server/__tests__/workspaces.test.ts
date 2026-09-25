@@ -344,7 +344,7 @@ describe('advanced update replaces the whole spec', () => {
   });
 
   test('a field-shaped body touches only its own paths', async () => {
-    // Contrast: nothing else in the spec is written, so desiredStatus is preserved.
+    // Nothing else in the spec is written, so desiredStatus is preserved.
     await handleUpdateWorkspace('jwt', 'test-ns', 'ws-1', jsonRequest({ displayName: 'merged' }, 'PUT'));
     expect(lastPatch().map((o) => o.path)).toEqual(['/spec/displayName']);
   });

@@ -55,8 +55,7 @@ export function NamespaceProvider({ children }: NamespaceProviderProps) {
 
   // The server resolves the cookie's namespace, else the configured one, with no access
   // check. Transient failures retry a bounded number of times; auth failures do not, they
-  // route to re-login, the same rule as the /me query. Without the retry one failed request
-  // leaves the app with no namespace and no way to recover.
+  // route to re-login, the same rule as the /me query.
   const {
     data: bootstrap,
     error: bootstrapError,

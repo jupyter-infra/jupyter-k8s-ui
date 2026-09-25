@@ -39,7 +39,7 @@ export function NamespaceGateView({ loading, error, onRetry, children }: Namespa
 }
 
 // Every page needs a namespace before it can load anything, so the layout renders the bootstrap
-// state for all of them instead of each page waiting on its own.
+// state for all of them.
 export function NamespaceGate({ children }: { children: ReactNode }) {
   const { activeNamespace, isBootstrapLoading, bootstrapError, retryBootstrap } = useNamespace();
   if (activeNamespace) return <>{children}</>;
