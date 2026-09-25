@@ -5,6 +5,9 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
 import { defineConfig, globalIgnores } from 'eslint/config';
 
+const NAV_IMPORTS = ['useNavigate', 'Link', 'NavLink', 'Navigate', 'redirect'];
+const NAV_MESSAGE = 'Use useNamespacedNavigate or NamespacedLink so in-app links keep the namespace.';
+
 export default defineConfig([
   globalIgnores(['dist']),
   {
@@ -26,11 +29,9 @@ export default defineConfig([
         'error',
         {
           paths: [
-            {
-              name: 'react-router-dom',
-              importNames: ['useNavigate', 'Link'],
-              message: 'Use useNamespacedNavigate or NamespacedLink so in-app links keep the namespace.',
-            },
+            { name: 'react-router-dom', importNames: NAV_IMPORTS, message: NAV_MESSAGE },
+            // v7 re-exports from react-router; it resolves, so restrict it too.
+            { name: 'react-router', importNames: NAV_IMPORTS, message: NAV_MESSAGE },
           ],
         },
       ],
