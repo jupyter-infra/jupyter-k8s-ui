@@ -1,4 +1,4 @@
-import type { Workspace } from '../types';
+import type { Workspace, DiscoveredTemplate } from '../types';
 import { strings } from '../constants';
 
 // Workspace status helpers
@@ -106,6 +106,25 @@ export function acceleratorLimits(limits: Record<string, string | undefined> | u
       return value !== undefined && key.includes('/');
     })
     .sort(([a], [b]) => a.localeCompare(b));
+}
+
+// Resolve a workspace's template from a discovered list by templateRef, the way the operator
+// does: a ref without a namespace is looked up in the workspace's own namespace first, then in
+// the shared template namespace.
+export function findTemplateByRef(
+  items: DiscoveredTemplate[] | undefined,
+  ref: { name: string; namespace?: string } | undefined,
+  workspaceNamespace: string | undefined,
+  sharedNamespace?: string,
+): DiscoveredTemplate | null {
+  if (!ref || !items) return null;
+  const byName = items.filter((t) => t.metadata.name === ref.name);
+  if (ref.namespace) return byName.find((t) => t.metadata.namespace === ref.namespace) ?? null;
+  return (
+    byName.find((t) => t.metadata.namespace === workspaceNamespace) ??
+    byName.find((t) => sharedNamespace !== undefined && t.metadata.namespace === sharedNamespace) ??
+    null
+  );
 }
 
 /**

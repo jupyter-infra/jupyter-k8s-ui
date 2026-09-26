@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { expectOnPath } from './test-utils';
+import { expectOnPath, waitForCardStatusByName } from './test-utils';
 
 // Single-flagged-default template create flow. When a namespace's ONLY template is flagged
 // the default, the simple create picker renders NOTHING (no card grid, no "No template"
@@ -31,22 +31,6 @@ async function switchNamespace(page: Page, ns: string) {
 }
 
 /** Click Refresh on the list until the named card shows the expected status. */
-async function waitForCardStatus(page: Page, name: string, statusText: string) {
-  const card = page.getByLabel(new RegExp(`${name}.*workspace`, 'i'));
-  await expect
-    .poll(
-      async () => {
-        await page.getByRole('button', { name: /refresh/i }).click();
-        return card
-          .getByText(statusText, { exact: true })
-          .isVisible()
-          .catch(() => false);
-      },
-      { timeout: 30_000, intervals: [2_000] },
-    )
-    .toBeTruthy();
-}
-
 async function deleteWorkspace(page: Page, name: string) {
   await page.goto(`/?namespace=${NS}`);
   await page.getByRole('button', { name: /all/i }).click();
@@ -100,7 +84,7 @@ test.describe('Single-flagged-default template create', () => {
     await expectOnPath(page, { namespace: NS });
 
     await page.getByRole('button', { name: /all/i }).click();
-    await waitForCardStatus(page, WS_NAME, 'Running');
+    await waitForCardStatusByName(page, WS_NAME, 'Running');
 
     // Detail confirms the enforced template rode onto the workspace (Template pill = ref name).
     await page.goto(`/workspace/${WS_NAME}?namespace=${NS}`);

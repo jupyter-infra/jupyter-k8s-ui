@@ -3,6 +3,7 @@ import { createContext, useContext, useCallback, useEffect, useMemo, type ReactN
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { isAuthError } from '../api/auth-interceptor';
 import type { MyNamespaceResponse, NamespaceListResponse } from '../types';
 
 interface NamespaceContextType {
@@ -14,6 +15,13 @@ interface NamespaceContextType {
   // active namespace is no longer visible (revoked), drop to a usable one. Returns true if
   // it changed the active namespace (caller should stop treating the 403 as fatal).
   recoverFromForbidden: () => Promise<boolean>;
+  // Bootstrap state while activeNamespace is still undefined: `isBootstrapLoading` is true
+  // while the request runs, including its retries and a manual retry, `bootstrapError` is set
+  // once the retries are exhausted (never for an auth failure, which routes to re-login), and
+  // `retryBootstrap` runs the request again.
+  isBootstrapLoading: boolean;
+  bootstrapError: Error | null;
+  retryBootstrap: () => void;
 }
 
 const NamespaceContext = createContext<NamespaceContextType | null>(null);
@@ -45,12 +53,19 @@ export function NamespaceProvider({ children }: NamespaceProviderProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlNamespace = searchParams.get('namespace') || undefined;
 
-  // Cheap bootstrap: the server resolves cookie-remembered-else-configured (no SSAR).
-  const { data: bootstrap } = useQuery({
+  // The server resolves the cookie's namespace, else the configured one, with no access
+  // check. Transient failures retry a bounded number of times; auth failures do not, they
+  // route to re-login, the same rule as the /me query.
+  const {
+    data: bootstrap,
+    error: bootstrapError,
+    isFetching: isBootstrapLoading,
+    refetch: refetchBootstrap,
+  } = useQuery({
     queryKey: namespaceKeys.active,
     queryFn: (): Promise<MyNamespaceResponse> => apiClient.getMyNamespace(),
     staleTime: Infinity,
-    retry: false,
+    retry: (failureCount, error) => (isAuthError(error) ? false : failureCount < 2),
   });
 
   // Precedence: URL ?namespace= (per-tab, wins over cookie) > server-resolved active
@@ -128,7 +143,14 @@ export function NamespaceProvider({ children }: NamespaceProviderProps) {
     return true;
   }, [queryClient, activeNamespace, setActiveNamespace]);
 
-  const value = useMemo(() => ({ activeNamespace, setActiveNamespace, recoverFromForbidden }), [activeNamespace, setActiveNamespace, recoverFromForbidden]);
+  const retryBootstrap = useCallback(() => {
+    void refetchBootstrap();
+  }, [refetchBootstrap]);
+
+  const value = useMemo(
+    () => ({ activeNamespace, setActiveNamespace, recoverFromForbidden, isBootstrapLoading, bootstrapError, retryBootstrap }),
+    [activeNamespace, setActiveNamespace, recoverFromForbidden, isBootstrapLoading, bootstrapError, retryBootstrap],
+  );
 
   return <NamespaceContext.Provider value={value}>{children}</NamespaceContext.Provider>;
 }

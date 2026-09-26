@@ -13,6 +13,7 @@ import {
   round2,
   formatCpuCores,
   formatMemoryGiB,
+  findTemplateByRef,
 } from './workspace';
 
 describe('round2', () => {
@@ -205,5 +206,36 @@ describe('getStatusChipColor', () => {
     ['Unknown', 'default'],
   ] as const)('%s → %s', (status, expected) => {
     expect(getStatusChipColor(status)).toBe(expected);
+  });
+});
+
+describe('findTemplateByRef', () => {
+  const items = [
+    { metadata: { name: 'tmpl-a', namespace: 'shared' }, spec: {}, sourceNamespace: 'shared' },
+    { metadata: { name: 'tmpl-a', namespace: 'user-ns' }, spec: {}, sourceNamespace: 'user-ns' },
+    { metadata: { name: 'tmpl-b', namespace: 'shared' }, spec: {}, sourceNamespace: 'shared' },
+  ];
+
+  test('matches on name and namespace when the ref carries one', () => {
+    expect(findTemplateByRef(items, { name: 'tmpl-a', namespace: 'shared' }, 'user-ns')?.metadata.namespace).toBe('shared');
+  });
+
+  test('a ref without a namespace resolves in the workspace namespace first', () => {
+    expect(findTemplateByRef(items, { name: 'tmpl-a' }, 'user-ns', 'shared')?.metadata.namespace).toBe('user-ns');
+  });
+
+  test('a ref without a namespace falls back to the shared template namespace', () => {
+    expect(findTemplateByRef(items, { name: 'tmpl-b' }, 'user-ns', 'shared')?.metadata.namespace).toBe('shared');
+  });
+
+  test('a ref without a namespace does not match a same-named template in any other namespace', () => {
+    expect(findTemplateByRef(items, { name: 'tmpl-b' }, 'user-ns', 'other')).toBeNull();
+    expect(findTemplateByRef(items, { name: 'tmpl-b' }, 'user-ns')).toBeNull();
+  });
+
+  test('no ref, no items, or no match resolve to null', () => {
+    expect(findTemplateByRef(items, undefined, 'user-ns')).toBeNull();
+    expect(findTemplateByRef(undefined, { name: 'tmpl-a' }, 'user-ns')).toBeNull();
+    expect(findTemplateByRef(items, { name: 'ghost' }, 'user-ns')).toBeNull();
   });
 });

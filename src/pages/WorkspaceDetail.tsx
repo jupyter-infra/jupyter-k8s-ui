@@ -1,4 +1,6 @@
-import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import { useNamespacedNavigate } from '../hooks';
+import { NamespacedLink } from '../components';
 import { Typography, Button, Chip, CircularProgress, Box, Stack, Paper, Tooltip } from '@mui/material';
 import {
   ArrowBack,
@@ -74,7 +76,7 @@ function InfoRow({ label, value }: { label: React.ReactNode; value: React.ReactN
 
 export function WorkspaceDetail() {
   const { name } = useParams<{ name: string }>();
-  const navigate = useNavigate();
+  const navigate = useNamespacedNavigate();
   const { user } = useAuth();
   const { data: workspace, isLoading, error } = useWorkspace(name ?? '');
   const startMutation = useStartWorkspace();
@@ -104,7 +106,6 @@ export function WorkspaceDetail() {
   const workspaceStatus = getWorkspaceStatus(workspace);
   const accessURL = workspace.status?.accessURL;
   const isRunning = workspace.spec.desiredStatus === 'Running';
-
   const owner = getWorkspaceOwner(workspace);
   const ownerMatch = checkIsOwner(owner, user?.k8sUser);
   const canOpen = workspaceStatus === 'Running' && accessURL && (ownerMatch || workspace.spec.accessType === 'Public');
@@ -132,7 +133,13 @@ export function WorkspaceDetail() {
           {/* Advanced edit is offered only to the owner and only while Stopped, to
               avoid mutating a live workspace's spec (for now). */}
           {ownerMatch && workspaceStatus === 'Stopped' && (
-            <Button variant="outlined" startIcon={<Edit />} component={RouterLink} to={`/workspace/${workspace.metadata.name}/edit`}>
+            <Button
+              variant="outlined"
+              startIcon={<Edit />}
+              component={NamespacedLink}
+              to={`/workspace/${workspace.metadata.name}/edit`}
+              namespace={workspace.metadata.namespace}
+            >
               {strings.workspace.edit}
             </Button>
           )}

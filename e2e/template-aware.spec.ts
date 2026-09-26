@@ -1,5 +1,5 @@
-import { test, expect, type Locator, type Page } from '@playwright/test';
-import { expectOnPath } from './test-utils';
+import { test, expect } from '@playwright/test';
+import { expectOnPath, waitForCardStatus } from './test-utils';
 
 // Template-aware simple create + simple edit, exercised against the real cluster with the
 // e2e template fixtures. The `default` fixture (e2e/fixtures/default-template.yaml) is the
@@ -10,21 +10,6 @@ import { expectOnPath } from './test-utils';
 
 const RUN_ID = `e2e-tmpl-${Date.now()}`;
 const WS_NAME = `${RUN_ID}-ws`;
-
-async function waitForCardStatus(page: Page, card: Locator, text: string) {
-  await expect
-    .poll(
-      async () => {
-        await page.getByRole('button', { name: /refresh/i }).click();
-        return card
-          .getByText(text, { exact: true })
-          .isVisible()
-          .catch(() => false);
-      },
-      { timeout: 30_000, intervals: [2_000] },
-    )
-    .toBeTruthy();
-}
 
 test.describe('Template-aware simple create + edit', () => {
   test.describe.configure({ mode: 'serial' });

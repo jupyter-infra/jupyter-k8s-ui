@@ -3,6 +3,7 @@ export { Layout } from './layout/Layout';
 
 // UI
 export { ConfirmDialog } from './ui/ConfirmDialog';
+export { NamespacedLink } from './ui/NamespacedLink';
 export { ErrorBoundary } from './ui/ErrorBoundary';
 export { ResourceSlider } from './ui/ResourceSlider';
 export { ThemeSwitcher } from './ui/ThemeSwitcher';

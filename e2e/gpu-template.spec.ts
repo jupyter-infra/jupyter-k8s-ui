@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process';
-import { test, expect, type Locator, type Page } from '@playwright/test';
-import { expectOnPath } from './test-utils';
+import { test, expect } from '@playwright/test';
+import { expectOnPath, advertiseNodeCapacity, withdrawNodeCapacity, waitForCardStatus, waitForCardGone, KUBECTL, KIND_NODE, kubectlGet } from './test-utils';
 
 // Accelerator axes end to end, against the real cluster with the gpu-template fixture
 // (e2e/fixtures/gpu-template.yaml: nvidia.com/gpu 0–2 default 1, plus a MIG profile key
@@ -18,64 +18,11 @@ import { expectOnPath } from './test-utils';
 const RUN_ID = `e2e-gpu-${Date.now()}`;
 const WS_NAME = `${RUN_ID}-ws`;
 
-const CLUSTER = process.env.E2E_KIND_CLUSTER || 'jupyter-k8s-dev';
-const NODE = `${CLUSTER}-control-plane`;
-const KUBECTL = `kubectl --context kind-${CLUSTER}`;
-
-function advertiseAccelerators() {
-  const patch = JSON.stringify([
-    { op: 'add', path: '/status/capacity/nvidia.com~1gpu', value: '4' },
-    { op: 'add', path: '/status/capacity/nvidia.com~1mig-1g.5gb', value: '4' },
-  ]);
-  execSync(`${KUBECTL} patch node ${NODE} --subresource=status --type=json -p='${patch}'`, { stdio: 'pipe' });
-}
-
-function withdrawAccelerators() {
-  const patch = JSON.stringify([
-    { op: 'remove', path: '/status/capacity/nvidia.com~1gpu' },
-    { op: 'remove', path: '/status/capacity/nvidia.com~1mig-1g.5gb' },
-  ]);
-  try {
-    execSync(`${KUBECTL} patch node ${NODE} --subresource=status --type=json -p='${patch}'`, { stdio: 'pipe' });
-  } catch {
-    // Best-effort: leftover fake capacity is harmless and re-advertised next run.
-  }
-}
-
-async function waitForCardStatus(page: Page, card: Locator, text: string) {
-  await expect
-    .poll(
-      async () => {
-        await page.getByRole('button', { name: /refresh/i }).click();
-        return card
-          .getByText(text, { exact: true })
-          .isVisible()
-          .catch(() => false);
-      },
-      { timeout: 30_000, intervals: [2_000] },
-    )
-    .toBeTruthy();
-}
-
-// Deletion is finalized asynchronously (the CR lists with a deletionTimestamp until the
-// operator's finalizer runs), so poll with explicit refreshes like workspace-crud does.
-async function waitForCardGone(page: Page, card: Locator) {
-  await expect
-    .poll(
-      async () => {
-        await page.getByRole('button', { name: /refresh/i }).click();
-        return card.isVisible().catch(() => false);
-      },
-      { timeout: 30_000, intervals: [2_000] },
-    )
-    .toBeFalsy();
-}
-
 test.describe('Accelerator axes (gpu-template)', () => {
   test.describe.configure({ mode: 'serial' });
 
-  test.beforeAll(() => advertiseAccelerators());
-  test.afterAll(() => withdrawAccelerators());
+  test.beforeAll(() => advertiseNodeCapacity(KUBECTL, KIND_NODE, { 'nvidia.com/gpu': '4', 'nvidia.com/mig-1g.5gb': '4' }));
+  test.afterAll(() => withdrawNodeCapacity(KUBECTL, KIND_NODE, ['nvidia.com/gpu', 'nvidia.com/mig-1g.5gb']));
 
   test('template-gated axes render and create emits the default GPU limit', async ({ page }) => {
     await page.goto('/create');
@@ -170,7 +117,7 @@ test.describe('Accelerator axes (gpu-template)', () => {
 
     // The form save rebuilds only the resource keys it models; a stored limit it does
     // not model must pass through the same save verbatim.
-    const limits = JSON.parse(execSync(`${KUBECTL} get workspace ${WS_NAME} -o jsonpath='{.spec.resources.limits}'`, { stdio: 'pipe' }).toString());
+    const limits = JSON.parse(kubectlGet(`workspace ${WS_NAME}`, '{.spec.resources.limits}'));
     expect(limits['nvidia.com/gpu']).toBeUndefined();
     expect(limits['ephemeral-storage']).toBe('1073741824');
   });

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import { useNamespacedNavigate } from '../hooks';
 import { Typography, Stack, Container, CircularProgress, Box, Alert, Button } from '@mui/material';
 import { WorkspaceSpecEditor } from '../components/workspace/yaml-editor/WorkspaceSpecEditor';
 import { SimpleWorkspaceEditor } from '../components/workspace/SimpleWorkspaceEditor';
@@ -35,7 +36,7 @@ function EditNotice({ title, message, onBack, backLabel }: { title?: string; mes
 // create). The YAML editor is the single path to YAML — no ?mode= deep-link.
 export function WorkspaceAdvancedEditor() {
   const { name: routeName } = useParams();
-  const navigate = useNavigate();
+  const navigate = useNamespacedNavigate();
   const { workspace: ws } = strings;
   const { user } = useAuth();
 
@@ -74,7 +75,7 @@ export function WorkspaceAdvancedEditor() {
           setDisplayName={setDisplayNameOverride}
           notice={EditNotice}
           onBack={() => navigate('/')}
-          onBackDetail={() => existing && navigate(`/workspace/${existing.metadata.name}`)}
+          onBackDetail={() => existing && navigate(`/workspace/${existing.metadata.name}`, { namespace: existing.metadata.namespace })}
         />
       </Stack>
     </Container>

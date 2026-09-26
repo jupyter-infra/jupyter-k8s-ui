@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { expectOnPath } from './test-utils';
+import { expectOnPath, waitForCardStatusByName } from './test-utils';
 import { execFileSync } from 'node:child_process';
 
 // Template DRIFT on edit: a template's defaultImage can change AFTER a workspace was created,
@@ -26,22 +26,6 @@ function setTemplateDefaultImage(image: string) {
     ['--context', CONTEXT, 'patch', 'workspacetemplate', TEMPLATE, '-n', 'default', '--type', 'merge', '-p', JSON.stringify({ spec: { defaultImage: image } })],
     { stdio: 'pipe' },
   );
-}
-
-async function waitForCardStatus(page: Page, name: string, statusText: string) {
-  const card = page.getByLabel(new RegExp(`${name}.*workspace`, 'i'));
-  await expect
-    .poll(
-      async () => {
-        await page.getByRole('button', { name: /refresh/i }).click();
-        return card
-          .getByText(statusText, { exact: true })
-          .isVisible()
-          .catch(() => false);
-      },
-      { timeout: 30_000, intervals: [2_000] },
-    )
-    .toBeTruthy();
 }
 
 async function deleteWorkspace(page: Page, name: string) {
@@ -77,7 +61,7 @@ test.describe('Template drift on edit', () => {
     await page.getByRole('button', { name: /create workspace/i }).click();
     await expectOnPath(page);
     await page.getByRole('button', { name: /all/i }).click();
-    await waitForCardStatus(page, WS_NAME, 'Running');
+    await waitForCardStatusByName(page, WS_NAME, 'Running');
   });
 
   test('stop, drift the template image, then editing conforms the stored image and saves', async ({ page }) => {

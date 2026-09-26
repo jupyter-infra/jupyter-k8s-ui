@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { expectOnPath } from './test-utils';
 import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -163,6 +164,18 @@ test.describe('Many-namespace discovery + pagination', () => {
     await expect(menuItem(page, forbidden)).toHaveCount(0);
     await page.getByRole('menuitem', { name: new RegExp(`Find "${forbidden}"`) }).click();
     await expect(page.getByText(`You don't have access to "${forbidden}".`)).toBeVisible({ timeout: 10_000 });
+  });
+
+  test('find-by-name selects an authorized namespace that is not in the loaded list', async ({ page }) => {
+    await page.goto('/');
+    await openSwitcher(page);
+
+    const target = labeledNs(19); // authorized, on a late page: not loaded until found by name
+    await expect(menuItem(page, target)).toHaveCount(0);
+    await page.getByRole('textbox', { name: /find a namespace/i }).fill(target);
+    await page.getByRole('menuitem', { name: new RegExp(`Find "${target}"`) }).click();
+    await expect(page.getByRole('button', { name: /select namespace/i })).toContainText(target);
+    await expectOnPath(page, { namespace: target });
   });
 
   test('switcher pages past the candidate cap via Load more', async ({ page }) => {

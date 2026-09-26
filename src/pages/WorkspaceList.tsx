@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNamespacedNavigate } from '../hooks';
 import {
   Box,
   Typography,
@@ -29,7 +29,7 @@ const KUBECTL_BANNER_DISMISSED_KEY = 'kubectl-banner-dismissed';
 const PAGE_SIZE = 12;
 
 export function WorkspaceList() {
-  const navigate = useNavigate();
+  const navigate = useNamespacedNavigate();
   const { user } = useAuth();
   const { activeNamespace, recoverFromForbidden } = useNamespace();
   const { data: workspaces, isLoading, error, refetch, isFetching } = useWorkspaces();

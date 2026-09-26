@@ -1,43 +1,16 @@
-import { test, expect, type Locator, type Page } from '@playwright/test';
-import { expectOnPath } from './test-utils';
+import { test, expect } from '@playwright/test';
+import { expectOnPath, waitForCardStatus, waitForCardGone } from './test-utils';
 
 // Unique prefix per test run to avoid collisions
 const RUN_ID = `e2e-${Date.now()}`;
 const WS_NAME = `${RUN_ID}-ws`;
 
 /** Click Refresh and wait for the expected status text using Playwright's polling assertion. */
-async function waitForCardStatus(page: Page, card: Locator, text: string) {
-  await expect
-    .poll(
-      async () => {
-        await page.getByRole('button', { name: /refresh/i }).click();
-        return card
-          .getByText(text)
-          .isVisible()
-          .catch(() => false);
-      },
-      { timeout: 30_000, intervals: [2_000] },
-    )
-    .toBeTruthy();
-}
-
 /**
  * Click Refresh until the card disappears. The list only auto-polls every 60s, so
  * after a delete the card can linger until the next poll — clicking Refresh forces
  * the refetch, mirroring what a user would do.
  */
-async function waitForCardGone(page: Page, card: Locator) {
-  await expect
-    .poll(
-      async () => {
-        await page.getByRole('button', { name: /refresh/i }).click();
-        return card.isVisible().catch(() => false);
-      },
-      { timeout: 30_000, intervals: [2_000] },
-    )
-    .toBeFalsy();
-}
-
 test.describe('Workspace CRUD', () => {
   test.describe.configure({ mode: 'serial' });
 
@@ -76,6 +49,16 @@ test.describe('Workspace CRUD', () => {
 
     // Refresh until status transitions to "Running" (operator reconciles in seconds)
     await waitForCardStatus(page, card, 'Running');
+  });
+
+  test('creating a second workspace with the same name shows the server error and stays on the form', async ({ page }) => {
+    await page.goto('/create');
+    await page.getByRole('textbox', { name: /^name$/i }).fill(WS_NAME);
+    await page.getByRole('textbox', { name: /display name/i }).fill(WS_NAME);
+    await page.getByRole('button', { name: /create workspace/i }).click();
+
+    await expect(page.getByRole('alert').filter({ hasText: 'Resource already exists' })).toBeVisible();
+    await expectOnPath(page, { path: '/create' });
   });
 
   test('stops a running workspace', async ({ page }) => {

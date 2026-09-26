@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { expectOnPath } from './test-utils';
+import { expectOnPath, waitForCardStatusByName } from './test-utils';
 import { execFileSync } from 'node:child_process';
 
 // No-template create flow: when NO WorkspaceTemplate is flagged the default, the picker
@@ -26,22 +26,6 @@ function setDefaultFlag(value: 'true' | 'false') {
     ['--context', CONTEXT, 'label', 'workspacetemplate', 'default', '-n', 'default', `workspace.jupyter.org/default-template=${value}`, '--overwrite'],
     { stdio: 'pipe' },
   );
-}
-
-async function waitForCardStatus(page: Page, name: string, statusText: string) {
-  const card = page.getByLabel(new RegExp(`${name}.*workspace`, 'i'));
-  await expect
-    .poll(
-      async () => {
-        await page.getByRole('button', { name: /refresh/i }).click();
-        return card
-          .getByText(statusText, { exact: true })
-          .isVisible()
-          .catch(() => false);
-      },
-      { timeout: 30_000, intervals: [2_000] },
-    )
-    .toBeTruthy();
 }
 
 async function deleteWorkspace(page: Page, name: string) {
@@ -111,7 +95,7 @@ test.describe('No-template create', () => {
     await expectOnPath(page);
 
     await page.getByRole('button', { name: /all/i }).click();
-    await waitForCardStatus(page, WS_NAME, 'Running');
+    await waitForCardStatusByName(page, WS_NAME, 'Running');
   });
 
   test('the bare workspace has NO template (detail shows "none")', async ({ page }) => {

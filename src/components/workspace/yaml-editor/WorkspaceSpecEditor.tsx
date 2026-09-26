@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNamespacedNavigate } from '../../../hooks';
 import { Typography, TextField, Button, Stack, Paper, Alert, CircularProgress, Box, Link } from '@mui/material';
 import type { editor } from 'monaco-editor';
 import { useWorkspace, useCrdSchema, useCreateWorkspaceAdvanced, useReplaceWorkspaceAdvanced } from '../../../api';
@@ -119,7 +119,7 @@ export function WorkspaceSpecEditor({
   onTemplateNameChange,
   onResolvedTemplateChange,
 }: WorkspaceSpecEditorProps) {
-  const navigate = useNavigate();
+  const navigate = useNamespacedNavigate();
   const isEdit = mode === 'edit';
   const { workspace: ws, common } = strings;
   // When the parent lifts template state (inline create), use the controlled values;
@@ -389,7 +389,7 @@ export function WorkspaceSpecEditor({
         <EditNotice
           title={ws.advancedEditNotAllowedTitle}
           message={ws.advancedEditNotStopped}
-          onBack={() => navigate(`/workspace/${existing.metadata.name}`)}
+          onBack={() => navigate(`/workspace/${existing.metadata.name}`, { namespace: existing.metadata.namespace })}
           backLabel={ws.advancedBack}
         />
       );

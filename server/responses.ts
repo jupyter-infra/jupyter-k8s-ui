@@ -43,13 +43,18 @@ const K8S_STATUS_MAP: ReadonlyMap<number, { status: number; message: string }> =
   [401, { status: 401, message: 'Unauthorized — invalid or expired token' }],
   [403, { status: 403, message: 'Forbidden — insufficient permissions' }],
   [404, { status: 404, message: 'Resource not found' }],
-  [409, { status: 409, message: 'Resource already exists' }],
   [422, { status: 422, message: 'Unprocessable entity — validation failed' }],
 ]);
 
 interface K8sError {
   statusCode?: number;
   message?: string;
+}
+
+// The API server answers 409 for AlreadyExists on a create and for Conflict on a write whose
+// resourceVersion is stale. The Status body's `reason` tells them apart.
+export function get409ErrorMessage(reason: string | undefined): string {
+  return reason === 'Conflict' ? 'Conflict — the resource was modified concurrently, try again' : 'Resource already exists';
 }
 
 // The K8s API server returns a metav1.Status body on errors. For validation (422)
@@ -100,6 +105,7 @@ export function handleK8sError(error: unknown, fallbackMessage: string): Respons
   log('error', fallbackMessage, err.message || error, ...(statusBody ? [JSON.stringify(statusBody)] : []));
 
   const details = formatK8sDetails(statusBody);
+  if (err.statusCode === 409) return errorResponse(409, get409ErrorMessage(statusBody?.reason), details);
   const mapped = err.statusCode ? K8S_STATUS_MAP.get(err.statusCode) : undefined;
   if (mapped) {
     // Surface the webhook/API-server message as `details` alongside the mapped

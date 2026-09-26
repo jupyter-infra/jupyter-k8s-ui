@@ -2,7 +2,7 @@
 // kubectl + the CRD reference, and a button that switches to the YAML editor. Shared so
 // the two pages stay consistent (same copy, same links).
 
-import { Link as RouterLink } from 'react-router-dom';
+import { NamespacedLink } from '../ui/NamespacedLink';
 import { Button, Link, Paper, Stack, Typography } from '@mui/material';
 import { strings } from '../../constants';
 
@@ -19,7 +19,7 @@ export function AdvancedBox({ onSwitchToYaml }: AdvancedBoxProps) {
           <Typography variant="subtitle2">{ws.advancedBoxTitle}</Typography>
           <Typography variant="caption" color="text.secondary">
             {ws.advancedBoxIntro}{' '}
-            <Link component={RouterLink} to="/kubectl" underline="hover">
+            <Link component={NamespacedLink} to="/kubectl" underline="hover">
               {ws.advancedBoxKubectl}
             </Link>{' '}
             {ws.advancedBoxDocsMid}{' '}

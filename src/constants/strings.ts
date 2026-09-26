@@ -269,6 +269,11 @@ export const strings = {
     noneDescription: 'Ask your admin to grant you access to a workspace namespace, or to label one for discovery.',
     // List/detail scope reinforcers
     noWorkspacesIn: (ns: string) => `No workspaces in ${ns}`,
+    // Shown when the namespace lookup failed after retries. The namespace is unknown, not empty,
+    // so the empty states above would mislead.
+    loadErrorTitle: "Couldn't load your namespace",
+    loadErrorDescription: 'The namespace lookup failed. Retry, or reload the page if it keeps failing.',
+    loadErrorAction: 'Retry',
   },
 
   a11y: {

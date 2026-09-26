@@ -2,7 +2,7 @@ import { describe, test, expect, mock, beforeEach, afterEach, beforeAll, afterAl
 import { StrictMode } from 'react';
 import { render, screen, cleanup, fireEvent, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { AuthProvider } from '../context/AuthContext';
 import type { AdvancedWorkspacePayload, CreateWorkspaceRequest, DiscoveredTemplate, DiscoveryResponse } from '../types';
 
@@ -61,7 +61,12 @@ const flush = () =>
 // leaks into AuthContext.test. This keeps the real provider and only fakes the network.
 const realFetch = globalThis.fetch;
 
-async function renderCreate() {
+function LocationProbe() {
+  const { pathname, search } = useLocation();
+  return <div data-testid="location">{pathname + search}</div>;
+}
+
+async function renderCreate(initialEntry = '/create') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   // Seed the namespace bootstrap so NamespaceProvider resolves synchronously to user-ns
   // (the templates fixture's own namespace); global fetch is stubbed only for /me.
@@ -75,9 +80,10 @@ async function renderCreate() {
       <StrictMode>
         <QueryClientProvider client={client}>
           <AuthProvider>
-            <MemoryRouter initialEntries={['/create']}>
+            <MemoryRouter initialEntries={[initialEntry]}>
               <NamespaceProvider>
                 <WorkspaceCreate />
+                <LocationProbe />
               </NamespaceProvider>
             </MemoryRouter>
           </AuthProvider>
@@ -117,7 +123,9 @@ describe('create via inline YAML toggle', () => {
     validateSpy.mockClear();
     validateSpy.mockResolvedValue({ valid: true });
     templatesResponse = { items: [], access: { user: 'ok', shared: 'ok' }, namespaces: { own: 'user-ns', shared: 'shared-ns' } };
-    globalThis.fetch = mock(async () => new Response(JSON.stringify({ authenticated: true, displayUser: 'alice' }), { status: 200 })) as typeof fetch;
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify({ authenticated: true, user: { displayUser: 'alice', k8sUser: 'alice' } }), { status: 200 }),
+    ) as typeof fetch;
   });
   // Flush inside act BEFORE the synchronous cleanup(), so any trailing update from the
   // just-finished test (e.g. MUI InputBase's mount effect) is applied under act rather than
@@ -181,7 +189,9 @@ describe('template-aware simple create', () => {
     createSpy.mockClear();
     createSimpleSpy.mockClear();
     templatesResponse = { items: [], access: { user: 'ok', shared: 'ok' }, namespaces: { own: 'user-ns', shared: 'shared-ns' } };
-    globalThis.fetch = mock(async () => new Response(JSON.stringify({ authenticated: true, displayUser: 'alice' }), { status: 200 })) as typeof fetch;
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify({ authenticated: true, user: { displayUser: 'alice', k8sUser: 'alice' } }), { status: 200 }),
+    ) as typeof fetch;
   });
   // See the note above: flush under act before cleanup so trailing updates don't leak.
   afterEach(async () => {
@@ -314,6 +324,19 @@ describe('template-aware simple create', () => {
     expect(p.idleShutdown).toEqual({ enabled: false, timeoutInMinutes: 30, detection });
   });
 
+  test('post-create returns to the list carrying the page namespace, not the cookie active', async () => {
+    // The create page's ?namespace= (deep link, second tab) wins over the bootstrap active
+    // for the create itself, and the redirect must carry the same namespace: a bare '/'
+    // falls back to the bootstrap active and hides the just-created workspace.
+    await renderCreate('/create?namespace=other-ns');
+    await screen.findByText(/^resources$/i);
+    fireEvent.change(screen.getByRole('combobox', { name: /image/i }), { target: { value: 'nginx:latest' } });
+    submit();
+
+    await waitFor(() => expect(createSimpleSpy).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/?namespace=other-ns'));
+  });
+
   test('a flagged default template is auto-selected and suppresses the no-template card', async () => {
     templatesResponse = {
       items: [tmplFixture({ defaultResources: { limits: { cpu: '2' } }, resourceBounds: { resources: { cpu: { min: '1', max: '4' } } } }, 'default-tmpl')].map(
@@ -340,7 +363,9 @@ describe('accelerator axes in simple create', () => {
   beforeEach(() => {
     createSimpleSpy.mockClear();
     templatesResponse = { items: [], access: { user: 'ok', shared: 'ok' }, namespaces: { own: 'user-ns', shared: 'shared-ns' } };
-    globalThis.fetch = mock(async () => new Response(JSON.stringify({ authenticated: true, displayUser: 'alice' }), { status: 200 })) as typeof fetch;
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify({ authenticated: true, user: { displayUser: 'alice', k8sUser: 'alice' } }), { status: 200 }),
+    ) as typeof fetch;
   });
   afterEach(async () => {
     await flush();
@@ -415,5 +440,47 @@ describe('accelerator axes in simple create', () => {
     await renderCreate();
     await screen.findByText(/^resources$/i);
     expect(screen.queryByRole('slider', { name: 'GPU' })).toBeNull();
+  });
+
+  const pinnedGpuTemplate = () =>
+    tmplFixture(
+      {
+        defaultImage: 'jupyter/pytorch:latest',
+        resourceBounds: { resources: { cpu: { min: '3', max: '3' }, memory: { min: '12Gi', max: '12Gi' }, 'nvidia.com/gpu': { min: '1', max: '1' } } },
+        defaultResources: { requests: { cpu: '3', memory: '12Gi', 'nvidia.com/gpu': '1' }, limits: { cpu: '3', memory: '12Gi', 'nvidia.com/gpu': '1' } },
+      },
+      'pinned-gpu',
+    );
+
+  test('a fully pinned template submits without spec.resources and still sends templateRef, image and storage', async () => {
+    templatesResponse = { items: [pinnedGpuTemplate()], access: { user: 'ok', shared: 'ok' }, namespaces: { own: 'user-ns', shared: 'shared-ns' } };
+    await renderCreate();
+    fireEvent.click(await screen.findByRole('button', { name: /select pinned-gpu template/i }));
+    submit();
+
+    await waitFor(() => expect(createSimpleSpy).toHaveBeenCalledTimes(1));
+    const p = lastSimplePayload();
+    // Omission (not a partial block) is the contract: admission stamps the complete
+    // template defaults, including the accelerator requests the form never renders.
+    expect(p.resources).toBeUndefined();
+    expect(p.templateRef).toEqual({ name: 'pinned-gpu', namespace: 'shared-ns' });
+    expect(p.storage).toEqual({ size: '10Gi' });
+    expect(p.image).toBe('jupyter/pytorch:latest');
+  });
+
+  test('touching sliders on an editable template then switching to a pinned one still omits resources', async () => {
+    templatesResponse = {
+      items: [gpuTemplate(), pinnedGpuTemplate()],
+      access: { user: 'ok', shared: 'ok' },
+      namespaces: { own: 'user-ns', shared: 'shared-ns' },
+    };
+    await renderCreate();
+    fireEvent.click(await screen.findByRole('button', { name: /select gpu-tmpl template/i }));
+    fireEvent.change(screen.getByRole('slider', { name: 'GPU' }), { target: { value: '2' } });
+    fireEvent.click(screen.getByRole('button', { name: /select pinned-gpu template/i }));
+    submit();
+
+    await waitFor(() => expect(createSimpleSpy).toHaveBeenCalledTimes(1));
+    expect(lastSimplePayload().resources).toBeUndefined();
   });
 });

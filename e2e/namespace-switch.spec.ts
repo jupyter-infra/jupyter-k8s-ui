@@ -25,8 +25,46 @@ import { expectOnPath } from './test-utils';
 
 const RUN_ID = `e2e-${Date.now()}`;
 const WS_NAME = `${RUN_ID}-ns-ws`;
+const DEEPLINK_WS_NAME = `${RUN_ID}-deeplink`;
 const CONTEXT = `kind-${process.env.E2E_KIND_CLUSTER || 'jupyter-k8s-dev'}`;
 const SHARED_TEMPLATE_FIXTURE = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'optional', 'shared-template.yaml');
+const SECOND_NAMESPACE_FIXTURE = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'e2e-second-namespace.yaml');
+
+/**
+ * RBAC changes reach the API server's authorizer a moment after the RoleBinding write; wait
+ * until `kubectl auth can-i` gives the expected answer for the e2e user in e2e-team-b before
+ * loading the app.
+ */
+async function waitForTeamBAccess(allowed: boolean) {
+  await expect
+    .poll(
+      () => {
+        try {
+          return execFileSync(
+            'kubectl',
+            [
+              '--context',
+              CONTEXT,
+              'auth',
+              'can-i',
+              'list',
+              'workspaces.workspace.jupyter.org',
+              '--as=system:serviceaccount:default:e2e-test',
+              '-n',
+              'e2e-team-b',
+            ],
+            { stdio: 'pipe' },
+          )
+            .toString()
+            .trim();
+        } catch {
+          return 'no';
+        }
+      },
+      { timeout: 30_000, intervals: [1_000] },
+    )
+    .toBe(allowed ? 'yes' : 'no');
+}
 
 /** Open the namespace switcher and pick a namespace by name. */
 async function switchNamespace(page: Page, ns: string) {
@@ -61,6 +99,15 @@ test.describe('Namespace selection', () => {
   });
   test.afterAll(() => {
     execFileSync('kubectl', ['--context', CONTEXT, 'delete', '-f', SHARED_TEMPLATE_FIXTURE, '--ignore-not-found'], { stdio: 'pipe' });
+  });
+
+  // Restores e2e-team-b access right after the revoke test, since the cleanup test needs it.
+  let teamBRevoked = false;
+  test.afterEach(async () => {
+    if (!teamBRevoked) return;
+    teamBRevoked = false;
+    execFileSync('kubectl', ['--context', CONTEXT, 'apply', '-f', SECOND_NAMESPACE_FIXTURE], { stdio: 'pipe' });
+    await waitForTeamBAccess(true);
   });
 
   test('switcher lists both accessible namespaces', async ({ page }) => {
@@ -110,6 +157,24 @@ test.describe('Namespace selection', () => {
     await page.getByRole('button', { name: /^all$/i }).click();
     await page.getByRole('textbox', { name: /search workspaces/i }).fill(RUN_ID);
     await expect(page.getByLabel(new RegExp(`${WS_NAME}.*workspace`, 'i'))).toBeHidden();
+  });
+
+  test('creating through a deep link lands back on that namespace, not the cookie one', async ({ page }) => {
+    await page.goto('/');
+    await switchNamespace(page, 'default');
+    await expectActiveNamespace(page, 'default');
+
+    await page.goto('/create?namespace=e2e-team-b');
+    await expect(page.getByText(/creating in e2e-team-b/i)).toBeVisible();
+    await page.getByRole('textbox', { name: /^name$/i }).fill(DEEPLINK_WS_NAME);
+    await page.getByRole('textbox', { name: /display name/i }).fill(DEEPLINK_WS_NAME);
+    await page.getByRole('button', { name: /create workspace/i }).click();
+
+    await expectOnPath(page, { namespace: 'e2e-team-b' });
+    await expectActiveNamespace(page, 'e2e-team-b');
+    await page.getByRole('button', { name: /^all$/i }).click();
+    await page.getByRole('textbox', { name: /search workspaces/i }).fill(DEEPLINK_WS_NAME);
+    await expect(page.getByLabel(new RegExp(`${DEEPLINK_WS_NAME}.*workspace`, 'i'))).toBeVisible({ timeout: 30_000 });
   });
 
   test('switching namespace changes the template set (default picker != e2e-team-b picker)', async ({ page }) => {
@@ -162,17 +227,34 @@ test.describe('Namespace selection', () => {
     await expectActiveNamespace(page, 'e2e-team-b', { checkUrl: true });
   });
 
-  test('cleanup: delete the test workspace', async ({ page }) => {
+  test('losing access to the active namespace drops the app back to the default one', async ({ page }) => {
+    // Without the RoleBinding the workspace list returns 403, and the app recomputes the
+    // visible namespaces and falls back to the default one.
+    await page.goto('/');
+    await switchNamespace(page, 'e2e-team-b');
+    await expectActiveNamespace(page, 'e2e-team-b');
+
+    execFileSync('kubectl', ['--context', CONTEXT, 'delete', 'rolebinding', 'e2e-test-binding', '-n', 'e2e-team-b'], { stdio: 'pipe' });
+    teamBRevoked = true;
+    await waitForTeamBAccess(false);
+    await page.goto('/?namespace=e2e-team-b');
+    await expectActiveNamespace(page, 'default', { checkUrl: true });
+  });
+
+  test('cleanup: delete the test workspaces', async ({ page }) => {
     await page.goto('/?namespace=e2e-team-b');
     await expectActiveNamespace(page, 'e2e-team-b');
     await page.getByRole('button', { name: /^all$/i }).click();
-    await page.getByRole('textbox', { name: /search workspaces/i }).fill(RUN_ID);
-    const card = page.getByLabel(new RegExp(`${WS_NAME}.*workspace`, 'i'));
-    if (await card.isVisible().catch(() => false)) {
-      await card.getByRole('button', { name: /more options/i }).click();
-      await page.getByRole('menuitem', { name: /delete/i }).click();
-      await expect(page.getByText(/are you sure you want to delete/i)).toBeVisible();
-      await page.getByRole('button', { name: /^delete$/i }).click();
+    for (const name of [WS_NAME, DEEPLINK_WS_NAME]) {
+      await page.getByRole('textbox', { name: /search workspaces/i }).fill(name);
+      const card = page.getByLabel(new RegExp(`${name}.*workspace`, 'i'));
+      if (await card.isVisible().catch(() => false)) {
+        await card.getByRole('button', { name: /more options/i }).click();
+        await page.getByRole('menuitem', { name: /delete/i }).click();
+        await expect(page.getByText(/are you sure you want to delete/i)).toBeVisible();
+        await page.getByRole('button', { name: /^delete$/i }).click();
+        await expect(card).toBeHidden({ timeout: 30_000 });
+      }
     }
   });
 });

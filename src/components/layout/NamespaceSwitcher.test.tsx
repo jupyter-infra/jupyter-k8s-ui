@@ -40,6 +40,7 @@ afterAll(() => {
 //     which three sibling files already mock with incompatible partial shapes.
 
 import { apiClient } from '../../api/client';
+import { strings } from '../../constants';
 
 // --- useNamespaces stub: a canned useInfiniteQuery-shaped result the test drives per-case ---
 type Page = { items: Array<{ namespace: string }>; offset: number; limit: number; hasMore: boolean };
@@ -256,5 +257,16 @@ describe('NamespaceSwitcher — load more (d)', () => {
     const item = screen.getByRole('menuitem', { name: /loading…/i });
     expect(item.getAttribute('aria-disabled')).toBe('true');
     expect(screen.queryByRole('menuitem', { name: /^load more$/i })).toBeNull();
+  });
+});
+
+describe('NamespaceSwitcher — no accessible namespaces (e)', () => {
+  test('an empty list shows the none message and offers neither items nor Load more', async () => {
+    pages = [pageOf([])];
+    renderSwitcher();
+    openMenu();
+    await waitFor(() => expect(screen.getByText(strings.namespace.noneTitle)).toBeDefined());
+    expect(screen.queryByText(/load more/i)).toBeNull();
+    expect(setActiveNamespace).not.toHaveBeenCalled();
   });
 });

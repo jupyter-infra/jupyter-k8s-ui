@@ -1,8 +1,9 @@
 import { describe, test, expect, mock, beforeEach, afterEach } from 'bun:test';
-import { renderHook, act, cleanup } from '@testing-library/react';
+import { renderHook, act, cleanup, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import React from 'react';
+import { AuthError } from '../api/auth-interceptor';
 
 const setMyNamespace = mock(async (ns: string) => ({ active: ns }));
 // listNamespaces reads a mutable response so recovery tests can script the recomputed
@@ -10,9 +11,13 @@ const setMyNamespace = mock(async (ns: string) => ({ active: ns }));
 type ListResponse = { items: Array<{ namespace: string }>; default: string | null };
 let listResponse: ListResponse = { items: [], default: null };
 const listNamespaces = mock(async () => listResponse);
+// getMyNamespace reads a mutable impl so the bootstrap-resilience tests can script a
+// transient/persistent failure and a recovery per test.
+let getMyNamespaceImpl: () => Promise<{ active: string }> = async () => ({ active: 'cookie-ns' });
+const getMyNamespace = mock(() => getMyNamespaceImpl());
 mock.module('../api/client', () => ({
   apiClient: {
-    getMyNamespace: mock(async () => ({ active: 'cookie-ns' })),
+    getMyNamespace,
     setMyNamespace,
     listNamespaces,
   },
@@ -21,7 +26,9 @@ mock.module('../api/client', () => ({
 const { NamespaceProvider, useNamespace, namespaceKeys } = await import('./NamespaceContext');
 
 function wrapper(initialEntries: string[], seedActive?: string) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  // retryDelay: 0 so the bootstrap's bounded retries resolve instantly under test. The
+  // per-query retry predicate in NamespaceProvider overrides the `retry: false` default.
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } });
   if (seedActive) client.setQueryData(namespaceKeys.active, { active: seedActive });
   return ({ children }: { children: React.ReactNode }) =>
     React.createElement(
@@ -34,6 +41,8 @@ function wrapper(initialEntries: string[], seedActive?: string) {
 beforeEach(() => {
   listNamespaces.mockClear();
   setMyNamespace.mockClear();
+  getMyNamespace.mockClear();
+  getMyNamespaceImpl = async () => ({ active: 'cookie-ns' });
   listResponse = { items: [], default: null };
 });
 afterEach(() => cleanup());
@@ -119,5 +128,88 @@ describe('NamespaceContext recoverFromForbidden', () => {
 
     expect(changed).toBe(false);
     expect(setMyNamespace).not.toHaveBeenCalled();
+  });
+});
+
+describe('NamespaceContext bootstrap resilience', () => {
+  test('a transient bootstrap failure retries, then resolves without wedging', async () => {
+    let attempts = 0;
+    getMyNamespaceImpl = async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error('transient');
+      return { active: 'cookie-ns' };
+    };
+    const { result } = renderHook(() => useNamespace(), { wrapper: wrapper(['/']) });
+
+    await waitFor(() => expect(result.current.activeNamespace).toBe('cookie-ns'));
+    expect(result.current.bootstrapError).toBeNull();
+    expect(attempts).toBeGreaterThanOrEqual(2);
+  });
+
+  test('a persistent failure surfaces bootstrapError with no active namespace; retryBootstrap shows progress, then recovers', async () => {
+    let healthy = false;
+    let release: (() => void) | undefined;
+    getMyNamespaceImpl = () => {
+      if (!healthy) return Promise.reject(new Error('down'));
+      // Held open until the test releases it, so the in-flight retry state is observable.
+      return new Promise((resolve) => {
+        release = () => resolve({ active: 'cookie-ns' });
+      });
+    };
+    const { result } = renderHook(() => useNamespace(), { wrapper: wrapper(['/']) });
+
+    await waitFor(() => expect(result.current.bootstrapError).not.toBeNull());
+    expect(result.current.activeNamespace).toBeUndefined();
+    expect(result.current.isBootstrapLoading).toBe(false);
+
+    healthy = true;
+    await act(async () => {
+      result.current.retryBootstrap();
+    });
+    await waitFor(() => expect(result.current.isBootstrapLoading).toBe(true));
+
+    await act(async () => {
+      release?.();
+    });
+    await waitFor(() => expect(result.current.activeNamespace).toBe('cookie-ns'));
+    expect(result.current.bootstrapError).toBeNull();
+    expect(result.current.isBootstrapLoading).toBe(false);
+  });
+
+  test('an auth failure is not retried (it routes to re-login instead)', async () => {
+    let attempts = 0;
+    getMyNamespaceImpl = async () => {
+      attempts += 1;
+      throw new AuthError('unauthorized');
+    };
+    const { result } = renderHook(() => useNamespace(), { wrapper: wrapper(['/']) });
+
+    await waitFor(() => expect(result.current.bootstrapError).not.toBeNull());
+    expect(attempts).toBe(1);
+  });
+});
+
+describe('NamespaceContext switch navigation', () => {
+  const useProbe = () => {
+    const ns = useNamespace();
+    const { pathname, search } = useLocation();
+    return { ns, location: pathname + search };
+  };
+
+  test('switching on a detail page returns to the list in the new namespace', async () => {
+    // A same-named workspace in the new namespace would be a different object.
+    const { result } = renderHook(useProbe, { wrapper: wrapper(['/workspace/ws-a?namespace=team-a'], 'team-a') });
+    await waitFor(() => expect(result.current.ns.activeNamespace).toBe('team-a'));
+    act(() => result.current.ns.setActiveNamespace('team-b'));
+    await waitFor(() => expect(result.current.location).toBe('/?namespace=team-b'));
+    expect(result.current.ns.activeNamespace).toBe('team-b');
+  });
+
+  test('switching on the list keeps the route and rewrites the namespace param', async () => {
+    const { result } = renderHook(useProbe, { wrapper: wrapper(['/?namespace=team-a'], 'team-a') });
+    await waitFor(() => expect(result.current.ns.activeNamespace).toBe('team-a'));
+    act(() => result.current.ns.setActiveNamespace('team-b'));
+    await waitFor(() => expect(result.current.location).toBe('/?namespace=team-b'));
+    expect(setMyNamespace).toHaveBeenCalledWith('team-b');
   });
 });

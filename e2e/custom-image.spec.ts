@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { expectOnPath } from './test-utils';
+import { expectOnPath, waitForCardStatusByName } from './test-utils';
 
 // Free-solo image path: a template with allowCustomImages:true AND a curated allowedImages
 // list (e2e/fixtures/custom-image-template.yaml). The image control must be an editable
@@ -9,22 +9,6 @@ import { expectOnPath } from './test-utils';
 
 const RUN_ID = `e2e-img-${Date.now()}`;
 const WS_NAME = `${RUN_ID}-ws`;
-
-async function waitForCardStatus(page: Page, name: string, statusText: string) {
-  const card = page.getByLabel(new RegExp(`${name}.*workspace`, 'i'));
-  await expect
-    .poll(
-      async () => {
-        await page.getByRole('button', { name: /refresh/i }).click();
-        return card
-          .getByText(statusText, { exact: true })
-          .isVisible()
-          .catch(() => false);
-      },
-      { timeout: 30_000, intervals: [2_000] },
-    )
-    .toBeTruthy();
-}
 
 async function deleteWorkspace(page: Page, name: string) {
   await page.goto('/');
@@ -79,7 +63,7 @@ test.describe('Custom-image (free-solo) template', () => {
     await expectOnPath(page);
 
     await page.getByRole('button', { name: /all/i }).click();
-    await waitForCardStatus(page, WS_NAME, 'Running');
+    await waitForCardStatusByName(page, WS_NAME, 'Running');
 
     // The typed image landed on the workspace (detail pill shows the short name:tag).
     await page.goto(`/workspace/${WS_NAME}`);

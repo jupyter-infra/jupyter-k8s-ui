@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { handleK8sError } from '../responses';
+import { get409ErrorMessage, handleK8sError } from '../responses';
 
 describe('handleK8sError', () => {
   // Each mapped status code is a contract with the frontend — if the map changes,
@@ -8,7 +8,6 @@ describe('handleK8sError', () => {
     [401, 'Unauthorized'],
     [403, 'Forbidden'],
     [404, 'not found'],
-    [409, 'already exists'],
     [422, 'Unprocessable'],
   ])('maps K8s %d to matching message', async (statusCode, expectedText) => {
     const err = Object.assign(new Error('x'), { statusCode });
@@ -16,6 +15,15 @@ describe('handleK8sError', () => {
     expect(res.status).toBe(statusCode);
     const body = (await res.json()) as { error: string };
     expect(body.error.toLowerCase()).toContain(expectedText.toLowerCase());
+  });
+
+  test('maps a 409 with reason Conflict to a concurrent-modification message', async () => {
+    const err = Object.assign(new Error('x'), { statusCode: 409, body: { reason: 'Conflict', message: 'the object has been modified' } });
+    const res = handleK8sError(err, 'fallback');
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string; details: string };
+    expect(body.error).toContain('modified concurrently');
+    expect(body.details).toBe('the object has been modified');
   });
 
   test('returns 500 with fallback message for unmapped status', async () => {
@@ -66,5 +74,19 @@ describe('handleK8sError', () => {
     const res = handleK8sError(err, 'fallback');
     const body = (await res.json()) as { details: string };
     expect(body.details).toContain('bad thing happened');
+  });
+});
+
+describe('get409ErrorMessage', () => {
+  test('reason Conflict reads as a concurrent modification', () => {
+    expect(get409ErrorMessage('Conflict')).toBe('Conflict — the resource was modified concurrently, try again');
+  });
+
+  test('reason AlreadyExists reads as an existing resource', () => {
+    expect(get409ErrorMessage('AlreadyExists')).toBe('Resource already exists');
+  });
+
+  test('a missing reason reads as an existing resource', () => {
+    expect(get409ErrorMessage(undefined)).toBe('Resource already exists');
   });
 });

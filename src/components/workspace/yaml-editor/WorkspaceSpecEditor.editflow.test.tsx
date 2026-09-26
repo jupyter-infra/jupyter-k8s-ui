@@ -68,7 +68,9 @@ function renderEditPage() {
 describe('edit flow — real hooks + StrictMode', () => {
   beforeEach(() => {
     cleanup();
-    globalThis.fetch = mock(async () => new Response(JSON.stringify({ authenticated: true, displayUser: 'alice' }), { status: 200 })) as typeof fetch;
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify({ authenticated: true, user: { displayUser: 'alice', k8sUser: 'alice' } }), { status: 200 }),
+    ) as typeof fetch;
   });
   afterEach(() => {
     globalThis.fetch = realFetch;

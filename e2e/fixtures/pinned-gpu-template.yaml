@@ -1,0 +1,40 @@
+# GPU template with every resource axis pinned (min equals max on cpu, memory and the GPU), for
+# e2e/pinned-template.spec.ts: the create form has nothing editable, so it must omit
+# spec.resources and let the operator stamp defaultResources, accelerator request included.
+# Storage keeps a range so the spec can check spec.storage still rides on the same submit. The
+# bounds and defaults mirror the eks-oidc template's GPU card.
+apiVersion: workspace.jupyter.org/v1alpha1
+kind: WorkspaceTemplate
+metadata:
+  name: pinned-gpu
+  namespace: default
+  labels:
+    workspace.jupyter.org/default-template: 'false'
+spec:
+  displayName: Pinned GPU
+  description: Fully pinned GPU template for e2e
+  defaultImage: nginx:latest
+  resourceBounds:
+    resources:
+      cpu:
+        min: 500m
+        max: 500m
+      memory:
+        min: 1Gi
+        max: 1Gi
+      nvidia.com/gpu:
+        min: '1'
+        max: '1'
+  defaultResources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+      nvidia.com/gpu: '1'
+    limits:
+      cpu: 500m
+      memory: 1Gi
+      nvidia.com/gpu: '1'
+  primaryStorage:
+    defaultSize: 5Gi
+    minSize: 5Gi
+    maxSize: 10Gi

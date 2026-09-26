@@ -18,10 +18,10 @@
 //     it would let the operator's defaulter re-enable idle from the template default).
 //   — storage read-only on edit.
 //   Identity: name read-only (immutable); displayName editable.
-//   Save: selective PATCH, no desiredStatus (stay Stopped), navigate to '/'.
+//   Save: selective PATCH, no desiredStatus (stay Stopped), navigate back to the list.
 
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNamespacedNavigate } from '../../hooks';
 import { Alert, Box, Button, CircularProgress, Paper, Stack, TextField, Tooltip, Typography } from '@mui/material';
 import { LockOutlined } from '@mui/icons-material';
 import { useTemplates, useUpdateWorkspace } from '../../api';
@@ -40,6 +40,7 @@ import {
   type ConformAdjustment,
   type ResolvedTemplateControls,
   shouldEmitAccelerator,
+  findTemplateByRef,
 } from '../../utils';
 import { WorkspaceResourceForm, type WorkspaceFormValues } from './WorkspaceResourceForm';
 import { LockedTemplateField } from './LockedTemplateField';
@@ -128,20 +129,19 @@ function seedFromSpec(
 }
 
 export function SimpleWorkspaceEditor({ workspace, displayName, onDisplayNameChange, onSwitchToYaml }: SimpleWorkspaceEditorProps) {
-  const navigate = useNavigate();
+  const navigate = useNamespacedNavigate();
   const { workspace: ws, common } = strings;
   const updateMutation = useUpdateWorkspace();
   const templatesQuery = useTemplates();
 
   const storedRef = workspace.spec.templateRef;
 
-  // Resolve the workspace's template from the shared cache (match on name + namespace).
-  // Unresolvable (RBAC-invisible / deleted) → null template but preserve the ref.
-  const resolvedTemplate = useMemo<DiscoveredTemplate | null>(() => {
-    if (!storedRef) return null;
-    const items = templatesQuery.data?.items ?? [];
-    return items.find((t) => t.metadata.name === storedRef.name && (storedRef.namespace === undefined || t.metadata.namespace === storedRef.namespace)) ?? null;
-  }, [storedRef, templatesQuery.data]);
+  // Resolve the workspace's template from the templates query. Unresolvable
+  // (RBAC-invisible / deleted) → null template but preserve the ref.
+  const resolvedTemplate = useMemo<DiscoveredTemplate | null>(
+    () => findTemplateByRef(templatesQuery.data?.items, storedRef, workspace.metadata.namespace, templatesQuery.data?.namespaces?.shared),
+    [storedRef, templatesQuery.data, workspace.metadata.namespace],
+  );
 
   // Ref set but not found in the discoverable list → treat as unresolvable.
   const refUnresolvable = Boolean(storedRef) && resolvedTemplate === null && !templatesQuery.isLoading;

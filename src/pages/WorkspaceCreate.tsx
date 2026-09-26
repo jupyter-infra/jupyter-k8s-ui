@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNamespacedNavigate } from '../hooks';
 import { Typography, TextField, Button, Stack, Container, Paper, Alert, CircularProgress } from '@mui/material';
 import { useCreateWorkspace, useWorkspaces, useTemplates } from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -11,7 +11,7 @@ import { WorkspaceResourceForm, type WorkspaceFormValues } from '../components/w
 import { WorkspaceSpecEditor } from '../components/workspace/yaml-editor/WorkspaceSpecEditor';
 import type { CreateWorkspaceRequest, DiscoveredTemplate } from '../types';
 import { strings } from '../constants';
-import { sanitizeK8sName, resolveTemplateControls, buildResourcesBlock, clamp } from '../utils';
+import { sanitizeK8sName, resolveTemplateControls, buildCreateResources, clamp } from '../utils';
 
 function generateDefaults(username: string, existingCount: number) {
   const n = existingCount + 1;
@@ -33,7 +33,7 @@ interface Touched {
 }
 
 export function WorkspaceCreate() {
-  const navigate = useNavigate();
+  const navigate = useNamespacedNavigate();
   const createMutation = useCreateWorkspace();
   const { user } = useAuth();
   const { activeNamespace } = useNamespace();
@@ -153,12 +153,13 @@ export function WorkspaceCreate() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // WYSIWYG: send exactly what the form displays. Complete resources block so the
-    // wholesale overlay doesn't wipe requests.
+    // No resources block when the template pins every axis with matching defaults, so the
+    // operator's admission webhook writes them; the complete block otherwise (#69).
+    const resources = buildCreateResources(controls, values.cpu, values.memory, values.accelerators);
     const request: CreateWorkspaceRequest = {
       name,
       displayName: displayName || name,
-      resources: buildResourcesBlock(controls, values.cpu, values.memory, values.accelerators),
+      ...(resources && { resources }),
       storage: { size: `${values.storage}Gi` },
       accessType: values.accessType,
       ownershipType: controls.ownershipType, // not derived from accessType

@@ -1,7 +1,7 @@
 import { Card, CardContent, Typography, IconButton, Chip, Button, Menu, MenuItem, ListItemIcon, Stack, Box, Divider } from '@mui/material';
 import { PlayArrow, Stop, OpenInNew, MoreVert, Delete, Circle, Speed, Memory, DeveloperBoard, Storage, Info, Edit } from '@mui/icons-material';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNamespacedNavigate } from '../../hooks';
 import type { Workspace } from '../../types';
 import { useStartWorkspace, useStopWorkspace, useDeleteWorkspace } from '../../api';
 import { useAuth } from '../../context';
@@ -25,7 +25,7 @@ interface WorkspaceCardProps {
 
 export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
   const { user } = useAuth();
-  const navigate = useNavigate();
+  const navigate = useNamespacedNavigate();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const startMutation = useStartWorkspace();
@@ -58,8 +58,8 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
     setDeleteDialogOpen(true);
   };
 
-  const handleViewDetails = () => navigate(`/workspace/${metadata.name}`);
-  const handleEdit = () => navigate(`/workspace/${metadata.name}/edit`);
+  const handleViewDetails = () => navigate(`/workspace/${metadata.name}`, { namespace: metadata.namespace });
+  const handleEdit = () => navigate(`/workspace/${metadata.name}/edit`, { namespace: metadata.namespace });
 
   // Advanced edit is offered only to the owner and only while Stopped, to avoid
   // mutating a live workspace's spec (for now).

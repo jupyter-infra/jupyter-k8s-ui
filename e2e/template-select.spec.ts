@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { expectOnPath } from './test-utils';
+import { expectOnPath, waitForCardStatusByName } from './test-utils';
 
 // Template SELECTION behaviors, exercised against the real cluster with TWO template
 // fixtures: `default` (flagged default, appType jupyterlab) and `alt-template` (non-default,
@@ -20,22 +20,6 @@ async function waitForMonaco(page: Page) {
 }
 
 /** Click Refresh on the list until the named card shows the expected status. */
-async function waitForCardStatus(page: Page, name: string, statusText: string) {
-  const card = page.getByLabel(new RegExp(`${name}.*workspace`, 'i'));
-  await expect
-    .poll(
-      async () => {
-        await page.getByRole('button', { name: /refresh/i }).click();
-        return card
-          .getByText(statusText, { exact: true })
-          .isVisible()
-          .catch(() => false);
-      },
-      { timeout: 30_000, intervals: [2_000] },
-    )
-    .toBeTruthy();
-}
-
 async function deleteWorkspace(page: Page, name: string) {
   await page.goto('/');
   await page.getByRole('button', { name: /all/i }).click();
@@ -108,7 +92,7 @@ test.describe('Template selection', () => {
     await expectOnPath(page);
 
     await page.getByRole('button', { name: /all/i }).click();
-    await waitForCardStatus(page, ALT_WS, 'Running');
+    await waitForCardStatusByName(page, ALT_WS, 'Running');
   });
 
   test('list card shows the template pill and the appType logo', async ({ page }) => {
@@ -206,7 +190,7 @@ test.describe('Template selection', () => {
     await page.getByRole('button', { name: /create workspace/i }).click();
     await expectOnPath(page);
     await page.getByRole('button', { name: /all/i }).click();
-    await waitForCardStatus(page, IDLE_WS, 'Running');
+    await waitForCardStatusByName(page, IDLE_WS, 'Running');
 
     // Detail confirms idle PERSISTED as disabled (not re-enabled by the operator defaulter).
     await page.goto(`/workspace/${IDLE_WS}`);

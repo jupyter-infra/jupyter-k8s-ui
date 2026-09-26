@@ -8,6 +8,7 @@ const mockedK8s = {
   get: mock(async () => ({ body: buildK8sWorkspace('ws-1') })),
   create: mock(async () => ({ body: buildK8sWorkspace('ws-1') })),
   replace: mock(async () => ({ body: buildK8sWorkspace('ws-1') })),
+  patch: mock(async () => ({ body: buildK8sWorkspace('ws-1') })),
   del: mock(async () => ({ body: {} })),
 };
 
@@ -24,6 +25,7 @@ mock.module('../k8s/client', () => ({
     getNamespacedCustomObject: mockedK8s.get,
     createNamespacedCustomObject: mockedK8s.create,
     replaceNamespacedCustomObject: mockedK8s.replace,
+    patchNamespacedCustomObject: mockedK8s.patch,
     deleteNamespacedCustomObject: mockedK8s.del,
   }),
   reuseOrCreateAuthnClient: async () => ({}),
@@ -57,14 +59,20 @@ interface CreatedObj {
 // two helpers — call sites get full type safety via the return types.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const lastCreated = (): CreatedObj => (mockedK8s.create.mock.calls.at(-1) as any)[4];
+
+type PatchOp = { op: string; path: string; value?: unknown };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const lastReplaced = (): { spec: Record<string, unknown> } => (mockedK8s.replace.mock.calls.at(-1) as any)[5];
+const lastPatch = (): PatchOp[] => (mockedK8s.patch.mock.calls.at(-1) as any)[5];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const lastPatchHeaders = (): Record<string, string> => (mockedK8s.patch.mock.calls.at(-1) as any)[9]?.headers;
+const patchValue = (path: string): unknown => lastPatch().find((o) => o.path === path)?.value;
 
 beforeEach(() => {
   mockedK8s.list.mockClear();
   mockedK8s.get.mockClear();
   mockedK8s.create.mockClear();
   mockedK8s.replace.mockClear();
+  mockedK8s.patch.mockClear();
   mockedK8s.del.mockClear();
 });
 
@@ -186,59 +194,53 @@ describe('handleCreateWorkspace', () => {
 });
 
 describe('handleUpdateWorkspace', () => {
-  test('merges body fields into existing spec, leaving unspecified fields untouched', async () => {
-    mockedK8s.get.mockImplementationOnce(async () => ({
-      body: {
-        apiVersion: 'workspace.jupyter.org/v1alpha1',
-        kind: 'Workspace',
-        metadata: { name: 'ws', namespace: 'test-ns' },
-        spec: { displayName: 'old', image: 'old:img', desiredStatus: 'Running' },
-      },
-    }));
-
+  test('patches only the fields the body carries, without reading the object first', async () => {
     await handleUpdateWorkspace('jwt', 'test-ns', 'ws', jsonRequest({ displayName: 'new' }, 'PUT'));
 
-    const updated = lastReplaced();
-    expect(updated.spec.displayName).toBe('new');
-    expect(updated.spec.image).toBe('old:img'); // preserved
-    expect(updated.spec.desiredStatus).toBe('Running'); // preserved
+    expect(mockedK8s.get).not.toHaveBeenCalled();
+    expect(lastPatch()).toEqual([{ op: 'add', path: '/spec/displayName', value: 'new' }]);
+  });
+
+  // A JSON Patch carries no resourceVersion, so the operator's status writes on the same
+  // object cannot make it fail with a conflict.
+  test('sends the patch with the json-patch content type', async () => {
+    await handleUpdateWorkspace('jwt', 'test-ns', 'ws', jsonRequest({ desiredStatus: 'Stopped' }, 'PATCH'));
+
+    expect(lastPatchHeaders()).toEqual({ 'Content-Type': 'application/json-patch+json' });
+    expect(patchValue('/spec/desiredStatus')).toBe('Stopped');
   });
 
   test('renames idleShutdown.timeoutInMinutes on update too', async () => {
-    mockedK8s.get.mockImplementationOnce(async () => ({ body: buildK8sWorkspace('ws') }));
-
     await handleUpdateWorkspace('jwt', 'test-ns', 'ws', jsonRequest({ idleShutdown: { enabled: true, timeoutInMinutes: 45 } }, 'PATCH'));
-
-    const updated = lastReplaced();
-    expect(updated.spec.idleShutdown).toEqual({ enabled: true, idleTimeoutInMinutes: 45 });
+    expect(patchValue('/spec/idleShutdown')).toEqual({ enabled: true, idleTimeoutInMinutes: 45 });
   });
 
   // The wholesale idleShutdown replace must carry detection through on update, since
   // the client echoes the workspace's own detection verbatim (no server-side merge).
   test('passes idleShutdown.detection through update verbatim', async () => {
-    mockedK8s.get.mockImplementationOnce(async () => ({ body: buildK8sWorkspace('ws') }));
     const detection = { httpGet: { path: '/api/status', port: 8888 } };
-
     await handleUpdateWorkspace('jwt', 'test-ns', 'ws', jsonRequest({ idleShutdown: { enabled: true, timeoutInMinutes: 45, detection } }, 'PATCH'));
-
-    const updated = lastReplaced();
-    expect(updated.spec.idleShutdown).toEqual({ enabled: true, idleTimeoutInMinutes: 45, detection });
+    expect(patchValue('/spec/idleShutdown')).toEqual({ enabled: true, idleTimeoutInMinutes: 45, detection });
   });
 
   test('rejects invalid accessType with 400 before touching K8s', async () => {
     const res = await handleUpdateWorkspace('jwt', 'test-ns', 'ws', jsonRequest({ accessType: 'Private' }, 'PATCH'));
     expect(res.status).toBe(400);
-    expect(mockedK8s.get).not.toHaveBeenCalled();
-    expect(mockedK8s.replace).not.toHaveBeenCalled();
+    expect(mockedK8s.patch).not.toHaveBeenCalled();
+  });
+
+  test('rejects a body with no updatable field with 400 before touching K8s', async () => {
+    const res = await handleUpdateWorkspace('jwt', 'test-ns', 'ws', jsonRequest({ desired_status: 'Stopped' }, 'PATCH'));
+    expect(res.status).toBe(400);
+    expect(mockedK8s.patch).not.toHaveBeenCalled();
   });
 
   test('returns 404 when workspace does not exist', async () => {
-    mockedK8s.get.mockImplementationOnce(async () => {
+    mockedK8s.patch.mockImplementationOnce(async () => {
       throw Object.assign(new Error('not found'), { statusCode: 404 });
     });
     const res = await handleUpdateWorkspace('jwt', 'test-ns', 'missing', jsonRequest({ displayName: 'x' }, 'PUT'));
     expect(res.status).toBe(404);
-    expect(mockedK8s.replace).not.toHaveBeenCalled();
   });
 });
 
@@ -276,11 +278,11 @@ function advancedRequest(body: unknown, method = 'POST', dryRun = false) {
   return new Request(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 }
 
-// dryRun is the 7th positional arg (index 6) on both create and replace.
+// dryRun is the 7th positional arg (index 6) on both create and patch.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const lastCreateDryRun = (): unknown => (mockedK8s.create.mock.calls.at(-1) as any)[6];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const lastReplaceDryRun = (): unknown => (mockedK8s.replace.mock.calls.at(-1) as any)[6];
+const lastPatchDryRun = (): unknown => (mockedK8s.patch.mock.calls.at(-1) as any)[6];
 
 describe('advanced create (raw spec)', () => {
   test('uses the raw spec verbatim instead of building from form fields', async () => {
@@ -296,7 +298,7 @@ describe('advanced create (raw spec)', () => {
     expect(obj.spec).not.toHaveProperty('ownershipType');
   });
 
-  test('merges the hoisted templateRef into the spec', async () => {
+  test('merges the top-level templateRef into the spec', async () => {
     await handleCreateWorkspace('jwt', 'test-ns', advancedRequest({ name: 'adv-ws', templateRef: { name: 'gpu-small' }, spec: { displayName: 'Adv' } }));
     const obj = lastCreated();
     expect(obj.spec.templateRef).toEqual({ name: 'gpu-small' });
@@ -325,27 +327,32 @@ describe('dry-run threading', () => {
 
   test('update passes dryRun=All and returns {valid:true}', async () => {
     const res = await handleUpdateWorkspace('jwt', 'test-ns', 'ws-1', advancedRequest({ name: 'ws-1', spec: { displayName: 'x' } }, 'PUT', true));
-    expect(lastReplaceDryRun()).toBe('All');
+    expect(lastPatchDryRun()).toBe('All');
     expect(await res.json()).toEqual({ valid: true });
   });
 });
 
-describe('advanced update does a full spec replace', () => {
-  test('replaces the whole spec so removed fields disappear', async () => {
-    // Existing ws-1 has { displayName, desiredStatus }. Advanced update sends only
-    // displayName — desiredStatus must NOT survive (WYSIWYG replace, not merge).
+describe('advanced update replaces the whole spec', () => {
+  test('patches /spec as one value so removed fields disappear', async () => {
+    // The editor buffer is the desired spec: a field absent from it must not survive.
     await handleUpdateWorkspace('jwt', 'test-ns', 'ws-1', advancedRequest({ name: 'ws-1', spec: { displayName: 'only-this' } }, 'PUT'));
-    const obj = lastReplaced();
-    expect(obj.spec).toEqual({ displayName: 'only-this' });
-    expect(obj.spec).not.toHaveProperty('desiredStatus');
+    expect(lastPatch()).toEqual([{ op: 'add', path: '/spec', value: { displayName: 'only-this' } }]);
   });
 
-  test('simple-form update still merges (desiredStatus preserved)', async () => {
-    // Contrast: the field-shaped body overlays onto the existing spec.
+  test('merges the top-level templateRef into the replaced spec', async () => {
+    await handleUpdateWorkspace(
+      'jwt',
+      'test-ns',
+      'ws-1',
+      advancedRequest({ name: 'ws-1', templateRef: { name: 'gpu-small' }, spec: { displayName: 'x' } }, 'PUT'),
+    );
+    expect(patchValue('/spec')).toEqual({ displayName: 'x', templateRef: { name: 'gpu-small' } });
+  });
+
+  test('a field-shaped body touches only its own paths', async () => {
+    // Nothing else in the spec is written, so desiredStatus is preserved.
     await handleUpdateWorkspace('jwt', 'test-ns', 'ws-1', jsonRequest({ displayName: 'merged' }, 'PUT'));
-    const obj = lastReplaced();
-    expect(obj.spec.displayName).toBe('merged');
-    expect(obj.spec.desiredStatus).toBe('Running'); // preserved from existing
+    expect(lastPatch().map((o) => o.path)).toEqual(['/spec/displayName']);
   });
 });
 
@@ -363,7 +370,7 @@ describe('accelerator keys relay verbatim', () => {
       'ws-1',
       jsonRequest({ resources: { limits: { cpu: '1', memory: '2Gi', 'nvidia.com/mig-1g.5gb': '1' } } }, 'PATCH'),
     );
-    const spec = lastReplaced().spec as { resources?: { limits?: Record<string, string> } };
-    expect(spec.resources?.limits?.['nvidia.com/mig-1g.5gb']).toBe('1');
+    const resources = patchValue('/spec/resources') as { limits?: Record<string, string> };
+    expect(resources.limits?.['nvidia.com/mig-1g.5gb']).toBe('1');
   });
 });

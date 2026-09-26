@@ -1,8 +1,10 @@
-import { Outlet, Link } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import { AppBar, Toolbar, Typography, Container, Skeleton, Box, Stack, IconButton, Tooltip } from '@mui/material';
 import { Terminal } from '@mui/icons-material';
 import { useAuth } from '../../context';
 import { ThemeSwitcher } from '../ui/ThemeSwitcher';
+import { NamespacedLink } from '../ui/NamespacedLink';
+import { NamespaceGate } from './NamespaceGate';
 import { UserMenu } from './UserMenu';
 import { NamespaceSwitcher } from './NamespaceSwitcher';
 import { strings } from '../../constants';
@@ -25,7 +27,7 @@ export function Layout() {
         }}
       >
         <Toolbar className={styles.toolbar}>
-          <Link to="/" className={styles.logoLink} aria-label={strings.a11y.homeLink}>
+          <NamespacedLink to="/" className={styles.logoLink} aria-label={strings.a11y.homeLink}>
             <Box className={styles.logoBox} aria-hidden="true">
               <Typography component="span" className={styles.logoText}>
                 {strings.app.logo}
@@ -34,14 +36,14 @@ export function Layout() {
             <Typography variant="h6" component="span" className={styles.brandText}>
               {strings.app.name}
             </Typography>
-          </Link>
+          </NamespacedLink>
 
           <Box sx={{ flex: 1 }} />
 
           <Stack direction="row" alignItems="center" gap={1}>
             <NamespaceSwitcher />
             <Tooltip title={strings.kubectl.navTooltip}>
-              <IconButton component={Link} to="/kubectl" size="small" aria-label={strings.kubectl.navAriaLabel}>
+              <IconButton component={NamespacedLink} to="/kubectl" size="small" aria-label={strings.kubectl.navAriaLabel}>
                 <Terminal fontSize="small" />
               </IconButton>
             </Tooltip>
@@ -55,7 +57,9 @@ export function Layout() {
 
       <Box component="main" sx={{ flex: 1 }}>
         <Container maxWidth="lg" className={styles.container}>
-          <Outlet />
+          <NamespaceGate>
+            <Outlet />
+          </NamespaceGate>
         </Container>
       </Box>
     </Box>
