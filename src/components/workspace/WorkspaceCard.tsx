@@ -8,6 +8,7 @@ import { useAuth } from '../../context';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import {
   getWorkspaceStatus,
+  getWorkspaceStatusLabel,
   getStatusChipColor,
   isOwner as checkIsOwner,
   getWorkspaceOwner,
@@ -38,6 +39,8 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
   // no pill.
   const templateLabel = spec.templateRef?.name ?? null;
   const workspaceStatus = getWorkspaceStatus(workspace);
+  // The chip text and its hover message. Color and the action buttons stay keyed on the status word.
+  const { label: statusLabel, title: statusTitle } = getWorkspaceStatusLabel(workspace);
   const accessURL = status?.accessURL;
 
   const owner = getWorkspaceOwner(workspace);
@@ -75,7 +78,7 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
 
   return (
     <>
-      <Card className={styles.card} aria-label={strings.a11y.workspaceCard(spec.displayName ?? metadata.name, workspaceStatus)}>
+      <Card className={styles.card} aria-label={strings.a11y.workspaceCard(spec.displayName ?? metadata.name, statusLabel)}>
         <CardContent className={styles.cardContent}>
           <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
             <Stack direction="row" gap={1.5} sx={{ flex: 1, minWidth: 0 }}>
@@ -99,7 +102,14 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
           </Stack>
 
           <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 2.5, flexWrap: 'wrap' }}>
-            <Chip icon={<Circle sx={{ fontSize: 8 }} />} label={workspaceStatus} size="small" color={getStatusChipColor(workspaceStatus)} variant="outlined" />
+            <Chip
+              icon={<Circle sx={{ fontSize: 8 }} />}
+              label={statusLabel}
+              title={statusTitle}
+              size="small"
+              color={getStatusChipColor(workspaceStatus)}
+              variant="outlined"
+            />
             <Chip label={spec.image?.split('/').pop() ?? spec.image} size="small" variant="outlined" className={styles.imageChip} title={spec.image} />
             {templateLabel && <Chip label={templateLabel} size="small" variant="outlined" className={styles.imageChip} title={templateLabel} />}
             {/* "Private" reflects accessType (who can connect) — matching the create/edit

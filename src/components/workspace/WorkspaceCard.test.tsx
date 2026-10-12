@@ -188,6 +188,29 @@ describe('WorkspaceCard accelerator chip', () => {
   });
 });
 
+describe('WorkspaceCard status detail', () => {
+  test('a Starting card names the recorded step and shows the message on hover', async () => {
+    const message = 'Waiting for a node to run the pod';
+    const ws = makeWorkspace({
+      owner: 'alice',
+      status: { accessURL: '', conditions: [{ type: 'Progressing', status: 'True', reason: 'WaitingForNode', message }] },
+    });
+    await renderCard(ws);
+    expect(screen.getByTitle(message).textContent).toBe('Starting: waiting for node');
+    expect(screen.getByLabelText('Test WS workspace, Starting: waiting for node')).toBeDefined();
+  });
+
+  test('without a reason the chip has no hover text and the accessible name is the bare word', async () => {
+    const ws = makeWorkspace({
+      owner: 'alice',
+      status: { accessURL: '', conditions: [{ type: 'Progressing', status: 'True', reason: '', message: '' }] },
+    });
+    await renderCard(ws);
+    expect(screen.getByText('Starting').closest('[title]')).toBeNull();
+    expect(screen.getByLabelText('Test WS workspace, Starting')).toBeDefined();
+  });
+});
+
 describe('WorkspaceCard navigation', () => {
   test('Details navigates carrying the workspace namespace', async () => {
     // A bare /workspace/<name> would resolve the detail fetch against the cookie's
