@@ -224,6 +224,13 @@ describe('useWorkspaces — poll interval', () => {
     expect(await nextListInterval()).toBe(DETAIL_POLL_INTERVAL_MS);
   });
 
+  test('a start older than the bound polls at the list rate', async () => {
+    mockList.mockImplementation(async () => [
+      makeWorkspace('a', 'Running', [{ type: 'Progressing', status: 'True', lastTransitionTime: new Date(Date.now() - 16 * 60_000).toISOString() }]),
+    ]);
+    expect(await nextListInterval()).toBe(LIST_POLL_INTERVAL_MS);
+  });
+
   test('an auth error stops polling', async () => {
     mockList.mockImplementation(async () => {
       throw new AuthError('401');

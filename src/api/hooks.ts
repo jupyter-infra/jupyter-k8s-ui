@@ -73,7 +73,8 @@ export function useWorkspaces() {
     // keeps up with the cluster.
     refetchInterval: (query) => {
       if (query.state.error && isAuthError(query.state.error)) return false;
-      return query.state.data?.some(isWorkspaceTransitioning) ? DETAIL_POLL_INTERVAL_MS : LIST_POLL_INTERVAL_MS;
+      // Arrow, not the bare function: some() would pass the index as the second argument, `now`.
+      return query.state.data?.some((w) => isWorkspaceTransitioning(w)) ? DETAIL_POLL_INTERVAL_MS : LIST_POLL_INTERVAL_MS;
     },
     refetchIntervalInBackground: false,
   });
