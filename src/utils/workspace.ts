@@ -175,15 +175,18 @@ export function isOwner(owner: string | undefined, k8sUser: string | null | unde
   return owner === k8sUser;
 }
 
+// Structural so callers can pass a full Workspace or only its spec and conditions.
+interface WorkspaceConditions {
+  spec: { desiredStatus?: string };
+  status?: { conditions?: Array<{ type: string; status: string; reason?: string; message?: string }> };
+}
+
 /**
  * Derive a single display status from workspace conditions.
  * Priority: Deleting > Degraded > Progressing (Starting/Stopping) > Available > Stopped.
  * Falls back to desiredStatus when no conditions exist (before first controller reconcile).
  */
-export function getWorkspaceStatus(workspace: {
-  spec: { desiredStatus?: string };
-  status?: { conditions?: Array<{ type: string; status: string }> };
-}): WorkspaceStatus {
+export function getWorkspaceStatus(workspace: WorkspaceConditions): WorkspaceStatus {
   const conditions = workspace.status?.conditions ?? [];
   const has = (type: string) => conditions.some((c) => c.type === type && c.status === 'True');
 
@@ -195,6 +198,36 @@ export function getWorkspaceStatus(workspace: {
 
   if (!conditions.length) return workspace.spec.desiredStatus === 'Running' ? 'Starting' : 'Stopped';
   return 'Unknown';
+}
+
+// Progressing reasons the operator sets while a start is under way; any other reason leaves the
+// bare status word.
+const START_STEP_PHRASES = new Map<string, string>([
+  ['WaitingForNode', strings.workspace.startStepWaitingForNode],
+  ['PullingImage', strings.workspace.startStepPullingImage],
+  ['StartingContainer', strings.workspace.startStepStartingContainer],
+]);
+
+export interface WorkspaceStatusLabel {
+  // The status word, followed by the start step or the Degraded reason when the operator recorded one.
+  label: string;
+  // The message recorded on the condition the label is derived from; shown on hover.
+  title?: string;
+}
+
+// What the status chip shows. Starting names the step the Progressing reason records and Degraded
+// names the Degraded reason verbatim; every other status is the bare word with no hover text.
+export function getWorkspaceStatusLabel(workspace: WorkspaceConditions): WorkspaceStatusLabel {
+  const status = getWorkspaceStatus(workspace);
+  if (status !== 'Starting' && status !== 'Degraded') return { label: status };
+  const type = status === 'Starting' ? 'Progressing' : 'Degraded';
+  const condition = workspace.status?.conditions?.find((c) => c.type === type && c.status === 'True');
+  const reason = condition?.reason ?? '';
+  const detail = status === 'Starting' ? START_STEP_PHRASES.get(reason) : reason;
+  return {
+    label: detail ? strings.workspace.statusDetail(status, detail) : status,
+    title: condition?.message || undefined,
+  };
 }
 
 // Default 63: workspace names are used in DNS labels. Server allows up to 253 (K8s resource limit).

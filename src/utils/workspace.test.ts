@@ -7,6 +7,7 @@ import {
   parseCpuCores,
   isOwner,
   getWorkspaceStatus,
+  getWorkspaceStatusLabel,
   getStatusChipColor,
   isValidK8sName,
   sanitizeK8sName,
@@ -167,6 +168,50 @@ describe('getWorkspaceStatus', () => {
 
   test('no conditions + Stopped → Stopped (pre-reconcile)', () => {
     expect(getWorkspaceStatus({ spec: { desiredStatus: 'Stopped' }, status: { conditions: [] } })).toBe('Stopped');
+  });
+});
+
+describe('getWorkspaceStatusLabel', () => {
+  const withCondition = (desiredStatus: string, type: string, reason: string, message = '') => ({
+    spec: { desiredStatus },
+    status: { conditions: [{ type, status: 'True', reason, message }] },
+  });
+  const starting = (reason: string, message = '') => withCondition('Running', 'Progressing', reason, message);
+  const degraded = (reason: string, message = '') => withCondition('Running', 'Degraded', reason, message);
+
+  test.each([
+    ['WaitingForNode', 'Starting: waiting for node'],
+    ['PullingImage', 'Starting: pulling image'],
+    ['StartingContainer', 'Starting: starting container'],
+  ])('Progressing reason %s → %s', (reason, label) => {
+    expect(getWorkspaceStatusLabel(starting(reason)).label).toBe(label);
+  });
+
+  test('an unknown or missing Progressing reason leaves the bare word', () => {
+    expect(getWorkspaceStatusLabel(starting('ComputeNotReady')).label).toBe('Starting');
+    expect(getWorkspaceStatusLabel(starting('')).label).toBe('Starting');
+  });
+
+  test('Degraded carries the condition reason verbatim, or the bare word without one', () => {
+    expect(getWorkspaceStatusLabel(degraded('ImagePullBackOff')).label).toBe('Degraded: ImagePullBackOff');
+    expect(getWorkspaceStatusLabel(degraded('')).label).toBe('Degraded');
+  });
+
+  test('the hover text is the condition message, absent when empty', () => {
+    expect(getWorkspaceStatusLabel(starting('WaitingForNode', 'Waiting for a node to run the pod')).title).toBe('Waiting for a node to run the pod');
+    expect(getWorkspaceStatusLabel(degraded('ErrImagePull', 'rpc error: code = NotFound')).title).toBe('rpc error: code = NotFound');
+    expect(getWorkspaceStatusLabel(starting('WaitingForNode')).title).toBeUndefined();
+  });
+
+  // Reason and message on a condition that does not drive a Starting or Degraded status never
+  // reach the chip. Stopping shares the Progressing condition with Starting.
+  test.each([
+    ['Running', withCondition('Running', 'Available', 'Ready', 'Workspace is available')],
+    ['Stopping', withCondition('Stopped', 'Progressing', 'WaitingForNode', 'Waiting for a node to run the pod')],
+    ['Stopped', withCondition('Stopped', 'Stopped', 'Stopped', 'Workspace is stopped')],
+    ['Starting', { spec: { desiredStatus: 'Running' } }],
+  ])('%s stays the bare word with no hover text', (status, workspace) => {
+    expect(getWorkspaceStatusLabel(workspace)).toEqual({ label: status, title: undefined });
   });
 });
 
