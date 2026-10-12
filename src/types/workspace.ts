@@ -45,6 +45,7 @@ export interface WorkspaceSpec {
 export interface WorkspaceCondition {
   type: string;
   status: string;
+  lastTransitionTime?: string;
   reason: string;
   message: string;
 }

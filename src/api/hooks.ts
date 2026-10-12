@@ -89,10 +89,19 @@ export function isWorkspaceSettled(workspace: Workspace | undefined): boolean {
   return getWorkspaceStatus(workspace) === desired;
 }
 
+// The operator's progress deadline is 10 minutes; a transition older than this stops counting as one.
+export const FAST_POLL_MAX_AGE_MS = 15 * 60_000;
+
 // Unsettled also covers the moment after a Start or Stop when conditions still show the old state (#51).
-// Degraded never counts: a start nobody fixes or a stop whose cleanup keeps failing has no bounded end.
-export function isWorkspaceTransitioning(workspace: Workspace): boolean {
-  return !isWorkspaceSettled(workspace) && getWorkspaceStatus(workspace) !== 'Degraded';
+// The fast rate must end on its own: Degraded and Unknown never count, and a transition older than the
+// bound stops counting, since a stuck start stays Progressing on an operator without stall detection.
+export function isWorkspaceTransitioning(workspace: Workspace, now = Date.now()): boolean {
+  if (isWorkspaceSettled(workspace)) return false;
+  const status = getWorkspaceStatus(workspace);
+  if (status === 'Degraded' || status === 'Unknown') return false;
+  const active = workspace.status?.conditions?.find((c) => (c.type === 'Progressing' || c.type === 'Deleting') && c.status === 'True');
+  if (!active?.lastTransitionTime) return true;
+  return now - Date.parse(active.lastTransitionTime) < FAST_POLL_MAX_AGE_MS;
 }
 
 export function useWorkspace(name: string) {

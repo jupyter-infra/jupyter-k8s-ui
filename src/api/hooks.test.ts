@@ -34,7 +34,11 @@ mock.module('./client', () => ({
   },
 }));
 
-function makeWorkspace(name: string, desiredStatus: 'Running' | 'Stopped' = 'Running', conditions: Array<{ type: string; status: string }> = []): Workspace {
+function makeWorkspace(
+  name: string,
+  desiredStatus: 'Running' | 'Stopped' = 'Running',
+  conditions: Array<{ type: string; status: string; lastTransitionTime?: string }> = [],
+): Workspace {
   return {
     metadata: { name, namespace: 'default', annotations: {}, creationTimestamp: '' },
     spec: { desiredStatus },
@@ -238,8 +242,23 @@ describe('isWorkspaceTransitioning', () => {
     ['Degraded', 'Running', 'Degraded', false],
     ['Stopped right after a Start request', 'Running', 'Stopped', true],
     ['Degraded with a Stop pending', 'Stopped', 'Degraded', false],
-    ['Unknown, no condition True yet', 'Running', 'Initialized', true],
+    ['Unknown, no recognized condition True', 'Running', 'Initialized', false],
   ] as const)('%s', (_status, desired, condition, expected) => {
     expect(isWorkspaceTransitioning(makeWorkspace('w', desired, [{ type: condition, status: 'True' }]))).toBe(expected);
+  });
+});
+
+describe('isWorkspaceTransitioning, fast poll bound', () => {
+  const now = Date.parse('2026-10-12T05:00:00Z');
+  const since = (minutesAgo: number) => new Date(now - minutesAgo * 60_000).toISOString();
+
+  test('a start under way for a minute keeps the fast rate', () => {
+    const ws = makeWorkspace('w', 'Running', [{ type: 'Progressing', status: 'True', lastTransitionTime: since(1) }]);
+    expect(isWorkspaceTransitioning(ws, now)).toBe(true);
+  });
+
+  test('a start older than the bound falls back to the list rate', () => {
+    const ws = makeWorkspace('w', 'Running', [{ type: 'Progressing', status: 'True', lastTransitionTime: since(16) }]);
+    expect(isWorkspaceTransitioning(ws, now)).toBe(false);
   });
 });
