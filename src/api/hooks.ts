@@ -90,7 +90,7 @@ export function isWorkspaceSettled(workspace: Workspace | undefined): boolean {
   return getWorkspaceStatus(workspace) === desired;
 }
 
-// The operator's progress deadline is 10 minutes; a transition older than this stops counting as one.
+// The operator's progress deadline is 10 minutes; a transition older than 15 stops counting as one.
 export const FAST_POLL_MAX_AGE_MS = 15 * 60_000;
 
 // Unsettled also covers the moment after a Start or Stop when conditions still show the old state (#51).
