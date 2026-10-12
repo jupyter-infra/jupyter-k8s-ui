@@ -26,8 +26,8 @@ export const clusterAccessKeys = {
 };
 
 // Polling configuration
-const LIST_POLL_INTERVAL_MS = 60_000; // 60 seconds
-const DETAIL_POLL_INTERVAL_MS = 3_000; // 3 seconds (only while workspace is transitioning)
+export const LIST_POLL_INTERVAL_MS = 60_000; // 60 seconds
+export const DETAIL_POLL_INTERVAL_MS = 3_000; // 3 seconds (only while workspace is transitioning)
 
 export function useTemplates() {
   const { activeNamespace } = useNamespace();
@@ -69,9 +69,11 @@ export function useWorkspaces() {
     queryKey: workspaceKeys.all(activeNamespace),
     queryFn: () => apiClient.listWorkspaces(activeNamespace),
     enabled: Boolean(activeNamespace),
+    // The detail page's rate while any listed workspace is changing state, so the card's start step
+    // keeps up with the cluster.
     refetchInterval: (query) => {
       if (query.state.error && isAuthError(query.state.error)) return false;
-      return LIST_POLL_INTERVAL_MS;
+      return query.state.data?.some(isWorkspaceTransitioning) ? DETAIL_POLL_INTERVAL_MS : LIST_POLL_INTERVAL_MS;
     },
     refetchIntervalInBackground: false,
   });
@@ -85,6 +87,12 @@ export function isWorkspaceSettled(workspace: Workspace | undefined): boolean {
   if (!workspace) return false;
   const desired = workspace.spec.desiredStatus ?? 'Stopped';
   return getWorkspaceStatus(workspace) === desired;
+}
+
+// Unsettled also covers the moment after a Start or Stop when conditions still show the old state (#51).
+// Degraded never counts: a start nobody fixes or a stop whose cleanup keeps failing has no bounded end.
+export function isWorkspaceTransitioning(workspace: Workspace): boolean {
+  return !isWorkspaceSettled(workspace) && getWorkspaceStatus(workspace) !== 'Degraded';
 }
 
 export function useWorkspace(name: string) {

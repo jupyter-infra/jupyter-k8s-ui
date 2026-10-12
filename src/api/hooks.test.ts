@@ -4,7 +4,17 @@ import { renderHook, waitFor, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
 import type { Workspace } from '../types';
-import { workspaceKeys, useDeleteWorkspace, useStartWorkspace, isWorkspaceSettled } from './hooks';
+import {
+  workspaceKeys,
+  useDeleteWorkspace,
+  useStartWorkspace,
+  useWorkspaces,
+  isWorkspaceSettled,
+  isWorkspaceTransitioning,
+  LIST_POLL_INTERVAL_MS,
+  DETAIL_POLL_INTERVAL_MS,
+} from './hooks';
+import { AuthError } from './auth-interceptor';
 import { NamespaceProvider, namespaceKeys } from '../context/NamespaceContext';
 
 const TEST_NS = 'default';
@@ -12,20 +22,23 @@ const TEST_NS = 'default';
 // Mock the API client
 const mockDelete = mock(async (): Promise<void> => undefined);
 const mockStart = mock(async (): Promise<Workspace> => ({}) as Workspace);
+const mockList = mock(async (): Promise<Workspace[]> => []);
 
 mock.module('./client', () => ({
   apiClient: {
     deleteWorkspace: mockDelete,
+    listWorkspaces: mockList,
     startWorkspace: mockStart,
     // stopWorkspace follows the same optimistic-update code path as startWorkspace
     stopWorkspace: mockStart,
   },
 }));
 
-function makeWorkspace(name: string, desiredStatus: 'Running' | 'Stopped' = 'Running'): Workspace {
+function makeWorkspace(name: string, desiredStatus: 'Running' | 'Stopped' = 'Running', conditions: Array<{ type: string; status: string }> = []): Workspace {
   return {
     metadata: { name, namespace: 'default', annotations: {}, creationTimestamp: '' },
     spec: { desiredStatus },
+    status: { conditions },
   } as Workspace;
 }
 
@@ -168,5 +181,65 @@ describe('isWorkspaceSettled', () => {
 
   test('unset desiredStatus expects Stopped', () => {
     expect(isWorkspaceSettled(ws(undefined, [{ type: 'Stopped', status: 'True' }]))).toBe(true);
+  });
+});
+
+describe('useWorkspaces — poll interval', () => {
+  let client: QueryClient;
+
+  beforeEach(() => {
+    mockList.mockReset();
+    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  });
+
+  // The interval React Query schedules next: the hook's refetchInterval option applied to the live
+  // query, the way the observer computes it after each fetch.
+  async function nextListInterval() {
+    const { result } = renderHook(() => useWorkspaces(), { wrapper: makeWrapper(client) });
+    await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true));
+    const observer = client.getQueryCache().find({ queryKey: listKey })!.observers[0];
+    const { refetchInterval } = observer.options;
+    return typeof refetchInterval === 'function' ? refetchInterval(observer.getCurrentQuery()) : refetchInterval;
+  }
+
+  // Degraded is not a transition: a workspace nobody fixes must not keep the list polling fast.
+  test('a list of Running, Stopped and Degraded workspaces polls at the list rate', async () => {
+    mockList.mockImplementation(async () => [
+      makeWorkspace('a', 'Running', [{ type: 'Available', status: 'True' }]),
+      makeWorkspace('b', 'Stopped', [{ type: 'Stopped', status: 'True' }]),
+      makeWorkspace('c', 'Running', [{ type: 'Degraded', status: 'True' }]),
+    ]);
+    expect(await nextListInterval()).toBe(LIST_POLL_INTERVAL_MS);
+  });
+
+  test('one Starting workspace switches the list to the transition rate', async () => {
+    mockList.mockImplementation(async () => [
+      makeWorkspace('a', 'Running', [{ type: 'Available', status: 'True' }]),
+      makeWorkspace('b', 'Running', [{ type: 'Progressing', status: 'True' }]),
+    ]);
+    expect(await nextListInterval()).toBe(DETAIL_POLL_INTERVAL_MS);
+  });
+
+  test('an auth error stops polling', async () => {
+    mockList.mockImplementation(async () => {
+      throw new AuthError('401');
+    });
+    expect(await nextListInterval()).toBe(false);
+  });
+});
+
+describe('isWorkspaceTransitioning', () => {
+  test.each([
+    ['Starting', 'Running', 'Progressing', true],
+    ['Stopping', 'Stopped', 'Progressing', true],
+    ['Deleting', 'Running', 'Deleting', true],
+    ['Running', 'Running', 'Available', false],
+    ['Stopped', 'Stopped', 'Stopped', false],
+    ['Degraded', 'Running', 'Degraded', false],
+    ['Stopped right after a Start request', 'Running', 'Stopped', true],
+    ['Degraded with a Stop pending', 'Stopped', 'Degraded', false],
+    ['Unknown, no condition True yet', 'Running', 'Initialized', true],
+  ] as const)('%s', (_status, desired, condition, expected) => {
+    expect(isWorkspaceTransitioning(makeWorkspace('w', desired, [{ type: condition, status: 'True' }]))).toBe(expected);
   });
 });
