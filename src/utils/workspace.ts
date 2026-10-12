@@ -200,7 +200,7 @@ export function getWorkspaceStatus(workspace: WorkspaceConditions): WorkspaceSta
   return 'Unknown';
 }
 
-// Progressing reasons the operator sets while a start is under way (jupyter-k8s
+// Progressing reasons the operator sets while a start is under way (jupyter-k8s 0.4.0 and later,
 // internal/controller/conditions.go); any other reason leaves the bare status word.
 const START_STEP_PHRASES = new Map<string, string>([
   ['WaitingForNode', strings.workspace.startStepWaitingForNode],
