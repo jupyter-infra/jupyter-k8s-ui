@@ -105,7 +105,7 @@ export function WorkspaceDetail() {
   }
 
   const workspaceStatus = getWorkspaceStatus(workspace);
-  const { label: statusLabel, title: statusTitle } = getWorkspaceStatusLabel(workspace);
+  const { label: statusLabel } = getWorkspaceStatusLabel(workspace);
   const accessURL = workspace.status?.accessURL;
   const isRunning = workspace.spec.desiredStatus === 'Running';
   const owner = getWorkspaceOwner(workspace);
@@ -185,7 +185,7 @@ export function WorkspaceDetail() {
               {strings.workspace.detailInfo}
             </Typography>
             <Stack gap={1}>
-              <InfoRow label="Status" value={<Chip size="small" label={statusLabel} title={statusTitle} color={getStatusChipColor(workspaceStatus)} />} />
+              <InfoRow label="Status" value={<Chip size="small" label={statusLabel} color={getStatusChipColor(workspaceStatus)} />} />
               <InfoRow label={strings.namespace.label} value={<Chip size="small" label={workspace.metadata.namespace} variant="outlined" />} />
               <InfoRow
                 label="Image"
