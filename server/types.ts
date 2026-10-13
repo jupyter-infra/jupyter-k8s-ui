@@ -43,6 +43,7 @@ export interface K8sCondition {
   status: string;
   reason?: string;
   message?: string;
+  lastTransitionTime?: string;
 }
 
 export interface K8sWorkspace {
@@ -137,6 +138,7 @@ export interface WorkspaceResponse {
       status: string;
       reason: string;
       message: string;
+      lastTransitionTime?: string;
     }>;
   };
 }

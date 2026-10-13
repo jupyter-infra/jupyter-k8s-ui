@@ -17,6 +17,7 @@ export function workspaceToResponse(ws: K8sWorkspace): WorkspaceResponse {
             status: c.status ?? '',
             reason: c.reason ?? '',
             message: c.message ?? '',
+            lastTransitionTime: c.lastTransitionTime,
           })),
         }
       : undefined,

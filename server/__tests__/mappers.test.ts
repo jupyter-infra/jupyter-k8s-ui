@@ -18,7 +18,7 @@ describe('workspaceToResponse', () => {
       spec: { displayName: 'My WS', image: 'jupyter:latest', desiredStatus: 'Running' },
       status: {
         accessURL: 'https://ws.example.com',
-        conditions: [{ type: 'Available', status: 'True', reason: 'Ready', message: 'ok' }],
+        conditions: [{ type: 'Available', status: 'True', reason: 'Ready', message: 'ok', lastTransitionTime: '2024-01-01T00:05:00Z' }],
       },
     };
     const res = workspaceToResponse(ws);
@@ -32,7 +32,7 @@ describe('workspaceToResponse', () => {
       spec: ws.spec,
       status: {
         accessURL: 'https://ws.example.com',
-        conditions: [{ type: 'Available', status: 'True', reason: 'Ready', message: 'ok' }],
+        conditions: [{ type: 'Available', status: 'True', reason: 'Ready', message: 'ok', lastTransitionTime: '2024-01-01T00:05:00Z' }],
       },
     });
   });
