@@ -13,6 +13,7 @@ import {
   isWorkspaceTransitioning,
   LIST_POLL_INTERVAL_MS,
   DETAIL_POLL_INTERVAL_MS,
+  FAST_POLL_MAX_AGE_MS,
 } from './hooks';
 import { AuthError } from './auth-interceptor';
 import { NamespaceProvider, namespaceKeys } from '../context/NamespaceContext';
@@ -196,8 +197,7 @@ describe('useWorkspaces — poll interval', () => {
     client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   });
 
-  // The interval React Query schedules next: the hook's refetchInterval option applied to the live
-  // query, the way the observer computes it after each fetch.
+  // Applies the hook's refetchInterval option to the live query, as React Query does after each fetch.
   async function nextListInterval() {
     const { result } = renderHook(() => useWorkspaces(), { wrapper: makeWrapper(client) });
     await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true));
@@ -206,7 +206,7 @@ describe('useWorkspaces — poll interval', () => {
     return typeof refetchInterval === 'function' ? refetchInterval(observer.getCurrentQuery()) : refetchInterval;
   }
 
-  // Degraded is not a transition: a workspace nobody fixes must not keep the list polling fast.
+  // Degraded never counts, so a workspace nobody fixes does not keep the list polling fast.
   test('a list of Running, Stopped and Degraded workspaces polls at the list rate', async () => {
     mockList.mockImplementation(async () => [
       makeWorkspace('a', 'Running', [{ type: 'Available', status: 'True' }]),
@@ -216,7 +216,7 @@ describe('useWorkspaces — poll interval', () => {
     expect(await nextListInterval()).toBe(LIST_POLL_INTERVAL_MS);
   });
 
-  test('one Starting workspace switches the list to the transition rate', async () => {
+  test('one Starting workspace switches the list to the fast rate', async () => {
     mockList.mockImplementation(async () => [
       makeWorkspace('a', 'Running', [{ type: 'Available', status: 'True' }]),
       makeWorkspace('b', 'Running', [{ type: 'Progressing', status: 'True' }]),
@@ -226,7 +226,9 @@ describe('useWorkspaces — poll interval', () => {
 
   test('a start older than the bound polls at the list rate', async () => {
     mockList.mockImplementation(async () => [
-      makeWorkspace('a', 'Running', [{ type: 'Progressing', status: 'True', lastTransitionTime: new Date(Date.now() - 16 * 60_000).toISOString() }]),
+      makeWorkspace('a', 'Running', [
+        { type: 'Progressing', status: 'True', lastTransitionTime: new Date(Date.now() - FAST_POLL_MAX_AGE_MS - 60_000).toISOString() },
+      ]),
     ]);
     expect(await nextListInterval()).toBe(LIST_POLL_INTERVAL_MS);
   });
@@ -265,7 +267,9 @@ describe('isWorkspaceTransitioning, fast poll bound', () => {
   });
 
   test('a start older than the bound falls back to the list rate', () => {
-    const ws = makeWorkspace('w', 'Running', [{ type: 'Progressing', status: 'True', lastTransitionTime: since(16) }]);
+    const ws = makeWorkspace('w', 'Running', [
+      { type: 'Progressing', status: 'True', lastTransitionTime: new Date(now - FAST_POLL_MAX_AGE_MS - 60_000).toISOString() },
+    ]);
     expect(isWorkspaceTransitioning(ws, now)).toBe(false);
   });
 });

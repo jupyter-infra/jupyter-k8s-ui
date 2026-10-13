@@ -69,11 +69,11 @@ export function useWorkspaces() {
     queryKey: workspaceKeys.all(activeNamespace),
     queryFn: () => apiClient.listWorkspaces(activeNamespace),
     enabled: Boolean(activeNamespace),
-    // The detail page's rate while any listed workspace is changing state, so the card's start step
+    // The detail page's rate while any listed workspace is transitioning, so the card's start step
     // keeps up with the cluster.
     refetchInterval: (query) => {
       if (query.state.error && isAuthError(query.state.error)) return false;
-      // Arrow, not the bare function: some() would pass the index as the second argument, `now`.
+      // Passed to some() directly, isWorkspaceTransitioning would receive the index as `now`.
       return query.state.data?.some((w) => isWorkspaceTransitioning(w)) ? DETAIL_POLL_INTERVAL_MS : LIST_POLL_INTERVAL_MS;
     },
     refetchIntervalInBackground: false,
@@ -94,8 +94,8 @@ export function isWorkspaceSettled(workspace: Workspace | undefined): boolean {
 export const FAST_POLL_MAX_AGE_MS = 15 * 60_000;
 
 // Unsettled also covers the moment after a Start or Stop when conditions still show the old state (#51).
-// The fast rate must end on its own: Degraded and Unknown never count, and a transition older than the
-// bound stops counting, since a stuck start stays Progressing on an operator without stall detection.
+// The fast rate must end on its own, so Degraded and Unknown never count and a start left Progressing
+// indefinitely stops counting at the age bound.
 export function isWorkspaceTransitioning(workspace: Workspace, now = Date.now()): boolean {
   if (isWorkspaceSettled(workspace)) return false;
   const status = getWorkspaceStatus(workspace);

@@ -39,7 +39,7 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
   // no pill.
   const templateLabel = spec.templateRef?.name ?? null;
   const workspaceStatus = getWorkspaceStatus(workspace);
-  // The chip text and its hover message. Color and the action buttons stay keyed on the status word.
+  // Color and the action buttons key on the status word, not on the chip text.
   const { label: statusLabel, title: statusTitle } = getWorkspaceStatusLabel(workspace);
   const accessURL = status?.accessURL;
 

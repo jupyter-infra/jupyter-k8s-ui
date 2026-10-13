@@ -200,8 +200,8 @@ export function getWorkspaceStatus(workspace: WorkspaceConditions): WorkspaceSta
   return 'Unknown';
 }
 
-// Progressing reasons the operator records while a start is under way (jupyter-k8s
-// internal/controller/conditions.go); an operator that records none leaves the bare status word.
+// Progressing reasons the operator records while a start is under way (jupyter-k8s#490); an operator
+// that records none leaves the bare status word.
 const START_STEP_PHRASES = new Map<string, string>([
   ['WaitingForNode', strings.workspace.startStepWaitingForNode],
   ['PullingImage', strings.workspace.startStepPullingImage],
@@ -215,8 +215,6 @@ export interface WorkspaceStatusLabel {
   title?: string;
 }
 
-// What the status chip shows. Starting names the step the Progressing reason records and Degraded
-// names the Degraded reason verbatim; every other status is the bare word with no hover text.
 export function getWorkspaceStatusLabel(workspace: WorkspaceConditions): WorkspaceStatusLabel {
   const status = getWorkspaceStatus(workspace);
   if (status !== 'Starting' && status !== 'Degraded') return { label: status };

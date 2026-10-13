@@ -203,8 +203,7 @@ describe('getWorkspaceStatusLabel', () => {
     expect(getWorkspaceStatusLabel(starting('WaitingForNode')).title).toBeUndefined();
   });
 
-  // Reason and message on a condition that does not drive a Starting or Degraded status never
-  // reach the chip. Stopping shares the Progressing condition with Starting.
+  // Stopping shares the Progressing condition with Starting.
   test.each([
     ['Running', withCondition('Running', 'Available', 'Ready', 'Workspace is available')],
     ['Stopping', withCondition('Stopped', 'Progressing', 'WaitingForNode', 'Waiting for a node to run the pod')],
