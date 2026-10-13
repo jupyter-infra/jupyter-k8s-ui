@@ -1,7 +1,7 @@
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from './client';
 import type { CreateWorkspaceRequest, UpdateWorkspaceRequest, Workspace, AdvancedWorkspacePayload } from '../types';
-import { getWorkspaceStatus } from '../utils';
+import { findTrueCondition, getWorkspaceStatus } from '../utils';
 import { isAuthError } from './auth-interceptor';
 import { useNamespace, namespaceKeys } from '../context/NamespaceContext';
 
@@ -27,7 +27,10 @@ export const clusterAccessKeys = {
 
 // Polling configuration
 export const LIST_POLL_INTERVAL_MS = 60_000; // 60 seconds
-export const DETAIL_POLL_INTERVAL_MS = 3_000; // 3 seconds (only while workspace is transitioning)
+export const FAST_POLL_INTERVAL_MS = 3_000; // 3 seconds (only while a workspace is transitioning)
+// A start still Progressing past the workspace Deployment's progress deadline (the Kubernetes default of 10
+// minutes) has stalled; the fast rate ends 5 minutes after that, and a late recovery shows at the list rate.
+export const FAST_POLL_MAX_AGE_MS = 15 * 60_000;
 
 export function useTemplates() {
   const { activeNamespace } = useNamespace();
@@ -69,11 +72,11 @@ export function useWorkspaces() {
     queryKey: workspaceKeys.all(activeNamespace),
     queryFn: () => apiClient.listWorkspaces(activeNamespace),
     enabled: Boolean(activeNamespace),
-    // The detail page's rate while any listed workspace is transitioning, so the card's start step
-    // keeps up with the cluster. A failed fetch keeps the previous list, so the error is checked first.
+    // The fast rate while any listed workspace is transitioning, so the card's start step keeps up with
+    // the cluster. A failed fetch keeps the previous list, so the error is checked first.
     refetchInterval: (query) => {
       if (query.state.error) return isAuthError(query.state.error) ? false : LIST_POLL_INTERVAL_MS;
-      return query.state.data?.some(isWorkspaceTransitioning) ? DETAIL_POLL_INTERVAL_MS : LIST_POLL_INTERVAL_MS;
+      return query.state.data?.some(isWorkspaceTransitioning) ? FAST_POLL_INTERVAL_MS : LIST_POLL_INTERVAL_MS;
     },
     refetchIntervalInBackground: false,
   });
@@ -88,10 +91,6 @@ export function isWorkspaceSettled(workspace: Workspace | undefined): boolean {
   const desired = workspace.spec.desiredStatus ?? 'Stopped';
   return getWorkspaceStatus(workspace) === desired;
 }
-
-// The workspace Deployment's progress deadline is the Kubernetes default of 10 minutes; a Progressing or
-// Deleting condition whose lastTransitionTime is older than 15 minutes no longer counts as a transition.
-export const FAST_POLL_MAX_AGE_MS = 15 * 60_000;
 
 const withinFastPollAge = (timestamp: string | undefined) => !timestamp || Date.now() - Date.parse(timestamp) < FAST_POLL_MAX_AGE_MS;
 
@@ -112,7 +111,7 @@ export function isWorkspaceTransitioning(workspace: Workspace): boolean {
     return false;
   }
   const conditions = workspace.status?.conditions ?? [];
-  const active = conditions.find((c) => (c.type === 'Progressing' || c.type === 'Deleting') && c.status === 'True');
+  const active = findTrueCondition(workspace, 'Progressing', 'Deleting');
   if (active) {
     requestedAt.delete(key);
     return withinFastPollAge(active.lastTransitionTime);
@@ -136,7 +135,7 @@ export function useWorkspace(name: string) {
     enabled: Boolean(name) && Boolean(activeNamespace),
     refetchInterval: (query) => {
       if (query.state.error && isAuthError(query.state.error)) return false;
-      return isWorkspaceSettled(query.state.data) ? false : DETAIL_POLL_INTERVAL_MS;
+      return isWorkspaceSettled(query.state.data) ? false : FAST_POLL_INTERVAL_MS;
     },
     refetchIntervalInBackground: false,
   });

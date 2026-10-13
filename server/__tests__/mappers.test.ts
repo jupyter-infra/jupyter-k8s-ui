@@ -39,7 +39,7 @@ describe('workspaceToResponse', () => {
 
   // Defensive defaults matter: the frontend calls .map on conditions and reads
   // annotations as a dict. undefined → TypeError.
-  test('defaults missing metadata/status fields so frontend never sees undefined', () => {
+  test('defaults the required metadata and status fields when they are missing', () => {
     const ws = {
       apiVersion: 'workspace.jupyter.org/v1alpha1',
       kind: 'Workspace',

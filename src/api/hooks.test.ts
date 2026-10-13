@@ -13,7 +13,7 @@ import {
   isWorkspaceTransitioning,
   markWorkspaceRequested,
   LIST_POLL_INTERVAL_MS,
-  DETAIL_POLL_INTERVAL_MS,
+  FAST_POLL_INTERVAL_MS,
   FAST_POLL_MAX_AGE_MS,
 } from './hooks';
 import { AuthError } from './auth-interceptor';
@@ -193,7 +193,7 @@ describe('isWorkspaceSettled', () => {
   });
 });
 
-describe('useWorkspaces — poll interval', () => {
+describe('useWorkspaces, poll interval', () => {
   let client: QueryClient;
 
   beforeEach(() => {
@@ -229,16 +229,7 @@ describe('useWorkspaces — poll interval', () => {
       makeWorkspace('a', 'Running', [{ type: 'Available', status: 'True' }]),
       makeWorkspace('b', 'Running', [{ type: 'Progressing', status: 'True' }]),
     ]);
-    expect(await nextListInterval()).toBe(DETAIL_POLL_INTERVAL_MS);
-  });
-
-  test('a start older than the bound polls at the list rate', async () => {
-    mockList.mockImplementation(async () => [
-      makeWorkspace('a', 'Running', [
-        { type: 'Progressing', status: 'True', lastTransitionTime: new Date(Date.now() - FAST_POLL_MAX_AGE_MS - 60_000).toISOString() },
-      ]),
-    ]);
-    expect(await nextListInterval()).toBe(LIST_POLL_INTERVAL_MS);
+    expect(await nextListInterval()).toBe(FAST_POLL_INTERVAL_MS);
   });
 
   test('an auth error stops polling', async () => {
@@ -256,7 +247,7 @@ describe('useWorkspaces — poll interval', () => {
     });
     const { result } = renderHook(() => useWorkspaces(), { wrapper: makeWrapper(client) });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(currentListInterval()).toBe(DETAIL_POLL_INTERVAL_MS);
+    expect(currentListInterval()).toBe(FAST_POLL_INTERVAL_MS);
 
     await act(async () => {
       await result.current.refetch();
