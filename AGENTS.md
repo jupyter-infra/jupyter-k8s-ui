@@ -131,7 +131,7 @@ validation layer.
 - Auth flow: Browser -> Traefik -> OAuth2 Proxy -> Web App (Bun) -> K8s API Server. This Traefik/OAuth2-Proxy/Dex stack (the `jupyter-k8s-aws` aws-oidc chart) is only **one** possible integration. Don't bake it into code or comments; reason in terms of generic authenticated/unauthenticated request paths and an optional auth proxy that may route on session-cookie presence.
 - In dev mode, backend reads `DEV_ACCESS_TOKEN` from `.env` instead of OAuth2 Proxy header
 - K8s clients are cached per JWT hash (10min TTL, max 100 clients)
-- React Query polls the workspace list every 60s, or every 3s while any listed workspace is transitioning (`isWorkspaceTransitioning` in `src/api/hooks.ts`; a Progressing or Deleting condition older than 15 minutes stops counting); the detail page polls every 3s until the workspace settles on its desired status (`isWorkspaceSettled`)
+- React Query polls the workspace list every 60s, or every 3s while any listed workspace is transitioning (`isWorkspaceTransitioning` in `src/api/hooks.ts`: an active Progressing or Deleting condition, a Start or Stop this tab requested, or a workspace not yet reconciled, each counting for 15 minutes); the detail page polls every 3s until the workspace settles on its desired status (`isWorkspaceSettled`)
 - Workspace ownership tracked via `workspace.jupyter.org/created-by` annotation
 - Vite proxies `/api` to `http://localhost:8090` in dev mode
 - **Multi-namespace:** The app presents one namespace at a time but lets the user switch.

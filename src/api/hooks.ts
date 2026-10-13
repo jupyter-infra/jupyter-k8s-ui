@@ -103,15 +103,11 @@ export function markWorkspaceRequested(namespace: string | undefined, name: stri
   requestedAt.set(`${namespace}/${name}`, Date.now());
 }
 
-// Degraded and Unknown never count, so a workspace nobody fixes does not keep the fast rate.
+// The fast rate follows an active transition for at most FAST_POLL_MAX_AGE_MS. Without one, Degraded and
+// Unknown never count, so a workspace nobody fixes does not keep the fast rate.
 export function isWorkspaceTransitioning(workspace: Workspace): boolean {
   const key = `${workspace.metadata.namespace}/${workspace.metadata.name}`;
   if (isWorkspaceSettled(workspace)) {
-    requestedAt.delete(key);
-    return false;
-  }
-  const status = getWorkspaceStatus(workspace);
-  if (status === 'Degraded' || status === 'Unknown') {
     requestedAt.delete(key);
     return false;
   }
@@ -120,6 +116,11 @@ export function isWorkspaceTransitioning(workspace: Workspace): boolean {
   if (active) {
     requestedAt.delete(key);
     return withinFastPollAge(active.lastTransitionTime);
+  }
+  const status = getWorkspaceStatus(workspace);
+  if (status === 'Degraded' || status === 'Unknown') {
+    requestedAt.delete(key);
+    return false;
   }
   // No conditions at all means the operator has not reconciled the workspace yet; its age bounds the rate.
   if (conditions.length === 0) return withinFastPollAge(workspace.metadata.creationTimestamp);

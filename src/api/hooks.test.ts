@@ -297,6 +297,15 @@ describe('isWorkspaceTransitioning, fast poll bound', () => {
     expect(isWorkspaceTransitioning(ws)).toBe(false);
   });
 
+  // The operator writes Degraded alone on a transient error during a start and clears it on the next pass.
+  test('a Degraded condition beside a fresh Progressing keeps the fast rate', () => {
+    const ws = makeWorkspace('w', 'Running', [
+      { type: 'Degraded', status: 'True' },
+      { type: 'Progressing', status: 'True', lastTransitionTime: since(0.5) },
+    ]);
+    expect(isWorkspaceTransitioning(ws)).toBe(true);
+  });
+
   // No conditions means the operator has not reconciled the workspace yet; its creation dates the wait.
   test('a workspace created a minute ago and not yet reconciled keeps the fast rate', () => {
     expect(isWorkspaceTransitioning(makeWorkspace('w', 'Running', [], since(1)))).toBe(true);
