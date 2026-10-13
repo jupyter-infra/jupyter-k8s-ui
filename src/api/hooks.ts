@@ -70,11 +70,10 @@ export function useWorkspaces() {
     queryFn: () => apiClient.listWorkspaces(activeNamespace),
     enabled: Boolean(activeNamespace),
     // The detail page's rate while any listed workspace is transitioning, so the card's start step
-    // keeps up with the cluster.
+    // keeps up with the cluster. A failed fetch keeps the previous list, so the error is checked first.
     refetchInterval: (query) => {
-      if (query.state.error && isAuthError(query.state.error)) return false;
-      // Passed to some() directly, isWorkspaceTransitioning would receive the index as `now`.
-      return query.state.data?.some((w) => isWorkspaceTransitioning(w)) ? DETAIL_POLL_INTERVAL_MS : LIST_POLL_INTERVAL_MS;
+      if (query.state.error) return isAuthError(query.state.error) ? false : LIST_POLL_INTERVAL_MS;
+      return query.state.data?.some(isWorkspaceTransitioning) ? DETAIL_POLL_INTERVAL_MS : LIST_POLL_INTERVAL_MS;
     },
     refetchIntervalInBackground: false,
   });
@@ -90,19 +89,24 @@ export function isWorkspaceSettled(workspace: Workspace | undefined): boolean {
   return getWorkspaceStatus(workspace) === desired;
 }
 
-// The Deployment's progress deadline is the Kubernetes default of 10 minutes; a transition older than 15 stops counting as one.
+// The workspace Deployment's progress deadline is the Kubernetes default of 10 minutes; a Progressing or
+// Deleting condition whose lastTransitionTime is older than 15 minutes no longer counts as a transition.
 export const FAST_POLL_MAX_AGE_MS = 15 * 60_000;
 
-// Unsettled also covers the moment after a Start or Stop when conditions still show the old state (#51).
-// The fast rate must end on its own, so Degraded and Unknown never count and a start left Progressing
-// indefinitely stops counting at the age bound.
-export function isWorkspaceTransitioning(workspace: Workspace, now = Date.now()): boolean {
+const withinFastPollAge = (timestamp: string | undefined) => !timestamp || Date.now() - Date.parse(timestamp) < FAST_POLL_MAX_AGE_MS;
+
+// Degraded and Unknown never count, so a workspace nobody fixes does not keep the fast rate. Unsettled
+// also covers the moment after a Start or Stop when the conditions still show the old state (#51); nothing
+// dates the request, so the fast rate holds until the operator records Progressing or Deleting.
+export function isWorkspaceTransitioning(workspace: Workspace): boolean {
   if (isWorkspaceSettled(workspace)) return false;
   const status = getWorkspaceStatus(workspace);
   if (status === 'Degraded' || status === 'Unknown') return false;
-  const active = workspace.status?.conditions?.find((c) => (c.type === 'Progressing' || c.type === 'Deleting') && c.status === 'True');
-  if (!active?.lastTransitionTime) return true;
-  return now - Date.parse(active.lastTransitionTime) < FAST_POLL_MAX_AGE_MS;
+  const conditions = workspace.status?.conditions ?? [];
+  const active = conditions.find((c) => (c.type === 'Progressing' || c.type === 'Deleting') && c.status === 'True');
+  if (active) return withinFastPollAge(active.lastTransitionTime);
+  // No conditions at all means the operator has not reconciled the workspace yet; its age bounds the rate.
+  return conditions.length > 0 || withinFastPollAge(workspace.metadata.creationTimestamp);
 }
 
 export function useWorkspace(name: string) {

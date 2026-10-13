@@ -39,9 +39,10 @@ function makeWorkspace(
   name: string,
   desiredStatus: 'Running' | 'Stopped' = 'Running',
   conditions: Array<{ type: string; status: string; lastTransitionTime?: string }> = [],
+  creationTimestamp = '',
 ): Workspace {
   return {
-    metadata: { name, namespace: 'default', annotations: {}, creationTimestamp: '' },
+    metadata: { name, namespace: 'default', annotations: {}, creationTimestamp },
     spec: { desiredStatus },
     status: { conditions },
   } as Workspace;
@@ -198,12 +199,16 @@ describe('useWorkspaces — poll interval', () => {
   });
 
   // Applies the hook's refetchInterval option to the live query, as React Query does after each fetch.
-  async function nextListInterval() {
-    const { result } = renderHook(() => useWorkspaces(), { wrapper: makeWrapper(client) });
-    await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true));
+  function currentListInterval() {
     const observer = client.getQueryCache().find({ queryKey: listKey })!.observers[0];
     const { refetchInterval } = observer.options;
     return typeof refetchInterval === 'function' ? refetchInterval(observer.getCurrentQuery()) : refetchInterval;
+  }
+
+  async function nextListInterval() {
+    const { result } = renderHook(() => useWorkspaces(), { wrapper: makeWrapper(client) });
+    await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true));
+    return currentListInterval();
   }
 
   // Degraded never counts, so a workspace nobody fixes does not keep the list polling fast.
@@ -239,6 +244,24 @@ describe('useWorkspaces — poll interval', () => {
     });
     expect(await nextListInterval()).toBe(false);
   });
+
+  // A failed refetch keeps the last list, so a transitioning workspace in it must not set the rate.
+  test('a failed refetch polls at the list rate', async () => {
+    mockList.mockImplementationOnce(async () => [makeWorkspace('a', 'Running', [{ type: 'Progressing', status: 'True' }])]);
+    mockList.mockImplementation(async () => {
+      throw new Error('502');
+    });
+    const { result } = renderHook(() => useWorkspaces(), { wrapper: makeWrapper(client) });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(currentListInterval()).toBe(DETAIL_POLL_INTERVAL_MS);
+
+    await act(async () => {
+      await result.current.refetch();
+    });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.data).toHaveLength(1);
+    expect(currentListInterval()).toBe(LIST_POLL_INTERVAL_MS);
+  });
 });
 
 describe('isWorkspaceTransitioning', () => {
@@ -258,18 +281,25 @@ describe('isWorkspaceTransitioning', () => {
 });
 
 describe('isWorkspaceTransitioning, fast poll bound', () => {
-  const now = Date.parse('2026-10-12T05:00:00Z');
-  const since = (minutesAgo: number) => new Date(now - minutesAgo * 60_000).toISOString();
+  const since = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
+  const beyondBound = () => new Date(Date.now() - FAST_POLL_MAX_AGE_MS - 60_000).toISOString();
 
   test('a start under way for a minute keeps the fast rate', () => {
     const ws = makeWorkspace('w', 'Running', [{ type: 'Progressing', status: 'True', lastTransitionTime: since(1) }]);
-    expect(isWorkspaceTransitioning(ws, now)).toBe(true);
+    expect(isWorkspaceTransitioning(ws)).toBe(true);
   });
 
   test('a start older than the bound falls back to the list rate', () => {
-    const ws = makeWorkspace('w', 'Running', [
-      { type: 'Progressing', status: 'True', lastTransitionTime: new Date(now - FAST_POLL_MAX_AGE_MS - 60_000).toISOString() },
-    ]);
-    expect(isWorkspaceTransitioning(ws, now)).toBe(false);
+    const ws = makeWorkspace('w', 'Running', [{ type: 'Progressing', status: 'True', lastTransitionTime: beyondBound() }]);
+    expect(isWorkspaceTransitioning(ws)).toBe(false);
+  });
+
+  // No conditions means the operator has not reconciled the workspace yet; its creation dates the wait.
+  test('a workspace created a minute ago and not yet reconciled keeps the fast rate', () => {
+    expect(isWorkspaceTransitioning(makeWorkspace('w', 'Running', [], since(1)))).toBe(true);
+  });
+
+  test('a workspace created beyond the bound and never reconciled falls back to the list rate', () => {
+    expect(isWorkspaceTransitioning(makeWorkspace('w', 'Running', [], beyondBound()))).toBe(false);
   });
 });
