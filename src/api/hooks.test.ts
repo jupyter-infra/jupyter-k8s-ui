@@ -289,8 +289,8 @@ describe('isWorkspaceTransitioning, fast poll bound', () => {
     expect(isWorkspaceTransitioning(ws)).toBe(true);
   });
 
-  test('a start older than the bound falls back to the list rate', () => {
-    const ws = makeWorkspace('w', 'Running', [{ type: 'Progressing', status: 'True', lastTransitionTime: beyondBound() }]);
+  test.each(['Progressing', 'Deleting'])('a %s condition older than the bound falls back to the list rate', (type) => {
+    const ws = makeWorkspace('w', 'Running', [{ type, status: 'True', lastTransitionTime: beyondBound() }]);
     expect(isWorkspaceTransitioning(ws)).toBe(false);
   });
 
