@@ -95,18 +95,36 @@ export const FAST_POLL_MAX_AGE_MS = 15 * 60_000;
 
 const withinFastPollAge = (timestamp: string | undefined) => !timestamp || Date.now() - Date.parse(timestamp) < FAST_POLL_MAX_AGE_MS;
 
-// Degraded and Unknown never count, so a workspace nobody fixes does not keep the fast rate. Unsettled
-// also covers the moment after a Start or Stop when the conditions still show the old state (#51); nothing
-// dates the request, so the fast rate holds until the operator records Progressing or Deleting.
+// Start and Stop requests made from this tab, by namespace/name. Right after one the conditions still show
+// the old state (#51) and nothing on the object dates the wait, so the request time bounds the fast rate.
+const requestedAt = new Map<string, number>();
+
+export function markWorkspaceRequested(namespace: string | undefined, name: string): void {
+  requestedAt.set(`${namespace}/${name}`, Date.now());
+}
+
+// Degraded and Unknown never count, so a workspace nobody fixes does not keep the fast rate.
 export function isWorkspaceTransitioning(workspace: Workspace): boolean {
-  if (isWorkspaceSettled(workspace)) return false;
+  const key = `${workspace.metadata.namespace}/${workspace.metadata.name}`;
+  if (isWorkspaceSettled(workspace)) {
+    requestedAt.delete(key);
+    return false;
+  }
   const status = getWorkspaceStatus(workspace);
-  if (status === 'Degraded' || status === 'Unknown') return false;
+  if (status === 'Degraded' || status === 'Unknown') {
+    requestedAt.delete(key);
+    return false;
+  }
   const conditions = workspace.status?.conditions ?? [];
   const active = conditions.find((c) => (c.type === 'Progressing' || c.type === 'Deleting') && c.status === 'True');
-  if (active) return withinFastPollAge(active.lastTransitionTime);
+  if (active) {
+    requestedAt.delete(key);
+    return withinFastPollAge(active.lastTransitionTime);
+  }
   // No conditions at all means the operator has not reconciled the workspace yet; its age bounds the rate.
-  return conditions.length > 0 || withinFastPollAge(workspace.metadata.creationTimestamp);
+  if (conditions.length === 0) return withinFastPollAge(workspace.metadata.creationTimestamp);
+  const requested = requestedAt.get(key);
+  return requested !== undefined && Date.now() - requested < FAST_POLL_MAX_AGE_MS;
 }
 
 export function useWorkspace(name: string) {
@@ -247,6 +265,7 @@ export function useStartWorkspace() {
     // Optimistic update — polling will reconcile with real state
     onMutate: async (name) => {
       await queryClient.cancelQueries({ queryKey: listKey });
+      markWorkspaceRequested(activeNamespace, name);
       const previousWorkspaces = queryClient.getQueryData<Workspace[]>(listKey);
 
       queryClient.setQueryData<Workspace[]>(
@@ -278,6 +297,7 @@ export function useStopWorkspace() {
     // Optimistic update — polling will reconcile with real state
     onMutate: async (name) => {
       await queryClient.cancelQueries({ queryKey: listKey });
+      markWorkspaceRequested(activeNamespace, name);
       const previousWorkspaces = queryClient.getQueryData<Workspace[]>(listKey);
 
       queryClient.setQueryData<Workspace[]>(

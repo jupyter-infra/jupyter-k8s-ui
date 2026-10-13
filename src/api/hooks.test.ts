@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, mock } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach, mock, setSystemTime } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -11,6 +11,7 @@ import {
   useWorkspaces,
   isWorkspaceSettled,
   isWorkspaceTransitioning,
+  markWorkspaceRequested,
   LIST_POLL_INTERVAL_MS,
   DETAIL_POLL_INTERVAL_MS,
   FAST_POLL_MAX_AGE_MS,
@@ -126,6 +127,8 @@ describe('useStartWorkspace — optimistic update', () => {
     });
 
     expect(mockStart).toHaveBeenCalledWith('a', 'default');
+    // The request dates the wait until the operator records Progressing (#51).
+    expect(isWorkspaceTransitioning(makeWorkspace('a', 'Running', [{ type: 'Stopped', status: 'True' }]))).toBe(true);
   });
 
   test('rolls back desiredStatus on error', async () => {
@@ -272,7 +275,7 @@ describe('isWorkspaceTransitioning', () => {
     ['Running', 'Running', 'Available', false],
     ['Stopped', 'Stopped', 'Stopped', false],
     ['Degraded', 'Running', 'Degraded', false],
-    ['Stopped right after a Start request', 'Running', 'Stopped', true],
+    ['Stopped with a Start made elsewhere', 'Running', 'Stopped', false],
     ['Degraded with a Stop pending', 'Stopped', 'Degraded', false],
     ['Unknown, no recognized condition True', 'Running', 'Initialized', false],
   ] as const)('%s', (_status, desired, condition, expected) => {
@@ -301,5 +304,27 @@ describe('isWorkspaceTransitioning, fast poll bound', () => {
 
   test('a workspace created beyond the bound and never reconciled falls back to the list rate', () => {
     expect(isWorkspaceTransitioning(makeWorkspace('w', 'Running', [], beyondBound()))).toBe(false);
+  });
+});
+
+describe('isWorkspaceTransitioning, request-time bound', () => {
+  afterEach(() => setSystemTime());
+  const stillStopped = (name: string) => makeWorkspace(name, 'Running', [{ type: 'Stopped', status: 'True' }]);
+
+  test('a Start requested from this tab keeps the fast rate while the conditions still show Stopped', () => {
+    markWorkspaceRequested('default', 'req-fast');
+    expect(isWorkspaceTransitioning(stillStopped('req-fast'))).toBe(true);
+  });
+
+  test('a request older than the bound falls back to the list rate', () => {
+    markWorkspaceRequested('default', 'req-old');
+    setSystemTime(new Date(Date.now() + FAST_POLL_MAX_AGE_MS + 60_000));
+    expect(isWorkspaceTransitioning(stillStopped('req-old'))).toBe(false);
+  });
+
+  test('the request is forgotten once the operator records the transition', () => {
+    markWorkspaceRequested('default', 'req-done');
+    isWorkspaceTransitioning(makeWorkspace('req-done', 'Running', [{ type: 'Progressing', status: 'True', lastTransitionTime: new Date().toISOString() }]));
+    expect(isWorkspaceTransitioning(stillStopped('req-done'))).toBe(false);
   });
 });
