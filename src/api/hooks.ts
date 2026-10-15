@@ -99,7 +99,12 @@ const withinFastPollAge = (timestamp: string | undefined) => !timestamp || Date.
 const requestedAt = new Map<string, number>();
 
 export function markWorkspaceRequested(namespace: string | undefined, name: string): void {
-  requestedAt.set(`${namespace}/${name}`, Date.now());
+  const now = Date.now();
+  // entries of workspaces this tab never lists again would otherwise live as long as the tab
+  for (const [key, at] of requestedAt) {
+    if (now - at >= FAST_POLL_MAX_AGE_MS) requestedAt.delete(key);
+  }
+  requestedAt.set(`${namespace}/${name}`, now);
 }
 
 // The fast rate follows an active transition for at most FAST_POLL_MAX_AGE_MS. Without one, Degraded and

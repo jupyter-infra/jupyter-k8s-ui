@@ -217,17 +217,17 @@ describe('useWorkspaces, poll interval', () => {
   // Degraded never counts, so a workspace nobody fixes does not keep the list polling fast.
   test('a list of Running, Stopped and Degraded workspaces polls at the list rate', async () => {
     mockList.mockImplementation(async () => [
-      makeWorkspace('a', 'Running', [{ type: 'Available', status: 'True' }]),
-      makeWorkspace('b', 'Stopped', [{ type: 'Stopped', status: 'True' }]),
-      makeWorkspace('c', 'Running', [{ type: 'Degraded', status: 'True' }]),
+      makeWorkspace('poll-running', 'Running', [{ type: 'Available', status: 'True' }]),
+      makeWorkspace('poll-stopped', 'Stopped', [{ type: 'Stopped', status: 'True' }]),
+      makeWorkspace('poll-degraded', 'Running', [{ type: 'Degraded', status: 'True' }]),
     ]);
     expect(await nextListInterval()).toBe(LIST_POLL_INTERVAL_MS);
   });
 
   test('one Starting workspace switches the list to the fast rate', async () => {
     mockList.mockImplementation(async () => [
-      makeWorkspace('a', 'Running', [{ type: 'Available', status: 'True' }]),
-      makeWorkspace('b', 'Running', [{ type: 'Progressing', status: 'True' }]),
+      makeWorkspace('poll-running', 'Running', [{ type: 'Available', status: 'True' }]),
+      makeWorkspace('poll-starting', 'Running', [{ type: 'Progressing', status: 'True' }]),
     ]);
     expect(await nextListInterval()).toBe(FAST_POLL_INTERVAL_MS);
   });
@@ -241,7 +241,7 @@ describe('useWorkspaces, poll interval', () => {
 
   // A failed refetch keeps the last list, so a transitioning workspace in it must not set the rate.
   test('a failed refetch polls at the list rate', async () => {
-    mockList.mockImplementationOnce(async () => [makeWorkspace('a', 'Running', [{ type: 'Progressing', status: 'True' }])]);
+    mockList.mockImplementationOnce(async () => [makeWorkspace('poll-failed', 'Running', [{ type: 'Progressing', status: 'True' }])]);
     mockList.mockImplementation(async () => {
       throw new Error('502');
     });
