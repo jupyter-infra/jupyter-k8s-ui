@@ -192,9 +192,29 @@ describe('getWorkspaceStatusLabel', () => {
     expect(getWorkspaceStatusLabel(starting('')).label).toBe('Starting');
   });
 
-  test('Degraded carries the condition reason verbatim, or the bare word without one', () => {
+  test('Degraded carries the condition reason verbatim', () => {
     expect(getWorkspaceStatusLabel(degraded('ImagePullBackOff')).label).toBe('Degraded: ImagePullBackOff');
+  });
+
+  test('Degraded without a reason is the bare word', () => {
     expect(getWorkspaceStatusLabel(degraded('')).label).toBe('Degraded');
+  });
+
+  // The operator writes every condition type with a reason; only the True one decides the label.
+  test('a Running workspace whose False conditions carry reasons stays the bare word', () => {
+    const workspace = {
+      spec: { desiredStatus: 'Running' },
+      status: {
+        conditions: [
+          { type: 'Degraded', status: 'False', reason: 'NoError', message: 'No errors detected' },
+          { type: 'Progressing', status: 'False', reason: 'ResourcesReady', message: 'Workspace is available' },
+          { type: 'Available', status: 'True', reason: 'ResourcesReady', message: 'Workspace is available' },
+          { type: 'Stopped', status: 'False', reason: 'NotStopped', message: '' },
+          { type: 'Deleting', status: 'False', reason: 'NotDeleting', message: '' },
+        ],
+      },
+    };
+    expect(getWorkspaceStatusLabel(workspace)).toEqual({ label: 'Running', title: undefined });
   });
 
   test('the hover text is the condition message, absent when empty', () => {

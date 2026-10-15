@@ -17,6 +17,7 @@ import {
   FAST_POLL_MAX_AGE_MS,
 } from './hooks';
 import { AuthError } from './auth-interceptor';
+import { makeWorkspace as baseWorkspace } from '../test-utils';
 import { NamespaceProvider, namespaceKeys } from '../context/NamespaceContext';
 
 const TEST_NS = 'default';
@@ -36,17 +37,23 @@ mock.module('./client', () => ({
   },
 }));
 
+// A workspace as the list endpoint returns it: conditions carry a fresh lastTransitionTime unless the test
+// sets one, and a null desiredStatus leaves the field out, as a workspace created before the default did.
 function makeWorkspace(
   name: string,
-  desiredStatus: 'Running' | 'Stopped' = 'Running',
+  desiredStatus: 'Running' | 'Stopped' | null = 'Running',
   conditions: Array<{ type: string; status: string; lastTransitionTime?: string }> = [],
-  creationTimestamp = '',
+  creationTimestamp?: string,
 ): Workspace {
-  return {
-    metadata: { name, namespace: 'default', annotations: {}, creationTimestamp },
-    spec: { desiredStatus },
-    status: { conditions },
-  } as Workspace;
+  const stamped = conditions.map((condition) => ({ lastTransitionTime: new Date().toISOString(), ...condition }));
+  const workspace = baseWorkspace({
+    name,
+    metadata: { name, namespace: 'default', annotations: {}, creationTimestamp: creationTimestamp ?? '2024-01-01T00:00:00Z' },
+    status: { conditions: stamped },
+  });
+  if (desiredStatus === null) delete workspace.spec.desiredStatus;
+  else workspace.spec.desiredStatus = desiredStatus;
+  return workspace;
 }
 
 // The namespaced hooks read activeNamespace from NamespaceProvider; seed the cheap
@@ -160,12 +167,8 @@ describe('useStartWorkspace — optimistic update', () => {
 // (same code path, different desired status). Covered by the start tests above.
 
 describe('isWorkspaceSettled', () => {
-  const ws = (desiredStatus: 'Running' | 'Stopped' | undefined, conditions: Array<{ type: string; status: string }>): Workspace =>
-    ({
-      metadata: { name: 'w', namespace: 'default', annotations: {}, creationTimestamp: '' },
-      spec: desiredStatus ? { desiredStatus } : {},
-      status: { conditions },
-    }) as Workspace;
+  const ws = (desiredStatus: 'Running' | 'Stopped' | undefined, conditions: Array<{ type: string; status: string }>) =>
+    makeWorkspace('w', desiredStatus ?? null, conditions);
 
   test('undefined workspace is not settled', () => {
     expect(isWorkspaceSettled(undefined)).toBe(false);
@@ -288,6 +291,12 @@ describe('isWorkspaceTransitioning, fast poll bound', () => {
     expect(isWorkspaceTransitioning(ws)).toBe(false);
   });
 
+  // Today's operator leaves lastTransitionTime unset on some writes; such a condition counts as fresh.
+  test('a condition without lastTransitionTime counts as fresh', () => {
+    const ws = makeWorkspace('w', 'Running', [{ type: 'Progressing', status: 'True', lastTransitionTime: undefined }]);
+    expect(isWorkspaceTransitioning(ws)).toBe(true);
+  });
+
   // The operator writes Degraded alone on a transient error during a start and clears it on the next pass.
   test('a Degraded condition beside a fresh Progressing keeps the fast rate', () => {
     const ws = makeWorkspace('w', 'Running', [
@@ -314,6 +323,14 @@ describe('isWorkspaceTransitioning, request-time bound', () => {
   test('a Start requested from this tab keeps the fast rate while the conditions still show Stopped', () => {
     markWorkspaceRequested('default', 'req-fast');
     expect(isWorkspaceTransitioning(stillStopped('req-fast'))).toBe(true);
+  });
+
+  // The optimistic cache write right after the click re-evaluates the rate while the conditions still read
+  // Degraded; the request must count there too.
+  test('a Stop requested from this tab on a Degraded workspace keeps the fast rate', () => {
+    markWorkspaceRequested('default', 'req-degraded');
+    const ws = makeWorkspace('req-degraded', 'Stopped', [{ type: 'Degraded', status: 'True' }]);
+    expect(isWorkspaceTransitioning(ws)).toBe(true);
   });
 
   test('a request older than the bound falls back to the list rate', () => {

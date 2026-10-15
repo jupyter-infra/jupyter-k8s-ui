@@ -66,7 +66,8 @@ export function useClusterAccess(enabled = true) {
   });
 }
 
-export function useWorkspaces() {
+// poll: false reads the list once for a page that shows no status, such as the create form.
+export function useWorkspaces({ poll = true }: { poll?: boolean } = {}) {
   const { activeNamespace } = useNamespace();
   return useQuery({
     queryKey: workspaceKeys.all(activeNamespace),
@@ -74,10 +75,12 @@ export function useWorkspaces() {
     enabled: Boolean(activeNamespace),
     // The fast rate while any listed workspace is transitioning, so the card's start step keeps up with
     // the cluster. A failed fetch keeps the previous list, so the error is checked first.
-    refetchInterval: (query) => {
-      if (query.state.error) return isAuthError(query.state.error) ? false : LIST_POLL_INTERVAL_MS;
-      return query.state.data?.some(isWorkspaceTransitioning) ? FAST_POLL_INTERVAL_MS : LIST_POLL_INTERVAL_MS;
-    },
+    refetchInterval: poll
+      ? (query) => {
+          if (query.state.error) return isAuthError(query.state.error) ? false : LIST_POLL_INTERVAL_MS;
+          return query.state.data?.some(isWorkspaceTransitioning) ? FAST_POLL_INTERVAL_MS : LIST_POLL_INTERVAL_MS;
+        }
+      : false,
     refetchIntervalInBackground: false,
   });
 }
@@ -92,6 +95,7 @@ export function isWorkspaceSettled(workspace: Workspace | undefined): boolean {
   return getWorkspaceStatus(workspace) === desired;
 }
 
+// Ages compare the browser clock with API server timestamps; a browser clock running ahead shortens the bound.
 const withinFastPollAge = (timestamp: string | undefined) => !timestamp || Date.now() - Date.parse(timestamp) < FAST_POLL_MAX_AGE_MS;
 
 // Start and Stop requests made from this tab, by namespace/name. Right after one the conditions still show
@@ -107,8 +111,14 @@ export function markWorkspaceRequested(namespace: string | undefined, name: stri
   requestedAt.set(`${namespace}/${name}`, now);
 }
 
+const requestedWithinBound = (key: string) => {
+  const requested = requestedAt.get(key);
+  return requested !== undefined && Date.now() - requested < FAST_POLL_MAX_AGE_MS;
+};
+
 // The fast rate follows an active transition for at most FAST_POLL_MAX_AGE_MS. Without one, Degraded and
-// Unknown never count, so a workspace nobody fixes does not keep the fast rate.
+// Unknown count only after a Start or Stop this tab requested, so a workspace nobody touches does not keep
+// the fast rate.
 export function isWorkspaceTransitioning(workspace: Workspace): boolean {
   const key = `${workspace.metadata.namespace}/${workspace.metadata.name}`;
   if (isWorkspaceSettled(workspace)) {
@@ -122,14 +132,12 @@ export function isWorkspaceTransitioning(workspace: Workspace): boolean {
     return withinFastPollAge(active.lastTransitionTime);
   }
   const status = getWorkspaceStatus(workspace);
-  if (status === 'Degraded' || status === 'Unknown') {
-    requestedAt.delete(key);
-    return false;
-  }
+  // the cache write right after a Start or Stop click re-evaluates the rate while the conditions still
+  // read the old state, Degraded included
+  if (status === 'Degraded' || status === 'Unknown') return requestedWithinBound(key);
   // No conditions at all means the operator has not reconciled the workspace yet; its age bounds the rate.
   if (conditions.length === 0) return withinFastPollAge(workspace.metadata.creationTimestamp);
-  const requested = requestedAt.get(key);
-  return requested !== undefined && Date.now() - requested < FAST_POLL_MAX_AGE_MS;
+  return requestedWithinBound(key);
 }
 
 export function useWorkspace(name: string) {

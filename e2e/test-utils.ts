@@ -73,8 +73,8 @@ export function cardByName(page: Page, name: string): Locator {
 }
 
 /**
- * Click Refresh until the card shows `text`. The list only auto-polls every 60s and the
- * operator reconciles in seconds, so the refresh mirrors what a user waiting on a card does.
+ * Click Refresh until the card shows `text`. The list polls every 3 s while a card is transitioning and
+ * every 60 s otherwise; the Refresh click mirrors what a user waiting on a card does at either rate.
  * The status is matched exactly: a substring match would also hit the card's description when
  * the resource name ends in the status word, and the strict-mode error that raises is swallowed
  * by the catch below, so the poll would never go truthy.

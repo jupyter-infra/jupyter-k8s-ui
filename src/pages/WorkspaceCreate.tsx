@@ -37,7 +37,7 @@ export function WorkspaceCreate() {
   const createMutation = useCreateWorkspace();
   const { user } = useAuth();
   const { activeNamespace } = useNamespace();
-  const { data: workspaces } = useWorkspaces();
+  const { data: workspaces } = useWorkspaces({ poll: false });
   const templatesQuery = useTemplates();
 
   const defaults = useMemo(() => generateDefaults(user?.displayUser ?? 'user', workspaces?.length ?? 0), [user?.displayUser, workspaces?.length]);
