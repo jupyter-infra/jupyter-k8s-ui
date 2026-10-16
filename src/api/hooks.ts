@@ -75,7 +75,7 @@ export function useWorkspaces({ poll = true }: { poll?: boolean } = {}) {
     queryKey: workspaceKeys.all(activeNamespace),
     queryFn: async () => {
       const workspaces = await apiClient.listWorkspaces(activeNamespace);
-      forgetAcknowledgedRequests(workspaces);
+      forgetSettledRequests(workspaces);
       return workspaces;
     },
     enabled: Boolean(activeNamespace),
@@ -125,16 +125,14 @@ export function forgetWorkspaceRequest(namespace: string | undefined, name: stri
   requestedAt.delete(requestKey(namespace, name));
 }
 
-// Drops the requests the fetched workspaces have outgrown (settled, or transition recorded) and any older than
-// the bound. The query functions call it, so the map is current when the refetch interval is evaluated.
-export function forgetAcknowledgedRequests(workspaces: Workspace[], now = Date.now()): void {
+// Drops the requests of settled workspaces and any older than the bound. The query functions call it, so the
+// map is current when the refetch interval is evaluated.
+export function forgetSettledRequests(workspaces: Workspace[], now = Date.now()): void {
   for (const [key, at] of requestedAt) {
     if (now - at >= FAST_POLL_MAX_AGE_MS) requestedAt.delete(key);
   }
   for (const workspace of workspaces) {
-    if (isWorkspaceSettled(workspace) || findTrueCondition(workspace, 'Progressing', 'Deleting')) {
-      forgetWorkspaceRequest(workspace.metadata.namespace, workspace.metadata.name);
-    }
+    if (isWorkspaceSettled(workspace)) forgetWorkspaceRequest(workspace.metadata.namespace, workspace.metadata.name);
   }
 }
 
@@ -145,11 +143,12 @@ export function isWorkspaceRequested(workspace: Workspace, now = Date.now()): bo
 
 // The fast rate follows an active transition for at most FAST_POLL_MAX_AGE_MS. Without one, Degraded and
 // Unknown count only after a Start or Stop this tab requested, so a workspace nobody touches does not keep
-// the fast rate. A read only; the request map changes in the mutations and in forgetAcknowledgedRequests.
+// the fast rate. A read only; the request map changes in the mutations and in forgetSettledRequests.
 export function isWorkspaceTransitioning(workspace: Workspace, now = Date.now()): boolean {
   if (isWorkspaceSettled(workspace)) return false;
   const active = findTrueCondition(workspace, 'Progressing', 'Deleting');
-  if (active) return withinFastPollAge(active.lastTransitionTime, now);
+  // a Start or Stop on a long-stalled start still gets the fast rate: the aged condition keeps its old timestamp
+  if (active) return withinFastPollAge(active.lastTransitionTime, now) || isWorkspaceRequested(workspace, now);
   const status = getWorkspaceStatus(workspace);
   // the cache write right after a Start or Stop click re-evaluates the rate while the conditions still
   // read the old state, Degraded included
@@ -165,7 +164,7 @@ export function useWorkspace(name: string) {
     queryKey: workspaceKeys.detail(name, activeNamespace),
     queryFn: async () => {
       const workspace = await apiClient.getWorkspace(name, activeNamespace);
-      forgetAcknowledgedRequests([workspace]);
+      forgetSettledRequests([workspace]);
       return workspace;
     },
     enabled: Boolean(name) && Boolean(activeNamespace),
@@ -318,6 +317,8 @@ export function useStartWorkspace() {
         queryClient.setQueryData(listKey, context.previousWorkspaces);
       }
     },
+    // a list fetch that raced the PATCH saw the settled object and forgot the request made in onMutate
+    onSuccess: (_data, name) => markWorkspaceRequested(activeNamespace, name),
     onSettled: (_data, _err, name) => {
       queryClient.invalidateQueries({ queryKey: listKey });
       queryClient.invalidateQueries({ queryKey: workspaceKeys.detail(name, activeNamespace) });
@@ -351,6 +352,8 @@ export function useStopWorkspace() {
         queryClient.setQueryData(listKey, context.previousWorkspaces);
       }
     },
+    // a list fetch that raced the PATCH saw the settled object and forgot the request made in onMutate
+    onSuccess: (_data, name) => markWorkspaceRequested(activeNamespace, name),
     onSettled: (_data, _err, name) => {
       queryClient.invalidateQueries({ queryKey: listKey });
       queryClient.invalidateQueries({ queryKey: workspaceKeys.detail(name, activeNamespace) });
