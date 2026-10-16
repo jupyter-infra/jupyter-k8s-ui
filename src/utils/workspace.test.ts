@@ -180,7 +180,7 @@ describe('getWorkspaceStatusLabel', () => {
   const degraded = (reason: string, message = '') => withCondition('Running', 'Degraded', reason, message);
 
   test.each([
-    ['WaitingForNode', 'Starting (waiting for node)'],
+    ['WaitingForNode', 'Starting (provisioning node)'],
     ['PullingImage', 'Starting (pulling image)'],
     ['StartingContainer', 'Starting (starting container)'],
   ])('Progressing reason %s → %s', (reason, label) => {

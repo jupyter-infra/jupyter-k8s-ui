@@ -59,7 +59,7 @@ export const strings = {
     statusStopped: 'Stopped',
     // The status chip's text when the operator recorded a start step or a failure reason.
     statusDetail: (status: string, detail: string) => `${status} (${detail})`,
-    startStepWaitingForNode: 'waiting for node',
+    startStepWaitingForNode: 'provisioning node',
     startStepPullingImage: 'pulling image',
     startStepStartingContainer: 'starting container',
 
