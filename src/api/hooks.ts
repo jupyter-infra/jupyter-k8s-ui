@@ -82,7 +82,8 @@ export function useWorkspaces({ poll = true }: { poll?: boolean } = {}) {
     refetchInterval: poll
       ? (query) => {
           if (query.state.error) return isAuthError(query.state.error) ? false : LIST_POLL_INTERVAL_MS;
-          return query.state.data?.some(isWorkspaceTransitioning) ? FAST_POLL_INTERVAL_MS : LIST_POLL_INTERVAL_MS;
+          // some() passes the index as the second argument, which the check would take as the clock
+          return query.state.data?.some((workspace) => isWorkspaceTransitioning(workspace)) ? FAST_POLL_INTERVAL_MS : LIST_POLL_INTERVAL_MS;
         }
       : false,
     refetchIntervalInBackground: false,

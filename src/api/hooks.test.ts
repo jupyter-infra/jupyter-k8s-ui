@@ -269,6 +269,15 @@ describe('useWorkspaces, poll interval', () => {
     expect(await nextListInterval()).toBe(false);
   });
 
+  test('a start under way for longer than the bound polls at the list rate', async () => {
+    const beyondBound = new Date(Date.now() - FAST_POLL_MAX_AGE_MS - 60_000).toISOString();
+    mockList.mockImplementation(async () => [
+      makeWorkspace('poll-running', 'Running', [{ type: 'Available', status: 'True' }]),
+      makeWorkspace('poll-stalled', 'Running', [{ type: 'Progressing', status: 'True', lastTransitionTime: beyondBound }]),
+    ]);
+    expect(await nextListInterval()).toBe(LIST_POLL_INTERVAL_MS);
+  });
+
   // A failed refetch keeps the last list, so a transitioning workspace in it must not set the rate.
   test('a failed refetch polls at the list rate', async () => {
     mockList.mockImplementationOnce(async () => [makeWorkspace('poll-failed', 'Running', [{ type: 'Progressing', status: 'True' }])]);
