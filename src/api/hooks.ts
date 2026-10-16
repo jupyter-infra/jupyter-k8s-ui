@@ -138,7 +138,8 @@ export function forgetAnsweredRequests(workspaces: Workspace[], now = Date.now()
     const requested = requestedAt.get(key);
     if (requested === undefined) continue;
     const active = findTrueCondition(workspace, 'Progressing', 'Deleting');
-    const recordedAfterRequest = active?.lastTransitionTime !== undefined && Date.parse(active.lastTransitionTime) > requested;
+    // condition times carry whole seconds, so a transition in the click's second counts as after it
+    const recordedAfterRequest = active?.lastTransitionTime !== undefined && Date.parse(active.lastTransitionTime) >= Math.floor(requested / 1000) * 1000;
     if (isWorkspaceSettled(workspace) || recordedAfterRequest) requestedAt.delete(key);
   }
 }
@@ -308,7 +309,8 @@ export function useStartWorkspace() {
     // Optimistic update — polling will reconcile with real state
     onMutate: async (name) => {
       await queryClient.cancelQueries({ queryKey: listKey });
-      markWorkspaceRequested(activeNamespace, name);
+      const requested = Date.now();
+      markWorkspaceRequested(activeNamespace, name, requested);
       const previousWorkspaces = queryClient.getQueryData<Workspace[]>(listKey);
 
       queryClient.setQueryData<Workspace[]>(
@@ -316,7 +318,7 @@ export function useStartWorkspace() {
         (old) => old?.map((ws) => (ws.metadata.name === name ? { ...ws, spec: { ...ws.spec, desiredStatus: 'Running' as const } } : ws)) ?? [],
       );
 
-      return { previousWorkspaces, name };
+      return { previousWorkspaces, name, requested };
     },
     onError: (_err, name, context) => {
       forgetWorkspaceRequest(activeNamespace, name);
@@ -325,7 +327,7 @@ export function useStartWorkspace() {
       }
     },
     // a list fetch that raced the PATCH saw the settled object and forgot the request made in onMutate
-    onSuccess: (_data, name) => markWorkspaceRequested(activeNamespace, name),
+    onSuccess: (_data, name, context) => markWorkspaceRequested(activeNamespace, name, context?.requested),
     onSettled: (_data, _err, name) => {
       queryClient.invalidateQueries({ queryKey: listKey });
       queryClient.invalidateQueries({ queryKey: workspaceKeys.detail(name, activeNamespace) });
@@ -343,7 +345,8 @@ export function useStopWorkspace() {
     // Optimistic update — polling will reconcile with real state
     onMutate: async (name) => {
       await queryClient.cancelQueries({ queryKey: listKey });
-      markWorkspaceRequested(activeNamespace, name);
+      const requested = Date.now();
+      markWorkspaceRequested(activeNamespace, name, requested);
       const previousWorkspaces = queryClient.getQueryData<Workspace[]>(listKey);
 
       queryClient.setQueryData<Workspace[]>(
@@ -351,7 +354,7 @@ export function useStopWorkspace() {
         (old) => old?.map((ws) => (ws.metadata.name === name ? { ...ws, spec: { ...ws.spec, desiredStatus: 'Stopped' as const } } : ws)) ?? [],
       );
 
-      return { previousWorkspaces, name };
+      return { previousWorkspaces, name, requested };
     },
     onError: (_err, name, context) => {
       forgetWorkspaceRequest(activeNamespace, name);
@@ -360,7 +363,7 @@ export function useStopWorkspace() {
       }
     },
     // a list fetch that raced the PATCH saw the settled object and forgot the request made in onMutate
-    onSuccess: (_data, name) => markWorkspaceRequested(activeNamespace, name),
+    onSuccess: (_data, name, context) => markWorkspaceRequested(activeNamespace, name, context?.requested),
     onSettled: (_data, _err, name) => {
       queryClient.invalidateQueries({ queryKey: listKey });
       queryClient.invalidateQueries({ queryKey: workspaceKeys.detail(name, activeNamespace) });

@@ -89,6 +89,9 @@ function ownedBy(workspace: Workspace, owner: string, accessType: 'Public' | 'Ow
 // The list cache key is now namespace-scoped.
 const listKey = workspaceKeys.all(TEST_NS);
 
+// the request map is module state: at the end of time every request is older than the bound
+beforeEach(() => forgetAnsweredRequests([], Number.MAX_SAFE_INTEGER));
+
 describe('useDeleteWorkspace — optimistic update', () => {
   let client: QueryClient;
 
@@ -514,6 +517,14 @@ describe('forgetAnsweredRequests', () => {
     );
     expect(isWorkspaceTransitioning(stillStopped('ack-settled'), now)).toBe(false);
     expect(isWorkspaceTransitioning(stillStopped('ack-active'), now)).toBe(false);
+  });
+
+  test('a transition recorded in the same second as the click counts as after it', () => {
+    const clicked = now + 500;
+    const sameSecond = new Date(now).toISOString();
+    markWorkspaceRequested('default', 'ack-same-second', clicked);
+    forgetAnsweredRequests([makeWorkspace('ack-same-second', 'Running', [{ type: 'Progressing', status: 'True', lastTransitionTime: sameSecond }])], clicked);
+    expect(isWorkspaceTransitioning(stillStopped('ack-same-second'), clicked)).toBe(false);
   });
 
   // Once the operator has recorded the start, the request has done its job; a failure after that reads
