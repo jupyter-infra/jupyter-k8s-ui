@@ -175,6 +175,11 @@ export function isOwner(owner: string | undefined, k8sUser: string | null | unde
   return owner === k8sUser;
 }
 
+// Whether the viewer may open this workspace once it runs: its owner, or anyone for a Public one.
+export function isOwnerOrPublic(workspace: Workspace, k8sUser: string | null | undefined): boolean {
+  return isOwner(getWorkspaceOwner(workspace), k8sUser) || workspace.spec.accessType === 'Public';
+}
+
 // Structural so callers can pass a full Workspace or only its spec and conditions.
 interface WorkspaceConditions {
   spec: { desiredStatus?: string };

@@ -21,7 +21,7 @@ export async function handleListWorkspaces(jwt: string, namespace: string): Prom
     const response = await k8sClient.listNamespacedCustomObject(CRD_GROUP, CRD_VERSION, namespace, WORKSPACE_PLURAL);
     const body = response.body as K8sListResponse<K8sWorkspace>;
     const workspaces = body.items.map(workspaceToResponse);
-    log('info', `Listed ${workspaces.length} workspaces in ${Date.now() - startTime}ms`);
+    log('debug', `Listed ${workspaces.length} workspaces in ${Date.now() - startTime}ms`);
     return jsonResponse(workspaces);
   } catch (error) {
     return handleK8sError(error, 'Failed to list workspaces');

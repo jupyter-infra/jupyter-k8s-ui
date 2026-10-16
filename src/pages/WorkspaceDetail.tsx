@@ -25,6 +25,7 @@ import {
   getWorkspaceStatusLabel,
   getStatusChipColor,
   getWorkspaceOwner,
+  isOwnerOrPublic,
   acceleratorLimits,
   formatCpuCores,
   formatMemoryGiB,
@@ -110,7 +111,7 @@ export function WorkspaceDetail() {
   const isRunning = workspace.spec.desiredStatus === 'Running';
   const owner = getWorkspaceOwner(workspace);
   const ownerMatch = checkIsOwner(owner, user?.k8sUser);
-  const canOpen = workspaceStatus === 'Running' && accessURL && (ownerMatch || workspace.spec.accessType === 'Public');
+  const canOpen = workspaceStatus === 'Running' && accessURL && isOwnerOrPublic(workspace, user?.k8sUser);
 
   const handleStart = () => startMutation.mutate(workspace.metadata.name);
   const handleStop = () => stopMutation.mutate(workspace.metadata.name);

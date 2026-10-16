@@ -22,6 +22,8 @@ import {
 import { AuthError } from './auth-interceptor';
 import { makeWorkspace as baseWorkspace } from '../test-utils';
 import { NamespaceProvider, namespaceKeys } from '../context/NamespaceContext';
+import { AuthProvider, authKeys } from '../context/AuthContext';
+import { OWNER_ANNOTATION } from '../utils';
 
 const TEST_NS = 'default';
 
@@ -61,12 +63,27 @@ function makeWorkspace(
   return workspace;
 }
 
-// The namespaced hooks read activeNamespace from NamespaceProvider; seed the cheap
-// bootstrap query so it resolves synchronously to TEST_NS (no network).
-function makeWrapper(client: QueryClient) {
+// The signed-in viewer; ownership compares against k8sUser, the name the created-by annotation holds.
+const alice = { displayUser: 'alice-raw-claim', k8sUser: 'alice' };
+
+// The namespaced hooks read activeNamespace from NamespaceProvider and the viewer from AuthProvider; seed
+// both cheap queries so they resolve synchronously (no network). A null viewer is a signed-out tab.
+function makeWrapper(client: QueryClient, viewer: typeof alice | null = alice) {
   client.setQueryData(namespaceKeys.active, { active: TEST_NS });
+  client.setQueryData(authKeys.me, viewer);
   return ({ children }: { children: React.ReactNode }) =>
-    React.createElement(QueryClientProvider, { client }, React.createElement(MemoryRouter, null, React.createElement(NamespaceProvider, null, children)));
+    React.createElement(
+      QueryClientProvider,
+      { client },
+      React.createElement(MemoryRouter, null, React.createElement(NamespaceProvider, null, React.createElement(AuthProvider, null, children))),
+    );
+}
+
+// A workspace as another user's, private unless `accessType` says otherwise.
+function ownedBy(workspace: Workspace, owner: string, accessType: 'Public' | 'OwnerOnly' = 'OwnerOnly'): Workspace {
+  workspace.metadata.annotations = { ...workspace.metadata.annotations, [OWNER_ANNOTATION]: owner };
+  workspace.spec.accessType = accessType;
+  return workspace;
 }
 
 // The list cache key is now namespace-scoped.
@@ -238,8 +255,8 @@ describe('useWorkspaces, poll interval', () => {
     return typeof refetchInterval === 'function' ? refetchInterval(observer.getCurrentQuery()) : refetchInterval;
   }
 
-  async function nextListInterval() {
-    const { result } = renderHook(() => useWorkspaces(), { wrapper: makeWrapper(client) });
+  async function nextListInterval(viewer: typeof alice | null = alice) {
+    const { result } = renderHook(() => useWorkspaces(), { wrapper: makeWrapper(client, viewer) });
     await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true));
     return currentListInterval();
   }
@@ -267,6 +284,37 @@ describe('useWorkspaces, poll interval', () => {
       throw new AuthError('401');
     });
     expect(await nextListInterval()).toBe(false);
+  });
+
+  // The fast rate is scoped to workspaces this viewer waits on, so one user's start does not put every tab
+  // in a shared namespace on the fast rate.
+  test('a transitioning workspace the viewer owns switches the list to the fast rate', async () => {
+    mockList.mockImplementation(async () => [ownedBy(makeWorkspace('poll-mine', 'Running', [{ type: 'Progressing', status: 'True' }]), 'alice')]);
+    expect(await nextListInterval()).toBe(FAST_POLL_INTERVAL_MS);
+  });
+
+  test('a transitioning Public workspace of another user switches the list to the fast rate', async () => {
+    mockList.mockImplementation(async () => [ownedBy(makeWorkspace('poll-public', 'Running', [{ type: 'Progressing', status: 'True' }]), 'bob', 'Public')]);
+    expect(await nextListInterval()).toBe(FAST_POLL_INTERVAL_MS);
+  });
+
+  test('a transitioning private workspace of another user polls at the list rate', async () => {
+    mockList.mockImplementation(async () => [ownedBy(makeWorkspace('poll-private', 'Running', [{ type: 'Progressing', status: 'True' }]), 'bob')]);
+    expect(await nextListInterval()).toBe(LIST_POLL_INTERVAL_MS);
+  });
+
+  test("a Start this tab requested on another user's private workspace keeps the fast rate while the conditions lag", async () => {
+    markWorkspaceRequested(TEST_NS, 'poll-requested');
+    mockList.mockImplementation(async () => [ownedBy(makeWorkspace('poll-requested', 'Running', [{ type: 'Stopped', status: 'True' }]), 'bob')]);
+    expect(await nextListInterval()).toBe(FAST_POLL_INTERVAL_MS);
+  });
+
+  test('a signed-out tab follows a transitioning Public workspace, not a private one', async () => {
+    mockList.mockImplementation(async () => [ownedBy(makeWorkspace('poll-public', 'Running', [{ type: 'Progressing', status: 'True' }]), 'bob', 'Public')]);
+    expect(await nextListInterval(null)).toBe(FAST_POLL_INTERVAL_MS);
+    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    mockList.mockImplementation(async () => [ownedBy(makeWorkspace('poll-private', 'Running', [{ type: 'Progressing', status: 'True' }]), 'bob')]);
+    expect(await nextListInterval(null)).toBe(LIST_POLL_INTERVAL_MS);
   });
 
   test('a start under way for longer than the bound polls at the list rate', async () => {

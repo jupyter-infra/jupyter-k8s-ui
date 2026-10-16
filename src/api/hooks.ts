@@ -1,9 +1,10 @@
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from './client';
 import type { CreateWorkspaceRequest, UpdateWorkspaceRequest, Workspace, AdvancedWorkspacePayload } from '../types';
-import { findTrueCondition, getWorkspaceStatus } from '../utils';
+import { findTrueCondition, getWorkspaceStatus, isOwnerOrPublic } from '../utils';
 import { isAuthError } from './auth-interceptor';
 import { useNamespace, namespaceKeys } from '../context/NamespaceContext';
+import { useAuth } from '../context/AuthContext';
 
 // Query keys include the namespace so cached data never leaks across namespaces. A
 // switch changes the key, so React Query fetches fresh rather than serving another
@@ -69,6 +70,7 @@ export function useClusterAccess(enabled = true) {
 // poll: false reads the list once for a page that shows no status, such as the create form.
 export function useWorkspaces({ poll = true }: { poll?: boolean } = {}) {
   const { activeNamespace } = useNamespace();
+  const { user } = useAuth();
   return useQuery({
     queryKey: workspaceKeys.all(activeNamespace),
     queryFn: async () => {
@@ -77,13 +79,18 @@ export function useWorkspaces({ poll = true }: { poll?: boolean } = {}) {
       return workspaces;
     },
     enabled: Boolean(activeNamespace),
-    // The fast rate while any listed workspace is transitioning, so the card's start step keeps up with
-    // the cluster. A failed fetch keeps the previous list, so the error is checked first.
+    // The fast rate while a workspace this viewer waits on is transitioning: one they could open, or one this
+    // tab asked to start or stop. Every tab lists the namespace with its own token, so the scope bounds the load.
+    // A failed fetch keeps the previous list, so the error is checked first.
     refetchInterval: poll
       ? (query) => {
           if (query.state.error) return isAuthError(query.state.error) ? false : LIST_POLL_INTERVAL_MS;
+          const now = Date.now();
           // some() passes the index as the second argument, which the check would take as the clock
-          return query.state.data?.some((workspace) => isWorkspaceTransitioning(workspace)) ? FAST_POLL_INTERVAL_MS : LIST_POLL_INTERVAL_MS;
+          const watched = query.state.data?.some(
+            (workspace) => (isOwnerOrPublic(workspace, user?.k8sUser) || isWorkspaceRequested(workspace, now)) && isWorkspaceTransitioning(workspace, now),
+          );
+          return watched ? FAST_POLL_INTERVAL_MS : LIST_POLL_INTERVAL_MS;
         }
       : false,
     refetchIntervalInBackground: false,
@@ -136,6 +143,10 @@ const requestedWithinBound = (key: string, now: number) => {
   const requested = requestedAt.get(key);
   return requested !== undefined && now - requested < FAST_POLL_MAX_AGE_MS;
 };
+
+export function isWorkspaceRequested(workspace: Workspace, now = Date.now()): boolean {
+  return requestedWithinBound(requestKey(workspace.metadata.namespace, workspace.metadata.name), now);
+}
 
 // The fast rate follows an active transition for at most FAST_POLL_MAX_AGE_MS. Without one, Degraded and
 // Unknown count only after a Start or Stop this tab requested, so a workspace nobody touches does not keep

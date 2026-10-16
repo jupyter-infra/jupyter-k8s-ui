@@ -12,6 +12,7 @@ import {
   getStatusChipColor,
   isOwner as checkIsOwner,
   getWorkspaceOwner,
+  isOwnerOrPublic,
   acceleratorLimits,
   formatCpuCores,
   formatMemoryGiB,
@@ -46,7 +47,7 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
   const owner = getWorkspaceOwner(workspace);
   const ownerMatch = checkIsOwner(owner, user?.k8sUser);
 
-  const canOpen = workspaceStatus === 'Running' && accessURL && (ownerMatch || spec.accessType === 'Public');
+  const canOpen = workspaceStatus === 'Running' && accessURL && isOwnerOrPublic(workspace, user?.k8sUser);
   const isRunning = spec.desiredStatus === 'Running';
 
   const handleOpen = () => {
