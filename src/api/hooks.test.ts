@@ -9,6 +9,7 @@ import {
   useDeleteWorkspace,
   useStartWorkspace,
   useStopWorkspace,
+  useWorkspace,
   useWorkspaces,
   isWorkspaceSettled,
   isWorkspaceTransitioning,
@@ -28,11 +29,13 @@ const TEST_NS = 'default';
 const mockDelete = mock(async (): Promise<void> => undefined);
 const mockStart = mock(async (): Promise<Workspace> => ({}) as Workspace);
 const mockList = mock(async (): Promise<Workspace[]> => []);
+const mockGet = mock(async (): Promise<Workspace> => ({}) as Workspace);
 
 mock.module('./client', () => ({
   apiClient: {
     deleteWorkspace: mockDelete,
     listWorkspaces: mockList,
+    getWorkspace: mockGet,
     startWorkspace: mockStart,
     // stopWorkspace follows the same optimistic-update code path as startWorkspace
     stopWorkspace: mockStart,
@@ -282,6 +285,44 @@ describe('useWorkspaces, poll interval', () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.data).toHaveLength(1);
     expect(currentListInterval()).toBe(LIST_POLL_INTERVAL_MS);
+  });
+});
+
+describe('useWorkspace, poll interval', () => {
+  let client: QueryClient;
+  const detailKey = workspaceKeys.detail('detail-ws', TEST_NS);
+
+  beforeEach(() => {
+    mockGet.mockReset();
+    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  });
+
+  async function nextDetailInterval() {
+    const { result } = renderHook(() => useWorkspace('detail-ws'), { wrapper: makeWrapper(client) });
+    await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true));
+    const observer = client.getQueryCache().find({ queryKey: detailKey })!.observers[0];
+    const { refetchInterval } = observer.options;
+    return typeof refetchInterval === 'function' ? refetchInterval(observer.getCurrentQuery()) : refetchInterval;
+  }
+
+  test('a Starting workspace polls at the fast rate', async () => {
+    mockGet.mockImplementation(async () => makeWorkspace('detail-ws', 'Running', [{ type: 'Progressing', status: 'True' }]));
+    expect(await nextDetailInterval()).toBe(FAST_POLL_INTERVAL_MS);
+  });
+
+  test.each([
+    ['Running', 'Running', 'Available'],
+    ['Degraded', 'Running', 'Degraded'],
+  ] as const)('a %s workspace polls at the list rate', async (_status, desired, condition) => {
+    mockGet.mockImplementation(async () => makeWorkspace('detail-ws', desired, [{ type: condition, status: 'True' }]));
+    expect(await nextDetailInterval()).toBe(LIST_POLL_INTERVAL_MS);
+  });
+
+  test('an auth error stops polling', async () => {
+    mockGet.mockImplementation(async () => {
+      throw new AuthError('401');
+    });
+    expect(await nextDetailInterval()).toBe(false);
   });
 });
 

@@ -163,9 +163,10 @@ export function useWorkspace(name: string) {
       return workspace;
     },
     enabled: Boolean(name) && Boolean(activeNamespace),
+    // The list's two rates, so a Degraded workspace left open does not poll fast without end.
     refetchInterval: (query) => {
-      if (query.state.error && isAuthError(query.state.error)) return false;
-      return isWorkspaceSettled(query.state.data) ? false : FAST_POLL_INTERVAL_MS;
+      if (query.state.error) return isAuthError(query.state.error) ? false : LIST_POLL_INTERVAL_MS;
+      return query.state.data && isWorkspaceTransitioning(query.state.data) ? FAST_POLL_INTERVAL_MS : LIST_POLL_INTERVAL_MS;
     },
     refetchIntervalInBackground: false,
   });
