@@ -298,6 +298,13 @@ describe('useWorkspaces, poll interval', () => {
     expect(await nextListInterval()).toBe(FAST_POLL_INTERVAL_MS);
   });
 
+  test('a transitioning private workspace with no owner annotation polls at the list rate', async () => {
+    const unowned = makeWorkspace('poll-unowned', 'Running', [{ type: 'Progressing', status: 'True' }]);
+    unowned.spec.accessType = 'OwnerOnly';
+    mockList.mockImplementation(async () => [unowned]);
+    expect(await nextListInterval()).toBe(LIST_POLL_INTERVAL_MS);
+  });
+
   test('a transitioning private workspace of another user polls at the list rate', async () => {
     mockList.mockImplementation(async () => [ownedBy(makeWorkspace('poll-private', 'Running', [{ type: 'Progressing', status: 'True' }]), 'bob')]);
     expect(await nextListInterval()).toBe(LIST_POLL_INTERVAL_MS);
