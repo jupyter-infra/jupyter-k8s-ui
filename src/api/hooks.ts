@@ -75,7 +75,7 @@ export function useWorkspaces({ poll = true }: { poll?: boolean } = {}) {
     queryKey: workspaceKeys.all(activeNamespace),
     queryFn: async () => {
       const workspaces = await apiClient.listWorkspaces(activeNamespace);
-      forgetSettledRequests(workspaces);
+      forgetAnsweredRequests(workspaces);
       return workspaces;
     },
     enabled: Boolean(activeNamespace),
@@ -125,14 +125,21 @@ export function forgetWorkspaceRequest(namespace: string | undefined, name: stri
   requestedAt.delete(requestKey(namespace, name));
 }
 
-// Drops the requests of settled workspaces and any older than the bound. The query functions call it, so the
+// Drops the requests the operator has answered, the workspace settled or an active condition dated after the
+// click, and any older than the bound. A Progressing condition from before the click keeps its old timestamp
+// when a Stop arrives mid-start, so only a newer one counts as an answer. The query functions call it, so the
 // map is current when the refetch interval is evaluated.
-export function forgetSettledRequests(workspaces: Workspace[], now = Date.now()): void {
+export function forgetAnsweredRequests(workspaces: Workspace[], now = Date.now()): void {
   for (const [key, at] of requestedAt) {
     if (now - at >= FAST_POLL_MAX_AGE_MS) requestedAt.delete(key);
   }
   for (const workspace of workspaces) {
-    if (isWorkspaceSettled(workspace)) forgetWorkspaceRequest(workspace.metadata.namespace, workspace.metadata.name);
+    const key = requestKey(workspace.metadata.namespace, workspace.metadata.name);
+    const requested = requestedAt.get(key);
+    if (requested === undefined) continue;
+    const active = findTrueCondition(workspace, 'Progressing', 'Deleting');
+    const recordedAfterRequest = active?.lastTransitionTime !== undefined && Date.parse(active.lastTransitionTime) > requested;
+    if (isWorkspaceSettled(workspace) || recordedAfterRequest) requestedAt.delete(key);
   }
 }
 
@@ -143,7 +150,7 @@ export function isWorkspaceRequested(workspace: Workspace, now = Date.now()): bo
 
 // The fast rate follows an active transition for at most FAST_POLL_MAX_AGE_MS. Without one, Degraded and
 // Unknown count only after a Start or Stop this tab requested, so a workspace nobody touches does not keep
-// the fast rate. A read only; the request map changes in the mutations and in forgetSettledRequests.
+// the fast rate. A read only; the request map changes in the mutations and in forgetAnsweredRequests.
 export function isWorkspaceTransitioning(workspace: Workspace, now = Date.now()): boolean {
   if (isWorkspaceSettled(workspace)) return false;
   const active = findTrueCondition(workspace, 'Progressing', 'Deleting');
@@ -164,7 +171,7 @@ export function useWorkspace(name: string) {
     queryKey: workspaceKeys.detail(name, activeNamespace),
     queryFn: async () => {
       const workspace = await apiClient.getWorkspace(name, activeNamespace);
-      forgetSettledRequests([workspace]);
+      forgetAnsweredRequests([workspace]);
       return workspace;
     },
     enabled: Boolean(name) && Boolean(activeNamespace),

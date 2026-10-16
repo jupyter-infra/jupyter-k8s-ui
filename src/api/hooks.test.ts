@@ -14,7 +14,7 @@ import {
   isWorkspaceSettled,
   isWorkspaceTransitioning,
   markWorkspaceRequested,
-  forgetSettledRequests,
+  forgetAnsweredRequests,
   LIST_POLL_INTERVAL_MS,
   FAST_POLL_INTERVAL_MS,
   FAST_POLL_MAX_AGE_MS,
@@ -164,7 +164,7 @@ describe('useStartWorkspace — optimistic update', () => {
     client.setQueryData(listKey, [makeWorkspace('a', 'Stopped')]);
     // the fetch returns before the PATCH lands and shows the settled object
     mockStart.mockImplementationOnce(async () => {
-      forgetSettledRequests([makeWorkspace('a', 'Stopped', [{ type: 'Stopped', status: 'True' }])]);
+      forgetAnsweredRequests([makeWorkspace('a', 'Stopped', [{ type: 'Stopped', status: 'True' }])]);
       return {} as Workspace;
     });
     const { result } = renderHook(() => useStartWorkspace(), { wrapper: makeWrapper(client) });
@@ -496,23 +496,37 @@ describe('isWorkspaceTransitioning, request-time bound', () => {
   });
 });
 
-describe('forgetSettledRequests', () => {
+describe('forgetAnsweredRequests', () => {
   const now = Date.parse('2026-10-16T12:00:00Z');
   const stillStopped = (name: string) => makeWorkspace(name, 'Running', [{ type: 'Stopped', status: 'True' }]);
   const degraded = (name: string) => makeWorkspace(name, 'Running', [{ type: 'Degraded', status: 'True' }]);
 
-  test('forgets the request of a settled workspace and keeps one whose start is still under way', () => {
+  test('forgets the request of a settled workspace and of one whose transition the operator recorded after it', () => {
+    const afterClick = new Date(now + 5_000).toISOString();
     markWorkspaceRequested('default', 'ack-settled', now);
     markWorkspaceRequested('default', 'ack-active', now);
-    forgetSettledRequests(
+    forgetAnsweredRequests(
       [
         makeWorkspace('ack-settled', 'Running', [{ type: 'Available', status: 'True' }]),
-        makeWorkspace('ack-active', 'Running', [{ type: 'Progressing', status: 'True' }]),
+        makeWorkspace('ack-active', 'Running', [{ type: 'Progressing', status: 'True', lastTransitionTime: afterClick }]),
       ],
       now,
     );
     expect(isWorkspaceTransitioning(stillStopped('ack-settled'), now)).toBe(false);
-    expect(isWorkspaceTransitioning(stillStopped('ack-active'), now)).toBe(true);
+    expect(isWorkspaceTransitioning(stillStopped('ack-active'), now)).toBe(false);
+  });
+
+  // Once the operator has recorded the start, the request has done its job; a failure after that reads
+  // Degraded at the list rate instead of keeping the fast rate for the rest of the bound.
+  test('an accepted start that later fails returns to the list rate', () => {
+    const afterClick = new Date(now + 5_000).toISOString();
+    markWorkspaceRequested('default', 'ack-failed', now);
+    forgetAnsweredRequests([makeWorkspace('ack-failed', 'Running', [{ type: 'Progressing', status: 'True', lastTransitionTime: afterClick }])], now);
+    const failed = makeWorkspace('ack-failed', 'Running', [
+      { type: 'Progressing', status: 'False', lastTransitionTime: afterClick },
+      { type: 'Degraded', status: 'True', lastTransitionTime: afterClick },
+    ]);
+    expect(isWorkspaceTransitioning(failed, now + 60_000)).toBe(false);
   });
 
   // The operator does not refresh a Progressing condition's timestamp when a Stop arrives mid-start or when it
@@ -525,20 +539,20 @@ describe('forgetSettledRequests', () => {
     ]);
     expect(isWorkspaceTransitioning(stalled, now)).toBe(false);
     markWorkspaceRequested('default', 'ack-stalled', now);
-    forgetSettledRequests([stalled], now);
+    forgetAnsweredRequests([stalled], now);
     expect(isWorkspaceTransitioning(stalled, now)).toBe(true);
   });
 
   test('keeps the request of a Degraded workspace', () => {
     markWorkspaceRequested('default', 'ack-degraded', now);
-    forgetSettledRequests([degraded('ack-degraded')], now);
+    forgetAnsweredRequests([degraded('ack-degraded')], now);
     expect(isWorkspaceTransitioning(degraded('ack-degraded'), now)).toBe(true);
   });
 
   test('drops a request older than the bound, listed or not', () => {
     const requested = now - FAST_POLL_MAX_AGE_MS;
     markWorkspaceRequested('default', 'ack-old', requested);
-    forgetSettledRequests([], now);
+    forgetAnsweredRequests([], now);
     // read as of a second after the request, when the entry would still count had it survived
     expect(isWorkspaceTransitioning(stillStopped('ack-old'), requested + 1_000)).toBe(false);
   });
