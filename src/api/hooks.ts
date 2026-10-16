@@ -125,9 +125,8 @@ export function forgetWorkspaceRequest(namespace: string | undefined, name: stri
   requestedAt.delete(requestKey(namespace, name));
 }
 
-// Drops the requests the fetched workspaces have outgrown, a settled one or one whose transition the operator
-// has recorded, and every request older than the bound. The query functions call it, so the map is current
-// when React Query evaluates the refetch interval on the fetched data.
+// Drops the requests the fetched workspaces have outgrown (settled, or transition recorded) and any older than
+// the bound. The query functions call it, so the map is current when the refetch interval is evaluated.
 export function forgetAcknowledgedRequests(workspaces: Workspace[], now = Date.now()): void {
   for (const [key, at] of requestedAt) {
     if (now - at >= FAST_POLL_MAX_AGE_MS) requestedAt.delete(key);
@@ -139,13 +138,9 @@ export function forgetAcknowledgedRequests(workspaces: Workspace[], now = Date.n
   }
 }
 
-const requestedWithinBound = (key: string, now: number) => {
-  const requested = requestedAt.get(key);
-  return requested !== undefined && now - requested < FAST_POLL_MAX_AGE_MS;
-};
-
 export function isWorkspaceRequested(workspace: Workspace, now = Date.now()): boolean {
-  return requestedWithinBound(requestKey(workspace.metadata.namespace, workspace.metadata.name), now);
+  const requested = requestedAt.get(requestKey(workspace.metadata.namespace, workspace.metadata.name));
+  return requested !== undefined && now - requested < FAST_POLL_MAX_AGE_MS;
 }
 
 // The fast rate follows an active transition for at most FAST_POLL_MAX_AGE_MS. Without one, Degraded and
@@ -155,14 +150,13 @@ export function isWorkspaceTransitioning(workspace: Workspace, now = Date.now())
   if (isWorkspaceSettled(workspace)) return false;
   const active = findTrueCondition(workspace, 'Progressing', 'Deleting');
   if (active) return withinFastPollAge(active.lastTransitionTime, now);
-  const key = requestKey(workspace.metadata.namespace, workspace.metadata.name);
   const status = getWorkspaceStatus(workspace);
   // the cache write right after a Start or Stop click re-evaluates the rate while the conditions still
   // read the old state, Degraded included
-  if (status === 'Degraded' || status === 'Unknown') return requestedWithinBound(key, now);
+  if (status === 'Degraded' || status === 'Unknown') return isWorkspaceRequested(workspace, now);
   // No conditions at all means the operator has not reconciled the workspace yet; its age bounds the rate.
   if ((workspace.status?.conditions ?? []).length === 0) return withinFastPollAge(workspace.metadata.creationTimestamp, now);
-  return requestedWithinBound(key, now);
+  return isWorkspaceRequested(workspace, now);
 }
 
 export function useWorkspace(name: string) {
