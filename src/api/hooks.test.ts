@@ -315,10 +315,10 @@ describe('isWorkspaceTransitioning, fast poll bound', () => {
     expect(isWorkspaceTransitioning(ws)).toBe(false);
   });
 
-  // Today's operator leaves lastTransitionTime unset on some writes; such a condition counts as fresh.
-  test('a condition without lastTransitionTime counts as fresh', () => {
+  // Nothing dates the wait without the timestamp, so the bounded rate is the safe one.
+  test('a condition without lastTransitionTime falls back to the list rate', () => {
     const ws = makeWorkspace('w', 'Running', [{ type: 'Progressing', status: 'True', lastTransitionTime: undefined }]);
-    expect(isWorkspaceTransitioning(ws)).toBe(true);
+    expect(isWorkspaceTransitioning(ws)).toBe(false);
   });
 
   // The operator writes Degraded alone on a transient error during a start and clears it on the next pass.

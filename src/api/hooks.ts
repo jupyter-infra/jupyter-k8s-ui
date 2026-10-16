@@ -100,7 +100,8 @@ export function isWorkspaceSettled(workspace: Workspace | undefined): boolean {
 }
 
 // Ages compare the browser clock with API server timestamps; a browser clock running ahead shortens the bound.
-const withinFastPollAge = (timestamp: string | undefined, now: number) => !timestamp || now - Date.parse(timestamp) < FAST_POLL_MAX_AGE_MS;
+// A missing timestamp cannot date the wait, so it counts as beyond the bound.
+const withinFastPollAge = (timestamp: string | undefined, now: number) => timestamp !== undefined && now - Date.parse(timestamp) < FAST_POLL_MAX_AGE_MS;
 
 // Start and Stop requests made from this tab, by namespace/name. Right after one the conditions still show
 // the old state (#51) and nothing on the object dates the wait, so the request time bounds the fast rate.
