@@ -303,6 +303,27 @@ describe('useWorkspaces, poll interval', () => {
     expect(await nextListInterval()).toBe(false);
   });
 
+  test('poll: false never polls, even with a transitioning workspace listed', async () => {
+    mockList.mockImplementation(async () => [makeWorkspace('poll-off', 'Running', [{ type: 'Progressing', status: 'True' }])]);
+    const { result } = renderHook(() => useWorkspaces({ poll: false }), { wrapper: makeWrapper(client) });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(currentListInterval()).toBe(false);
+  });
+
+  // A Start click cancels the fetch in flight; its response still arrives, showing the object from before the
+  // click, and must not forget the request the click just recorded.
+  test('a fetch cancelled by a request does not forget that request', async () => {
+    let resolveFetch: (workspaces: Workspace[]) => void = () => {};
+    mockList.mockImplementation(() => new Promise<Workspace[]>((resolve) => (resolveFetch = resolve)));
+    renderHook(() => useWorkspaces(), { wrapper: makeWrapper(client) });
+    await waitFor(() => expect(mockList).toHaveBeenCalled());
+    await client.cancelQueries({ queryKey: listKey });
+    markWorkspaceRequested('default', 'poll-cancelled');
+    resolveFetch([makeWorkspace('poll-cancelled', 'Stopped', [{ type: 'Stopped', status: 'True' }])]);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(isWorkspaceTransitioning(makeWorkspace('poll-cancelled', 'Running', [{ type: 'Stopped', status: 'True' }]))).toBe(true);
+  });
+
   // The fast rate is scoped to workspaces this viewer waits on, so one user's start does not put every tab
   // in a shared namespace on the fast rate.
   test('a transitioning workspace the viewer owns switches the list to the fast rate', async () => {

@@ -73,9 +73,10 @@ export function useWorkspaces({ poll = true }: { poll?: boolean } = {}) {
   const { user } = useAuth();
   return useQuery({
     queryKey: workspaceKeys.all(activeNamespace),
-    queryFn: async () => {
+    // a fetch a Start or Stop click cancelled can still resolve, with the object as it was before the click
+    queryFn: async ({ signal }) => {
       const workspaces = await apiClient.listWorkspaces(activeNamespace);
-      forgetAnsweredRequests(workspaces);
+      if (!signal.aborted) forgetAnsweredRequests(workspaces);
       return workspaces;
     },
     enabled: Boolean(activeNamespace),
@@ -170,9 +171,9 @@ export function useWorkspace(name: string) {
   const { activeNamespace } = useNamespace();
   const result = useQuery({
     queryKey: workspaceKeys.detail(name, activeNamespace),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const workspace = await apiClient.getWorkspace(name, activeNamespace);
-      forgetAnsweredRequests([workspace]);
+      if (!signal.aborted) forgetAnsweredRequests([workspace]);
       return workspace;
     },
     enabled: Boolean(name) && Boolean(activeNamespace),
