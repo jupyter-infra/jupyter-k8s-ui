@@ -8,10 +8,12 @@ import {
   workspaceKeys,
   useDeleteWorkspace,
   useStartWorkspace,
+  useStopWorkspace,
   useWorkspaces,
   isWorkspaceSettled,
   isWorkspaceTransitioning,
   markWorkspaceRequested,
+  forgetAcknowledgedRequests,
   LIST_POLL_INTERVAL_MS,
   FAST_POLL_INTERVAL_MS,
   FAST_POLL_MAX_AGE_MS,
@@ -160,11 +162,33 @@ describe('useStartWorkspace — optimistic update', () => {
       const data = client.getQueryData<Workspace[]>(listKey);
       expect(data?.[0].spec.desiredStatus).toBe('Stopped');
     });
+    // No transition was accepted, so the request must not keep the fast rate.
+    expect(isWorkspaceTransitioning(makeWorkspace('a', 'Running', [{ type: 'Stopped', status: 'True' }]))).toBe(false);
   });
 });
 
 // useStopWorkspace follows the same optimistic-update pattern as useStartWorkspace
-// (same code path, different desired status). Covered by the start tests above.
+// (same code path, different desired status). The start tests above cover the shared path.
+describe('useStopWorkspace — rejected request', () => {
+  test('forgets the request on error', async () => {
+    mockStart.mockImplementationOnce(async () => {
+      throw new Error('boom');
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(listKey, [makeWorkspace('stop-rejected', 'Running', [{ type: 'Degraded', status: 'True' }])]);
+
+    const { result } = renderHook(() => useStopWorkspace(), { wrapper: makeWrapper(client) });
+    await act(async () => {
+      try {
+        await result.current.mutateAsync('stop-rejected');
+      } catch {
+        // expected
+      }
+    });
+
+    expect(isWorkspaceTransitioning(makeWorkspace('stop-rejected', 'Stopped', [{ type: 'Degraded', status: 'True' }]))).toBe(false);
+  });
+});
 
 describe('isWorkspaceSettled', () => {
   const ws = (desiredStatus: 'Running' | 'Stopped' | undefined, conditions: Array<{ type: string; status: string }>) =>
@@ -339,9 +363,44 @@ describe('isWorkspaceTransitioning, request-time bound', () => {
     expect(isWorkspaceTransitioning(stillStopped('req-old'))).toBe(false);
   });
 
-  test('the request is forgotten once the operator records the transition', () => {
-    markWorkspaceRequested('default', 'req-done');
-    isWorkspaceTransitioning(makeWorkspace('req-done', 'Running', [{ type: 'Progressing', status: 'True', lastTransitionTime: new Date().toISOString() }]));
-    expect(isWorkspaceTransitioning(stillStopped('req-done'))).toBe(false);
+  // A read of a settled workspace must not drop the request: React Query decides when the check runs.
+  test('a settled read leaves the request in place', () => {
+    markWorkspaceRequested('default', 'req-pure');
+    isWorkspaceTransitioning(makeWorkspace('req-pure', 'Stopped', [{ type: 'Stopped', status: 'True' }]));
+    expect(isWorkspaceTransitioning(stillStopped('req-pure'))).toBe(true);
+  });
+});
+
+describe('forgetAcknowledgedRequests', () => {
+  const now = Date.parse('2026-10-16T12:00:00Z');
+  const stillStopped = (name: string) => makeWorkspace(name, 'Running', [{ type: 'Stopped', status: 'True' }]);
+  const degraded = (name: string) => makeWorkspace(name, 'Running', [{ type: 'Degraded', status: 'True' }]);
+
+  test('forgets the request of a settled workspace and of one whose transition the operator recorded', () => {
+    markWorkspaceRequested('default', 'ack-settled', now);
+    markWorkspaceRequested('default', 'ack-active', now);
+    forgetAcknowledgedRequests(
+      [
+        makeWorkspace('ack-settled', 'Running', [{ type: 'Available', status: 'True' }]),
+        makeWorkspace('ack-active', 'Running', [{ type: 'Progressing', status: 'True' }]),
+      ],
+      now,
+    );
+    expect(isWorkspaceTransitioning(stillStopped('ack-settled'), now)).toBe(false);
+    expect(isWorkspaceTransitioning(stillStopped('ack-active'), now)).toBe(false);
+  });
+
+  test('keeps the request of a Degraded workspace', () => {
+    markWorkspaceRequested('default', 'ack-degraded', now);
+    forgetAcknowledgedRequests([degraded('ack-degraded')], now);
+    expect(isWorkspaceTransitioning(degraded('ack-degraded'), now)).toBe(true);
+  });
+
+  test('drops a request older than the bound, listed or not', () => {
+    const requested = now - FAST_POLL_MAX_AGE_MS;
+    markWorkspaceRequested('default', 'ack-old', requested);
+    forgetAcknowledgedRequests([], now);
+    // read as of a second after the request, when the entry would still count had it survived
+    expect(isWorkspaceTransitioning(stillStopped('ack-old'), requested + 1_000)).toBe(false);
   });
 });
