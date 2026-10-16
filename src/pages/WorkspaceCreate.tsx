@@ -37,6 +37,7 @@ export function WorkspaceCreate() {
   const createMutation = useCreateWorkspace();
   const { user } = useAuth();
   const { activeNamespace } = useNamespace();
+  // The list only numbers the default name here and no status is shown, so one read is enough.
   const { data: workspaces } = useWorkspaces({ poll: false });
   const templatesQuery = useTemplates();
 
