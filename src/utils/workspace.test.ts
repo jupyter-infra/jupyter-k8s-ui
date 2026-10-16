@@ -180,9 +180,9 @@ describe('getWorkspaceStatusLabel', () => {
   const degraded = (reason: string, message = '') => withCondition('Running', 'Degraded', reason, message);
 
   test.each([
-    ['WaitingForNode', 'Starting: waiting for node'],
-    ['PullingImage', 'Starting: pulling image'],
-    ['StartingContainer', 'Starting: starting container'],
+    ['WaitingForNode', 'Starting (waiting for node)'],
+    ['PullingImage', 'Starting (pulling image)'],
+    ['StartingContainer', 'Starting (starting container)'],
   ])('Progressing reason %s → %s', (reason, label) => {
     expect(getWorkspaceStatusLabel(starting(reason)).label).toBe(label);
   });
@@ -193,7 +193,7 @@ describe('getWorkspaceStatusLabel', () => {
   });
 
   test('Degraded carries the condition reason verbatim', () => {
-    expect(getWorkspaceStatusLabel(degraded('ImagePullBackOff')).label).toBe('Degraded: ImagePullBackOff');
+    expect(getWorkspaceStatusLabel(degraded('ImagePullBackOff')).label).toBe('Degraded (ImagePullBackOff)');
   });
 
   test('Degraded without a reason is the bare word', () => {

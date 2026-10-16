@@ -196,8 +196,8 @@ describe('WorkspaceCard status detail', () => {
       status: { accessURL: '', conditions: [{ type: 'Progressing', status: 'True', reason: 'WaitingForNode', message }] },
     });
     await renderCard(ws);
-    expect(screen.getByTitle(message).textContent).toBe('Starting: waiting for node');
-    expect(screen.getByLabelText('Test WS workspace, Starting: waiting for node')).toBeDefined();
+    expect(screen.getByTitle(message).textContent).toBe('Starting (waiting for node)');
+    expect(screen.getByLabelText('Test WS workspace, Starting (waiting for node)')).toBeDefined();
   });
 
   test('without a reason the chip has no hover text and the accessible name is the bare word', async () => {
